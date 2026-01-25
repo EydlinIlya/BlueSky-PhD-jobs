@@ -19,12 +19,12 @@ MAX_DELAY = 120  # seconds
 class GeminiProvider(LLMProvider):
     """Google Gemini LLM provider."""
 
-    def __init__(self, api_key: str, model: str = "gemini-2.0-flash"):
+    def __init__(self, api_key: str, model: str = "gemma-3-1b-it"):
         """Initialize Gemini provider.
 
         Args:
             api_key: Google AI API key
-            model: Model name to use (default: gemini-2.0-flash)
+            model: Model name to use (default: gemma-3-1b-it, has higher rate limits)
         """
         self.client = genai.Client(api_key=api_key)
         self.model = model
