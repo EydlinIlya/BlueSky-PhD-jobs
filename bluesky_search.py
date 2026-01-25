@@ -8,11 +8,21 @@ import time
 from datetime import datetime
 
 from src.logger import setup_logger
+from src.llm import GeminiProvider, JobClassifier
 
 # Fix Windows console encoding
 sys.stdout.reconfigure(encoding="utf-8")
 
 logger = setup_logger()
+
+
+def get_classifier() -> JobClassifier | None:
+    """Create a job classifier if API key is available."""
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return None
+    llm = GeminiProvider(api_key)
+    return JobClassifier(llm)
 
 DEFAULT_QUERIES = [
     "PhD position",
@@ -72,10 +82,26 @@ def search_with_retry(client: Client, query: str, limit: int = 25) -> list | Non
     return None
 
 
-def search_phd_calls(client: Client, queries: list[str], limit: int = 25) -> list[dict]:
-    """Search Bluesky for PhD-related posts."""
+def search_phd_calls(
+    client: Client,
+    queries: list[str],
+    limit: int = 25,
+    classifier: JobClassifier | None = None,
+) -> list[dict]:
+    """Search Bluesky for PhD-related posts.
+
+    Args:
+        client: Authenticated Bluesky client
+        queries: List of search queries
+        limit: Maximum results per query
+        classifier: Optional JobClassifier for LLM filtering
+
+    Returns:
+        List of post dictionaries
+    """
     results = []
     seen_uris = set()
+    filtered_count = 0
 
     for query in queries:
         logger.info(f"Searching: {query}")
@@ -89,14 +115,29 @@ def search_phd_calls(client: Client, queries: list[str], limit: int = 25) -> lis
                 continue
             seen_uris.add(post.uri)
 
-            results.append({
+            post_data = {
+                "uri": post.uri,
                 "message": post.record.text,
                 "url": uri_to_url(post.uri, post.author.handle),
                 "user": post.author.handle,
                 "created": post.record.created_at,
-            })
+            }
+
+            # Apply LLM classification if available
+            if classifier:
+                classification = classifier.classify_post(post.record.text)
+                if classification is None:
+                    filtered_count += 1
+                    logger.debug(f"Filtered out: {post.record.text[:50]}...")
+                    continue
+                post_data.update(classification)
+
+            results.append(post_data)
 
         time.sleep(REQUEST_DELAY)
+
+    if classifier and filtered_count > 0:
+        logger.info(f"Filtered out {filtered_count} non-job posts via LLM")
 
     return results
 
@@ -115,8 +156,17 @@ def write_csv(results: list[dict], filename: str = "phd_positions.csv"):
         logger.warning("No results to write.")
         return
 
+    # Determine fieldnames based on what fields are present
+    base_fields = ["message", "url", "user", "created"]
+    extra_fields = ["discipline", "is_verified_job"]
+
+    # Check if any result has extra fields
+    fieldnames = base_fields.copy()
+    if results and any(f in results[0] for f in extra_fields):
+        fieldnames.extend([f for f in extra_fields if f in results[0]])
+
     with open(filename, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["message", "url", "user", "created"])
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(results)
 
@@ -142,9 +192,23 @@ def main():
         default=50,
         help="Max results per query (default: 50)",
     )
+    parser.add_argument(
+        "--no-llm",
+        action="store_true",
+        help="Disable LLM filtering (uses GEMINI_API_KEY env var when enabled)",
+    )
     args = parser.parse_args()
 
     queries = args.query if args.query else DEFAULT_QUERIES
+
+    # Set up classifier if LLM is enabled
+    classifier = None
+    if not args.no_llm:
+        classifier = get_classifier()
+        if classifier:
+            logger.info("LLM filtering enabled (Gemini)")
+        else:
+            logger.info("LLM filtering disabled (no GEMINI_API_KEY)")
 
     logger.info("Connecting to Bluesky...")
     try:
@@ -154,7 +218,7 @@ def main():
         return
 
     logger.info(f"Searching with {len(queries)} queries...")
-    results = search_phd_calls(client, queries, limit=args.limit)
+    results = search_phd_calls(client, queries, limit=args.limit, classifier=classifier)
 
     logger.info(f"Found {len(results)} unique positions")
     write_csv(results, args.output)
