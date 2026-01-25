@@ -2,10 +2,12 @@
 
 import argparse
 import csv
+import json
 import os
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
 
 from src.logger import setup_logger
 from src.llm import GeminiProvider, JobClassifier
@@ -23,6 +25,47 @@ def get_classifier() -> JobClassifier | None:
         return None
     llm = GeminiProvider(api_key)
     return JobClassifier(llm)
+
+
+SYNC_STATE_FILE = "last_sync.json"
+
+
+def load_sync_state(state_file: str = SYNC_STATE_FILE) -> dict:
+    """Load the last sync state from file.
+
+    Returns:
+        Dict with 'last_timestamp', 'seen_uris' keys
+    """
+    if Path(state_file).exists():
+        try:
+            with open(state_file, encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            logger.warning(f"Could not load sync state: {e}")
+    return {"last_timestamp": None, "seen_uris": []}
+
+
+def save_sync_state(
+    last_timestamp: str | None,
+    seen_uris: list[str],
+    state_file: str = SYNC_STATE_FILE,
+):
+    """Save the sync state to file.
+
+    Args:
+        last_timestamp: ISO timestamp of the most recent post
+        seen_uris: List of all processed post URIs
+        state_file: Path to state file
+    """
+    state = {
+        "last_timestamp": last_timestamp,
+        "seen_uris": seen_uris,
+        "updated_at": datetime.now().isoformat(),
+    }
+    with open(state_file, "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2)
+    logger.debug(f"Saved sync state with {len(seen_uris)} URIs")
+
 
 DEFAULT_QUERIES = [
     "PhD position",
@@ -87,7 +130,9 @@ def search_phd_calls(
     queries: list[str],
     limit: int = 25,
     classifier: JobClassifier | None = None,
-) -> list[dict]:
+    since_timestamp: str | None = None,
+    existing_uris: set[str] | None = None,
+) -> tuple[list[dict], set[str]]:
     """Search Bluesky for PhD-related posts.
 
     Args:
@@ -95,13 +140,16 @@ def search_phd_calls(
         queries: List of search queries
         limit: Maximum results per query
         classifier: Optional JobClassifier for LLM filtering
+        since_timestamp: Only include posts newer than this ISO timestamp
+        existing_uris: Set of URIs already processed (for deduplication)
 
     Returns:
-        List of post dictionaries
+        Tuple of (list of post dictionaries, set of all seen URIs)
     """
     results = []
-    seen_uris = set()
+    seen_uris = existing_uris.copy() if existing_uris else set()
     filtered_count = 0
+    skipped_old = 0
 
     for query in queries:
         logger.info(f"Searching: {query}")
@@ -111,9 +159,15 @@ def search_phd_calls(
             continue
 
         for post in posts:
+            # Skip already seen posts
             if post.uri in seen_uris:
                 continue
             seen_uris.add(post.uri)
+
+            # Skip posts older than our last sync
+            if since_timestamp and post.record.created_at <= since_timestamp:
+                skipped_old += 1
+                continue
 
             post_data = {
                 "uri": post.uri,
@@ -136,10 +190,12 @@ def search_phd_calls(
 
         time.sleep(REQUEST_DELAY)
 
+    if skipped_old > 0:
+        logger.info(f"Skipped {skipped_old} posts older than last sync")
     if classifier and filtered_count > 0:
         logger.info(f"Filtered out {filtered_count} non-job posts via LLM")
 
-    return results
+    return results, seen_uris
 
 
 def uri_to_url(uri: str, handle: str) -> str:
@@ -197,9 +253,26 @@ def main():
         action="store_true",
         help="Disable LLM filtering (uses GEMINI_API_KEY env var when enabled)",
     )
+    parser.add_argument(
+        "--full-sync",
+        action="store_true",
+        help="Ignore last sync state and fetch all posts",
+    )
     args = parser.parse_args()
 
     queries = args.query if args.query else DEFAULT_QUERIES
+
+    # Load sync state for incremental updates
+    sync_state = load_sync_state()
+    since_timestamp = None
+    existing_uris = set()
+
+    if not args.full_sync and sync_state.get("last_timestamp"):
+        since_timestamp = sync_state["last_timestamp"]
+        existing_uris = set(sync_state.get("seen_uris", []))
+        logger.info(f"Incremental sync from {since_timestamp}")
+    else:
+        logger.info("Full sync (no previous state or --full-sync specified)")
 
     # Set up classifier if LLM is enabled
     classifier = None
@@ -218,10 +291,25 @@ def main():
         return
 
     logger.info(f"Searching with {len(queries)} queries...")
-    results = search_phd_calls(client, queries, limit=args.limit, classifier=classifier)
+    results, all_uris = search_phd_calls(
+        client,
+        queries,
+        limit=args.limit,
+        classifier=classifier,
+        since_timestamp=since_timestamp,
+        existing_uris=existing_uris,
+    )
 
-    logger.info(f"Found {len(results)} unique positions")
-    write_csv(results, args.output)
+    logger.info(f"Found {len(results)} new positions")
+
+    if results:
+        write_csv(results, args.output)
+
+        # Update sync state with newest timestamp
+        newest_timestamp = max(r["created"] for r in results)
+        save_sync_state(newest_timestamp, list(all_uris))
+    else:
+        logger.info("No new positions to save")
 
 
 if __name__ == "__main__":

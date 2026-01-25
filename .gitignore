@@ -4,4 +4,5 @@ __pycache__/
 .env
 .venv/
 phd_positions.csv
+last_sync.json
 .claude/
