@@ -30,10 +30,17 @@ You can create an app password at Settings → App Passwords in Bluesky.
 ## Usage
 
 ```bash
+# Default search (PhD position, PhD call, doctoral position, etc.)
 python bluesky_search.py
+
+# Custom search queries
+python bluesky_search.py -q "postdoc position" -q "research fellow"
+
+# Specify output file and limit
+python bluesky_search.py -o results.csv -l 100
 ```
 
-Searches for PhD positions using multiple queries and outputs results to `phd_positions.csv` with columns:
+Outputs results to `phd_positions.csv` (default) with columns:
 - `message` - Post text
 - `url` - Link to the post on Bluesky
 - `user` - Author handle

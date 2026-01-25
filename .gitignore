@@ -3,5 +3,5 @@
 __pycache__/
 .env
 .venv/
-*.csv
+phd_positions.csv
 .claude/

@@ -1,5 +1,6 @@
 """Search Bluesky for PhD calls using the AT Protocol SDK."""
 
+import argparse
 import csv
 import os
 import sys
@@ -8,6 +9,15 @@ from datetime import datetime
 
 # Fix Windows console encoding
 sys.stdout.reconfigure(encoding="utf-8")
+
+DEFAULT_QUERIES = [
+    "PhD position",
+    "PhD call",
+    "doctoral position",
+    "PhD opportunity",
+    "PhD opening",
+    "PhD vacancy",
+]
 
 from atproto import Client
 from atproto_client.exceptions import RequestException
@@ -111,6 +121,27 @@ def write_csv(results: list[dict], filename: str = "phd_positions.csv"):
 
 def main():
     """Run PhD call search."""
+    parser = argparse.ArgumentParser(description="Search Bluesky for PhD positions")
+    parser.add_argument(
+        "-q", "--query",
+        action="append",
+        help="Search query (can be specified multiple times). Defaults to PhD-related queries.",
+    )
+    parser.add_argument(
+        "-o", "--output",
+        default="phd_positions.csv",
+        help="Output CSV filename (default: phd_positions.csv)",
+    )
+    parser.add_argument(
+        "-l", "--limit",
+        type=int,
+        default=50,
+        help="Max results per query (default: 50)",
+    )
+    args = parser.parse_args()
+
+    queries = args.query if args.query else DEFAULT_QUERIES
+
     print("Connecting to Bluesky...")
     try:
         client = get_client()
@@ -118,20 +149,11 @@ def main():
         print(f"Failed to connect: {e}")
         return
 
-    queries = [
-        "PhD position",
-        "PhD call",
-        "doctoral position",
-        "PhD opportunity",
-        "PhD opening",
-        "PhD vacancy",
-    ]
-
     print(f"Searching with {len(queries)} queries...\n")
-    results = search_phd_calls(client, queries, limit=50)
+    results = search_phd_calls(client, queries, limit=args.limit)
 
     print(f"\nFound {len(results)} unique positions")
-    write_csv(results)
+    write_csv(results, args.output)
 
 
 if __name__ == "__main__":
