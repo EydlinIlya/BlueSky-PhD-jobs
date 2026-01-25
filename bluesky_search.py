@@ -11,6 +11,7 @@ from pathlib import Path
 
 from src.logger import setup_logger
 from src.llm import GeminiProvider, JobClassifier
+from src.storage import StorageBackend, CSVStorage, SupabaseStorage
 
 # Fix Windows console encoding
 sys.stdout.reconfigure(encoding="utf-8")
@@ -25,6 +26,21 @@ def get_classifier() -> JobClassifier | None:
         return None
     llm = GeminiProvider(api_key)
     return JobClassifier(llm)
+
+
+def get_storage(backend: str, output: str) -> StorageBackend:
+    """Create a storage backend.
+
+    Args:
+        backend: Backend type ("csv" or "supabase")
+        output: Output filename (for CSV backend)
+
+    Returns:
+        StorageBackend instance
+    """
+    if backend == "supabase":
+        return SupabaseStorage()
+    return CSVStorage(output)
 
 
 SYNC_STATE_FILE = "last_sync.json"
@@ -258,21 +274,48 @@ def main():
         action="store_true",
         help="Ignore last sync state and fetch all posts",
     )
+    parser.add_argument(
+        "--storage",
+        choices=["csv", "supabase"],
+        default="csv",
+        help="Storage backend (default: csv). Supabase requires SUPABASE_URL and SUPABASE_KEY env vars.",
+    )
     args = parser.parse_args()
 
     queries = args.query if args.query else DEFAULT_QUERIES
 
+    # Set up storage backend
+    try:
+        storage = get_storage(args.storage, args.output)
+        logger.info(f"Using {args.storage} storage backend")
+    except ValueError as e:
+        logger.error(f"Storage setup failed: {e}")
+        return
+
     # Load sync state for incremental updates
-    sync_state = load_sync_state()
     since_timestamp = None
     existing_uris = set()
 
-    if not args.full_sync and sync_state.get("last_timestamp"):
-        since_timestamp = sync_state["last_timestamp"]
-        existing_uris = set(sync_state.get("seen_uris", []))
-        logger.info(f"Incremental sync from {since_timestamp}")
+    if not args.full_sync:
+        if args.storage == "supabase":
+            # For Supabase, get state from the database
+            since_timestamp = storage.get_last_timestamp()
+            existing_uris = storage.get_existing_uris()
+            if since_timestamp:
+                logger.info(f"Incremental sync from {since_timestamp} ({len(existing_uris)} existing posts)")
+            else:
+                logger.info("Full sync (no posts in database)")
+        else:
+            # For CSV, use the local sync state file
+            sync_state = load_sync_state()
+            if sync_state.get("last_timestamp"):
+                since_timestamp = sync_state["last_timestamp"]
+                existing_uris = set(sync_state.get("seen_uris", []))
+                logger.info(f"Incremental sync from {since_timestamp}")
+            else:
+                logger.info("Full sync (no previous state)")
     else:
-        logger.info("Full sync (no previous state or --full-sync specified)")
+        logger.info("Full sync (--full-sync specified)")
 
     # Set up classifier if LLM is enabled
     classifier = None
@@ -303,11 +346,13 @@ def main():
     logger.info(f"Found {len(results)} new positions")
 
     if results:
-        write_csv(results, args.output)
+        saved_count = storage.save_posts(results)
+        logger.info(f"Saved {saved_count} positions to {args.storage}")
 
-        # Update sync state with newest timestamp
-        newest_timestamp = max(r["created"] for r in results)
-        save_sync_state(newest_timestamp, list(all_uris))
+        # Update local sync state for CSV backend
+        if args.storage == "csv":
+            newest_timestamp = max(r["created"] for r in results)
+            save_sync_state(newest_timestamp, list(all_uris))
     else:
         logger.info("No new positions to save")
 
