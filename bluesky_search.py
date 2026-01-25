@@ -7,8 +7,12 @@ import sys
 import time
 from datetime import datetime
 
+from src.logger import setup_logger
+
 # Fix Windows console encoding
 sys.stdout.reconfigure(encoding="utf-8")
+
+logger = setup_logger()
 
 DEFAULT_QUERIES = [
     "PhD position",
@@ -56,14 +60,14 @@ def search_with_retry(client: Client, query: str, limit: int = 25) -> list | Non
             error_msg = str(e)
             if "429" in error_msg or "RateLimitExceeded" in error_msg:
                 wait_time = RETRY_BACKOFF ** (attempt + 2)
-                print(f"  Rate limited. Waiting {wait_time}s...")
+                logger.warning(f"Rate limited. Waiting {wait_time}s...")
                 time.sleep(wait_time)
             elif attempt < MAX_RETRIES - 1:
                 wait_time = RETRY_BACKOFF ** attempt
-                print(f"  Request failed: {e}. Retrying in {wait_time}s...")
+                logger.warning(f"Request failed: {e}. Retrying in {wait_time}s...")
                 time.sleep(wait_time)
             else:
-                print(f"  Failed after {MAX_RETRIES} attempts: {e}")
+                logger.error(f"Failed after {MAX_RETRIES} attempts: {e}")
                 return None
     return None
 
@@ -74,7 +78,7 @@ def search_phd_calls(client: Client, queries: list[str], limit: int = 25) -> lis
     seen_uris = set()
 
     for query in queries:
-        print(f"Searching: {query}")
+        logger.info(f"Searching: {query}")
         posts = search_with_retry(client, query, limit)
 
         if posts is None:
@@ -108,7 +112,7 @@ def uri_to_url(uri: str, handle: str) -> str:
 def write_csv(results: list[dict], filename: str = "phd_positions.csv"):
     """Write results to CSV file."""
     if not results:
-        print("No results to write.")
+        logger.warning("No results to write.")
         return
 
     with open(filename, "w", newline="", encoding="utf-8") as f:
@@ -116,7 +120,7 @@ def write_csv(results: list[dict], filename: str = "phd_positions.csv"):
         writer.writeheader()
         writer.writerows(results)
 
-    print(f"Wrote {len(results)} positions to {filename}")
+    logger.info(f"Wrote {len(results)} positions to {filename}")
 
 
 def main():
@@ -142,17 +146,17 @@ def main():
 
     queries = args.query if args.query else DEFAULT_QUERIES
 
-    print("Connecting to Bluesky...")
+    logger.info("Connecting to Bluesky...")
     try:
         client = get_client()
     except Exception as e:
-        print(f"Failed to connect: {e}")
+        logger.error(f"Failed to connect: {e}")
         return
 
-    print(f"Searching with {len(queries)} queries...\n")
+    logger.info(f"Searching with {len(queries)} queries...")
     results = search_phd_calls(client, queries, limit=args.limit)
 
-    print(f"\nFound {len(results)} unique positions")
+    logger.info(f"Found {len(results)} unique positions")
     write_csv(results, args.output)
 
 
