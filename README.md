@@ -5,14 +5,9 @@ Search Bluesky for PhD position announcements using the AT Protocol SDK.
 ## Setup
 
 ```bash
-# Create virtual environment
 python -m venv .venv
-
-# Activate
 .venv/Scripts/activate  # Windows
 source .venv/bin/activate  # Unix
-
-# Install
 pip install -e .
 ```
 
@@ -25,14 +20,25 @@ BLUESKY_HANDLE=your-handle.bsky.social
 BLUESKY_PASSWORD=your-app-password
 ```
 
-You can create an app password at Settings → App Passwords in Bluesky.
+Create an app password at Settings → App Passwords in Bluesky.
 
 ## Usage
 
 ```bash
-# Default search (PhD position, PhD call, doctoral position, etc.)
 python bluesky_search.py
+```
 
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `-q, --query` | Search query (repeatable) | PhD position, PhD call, doctoral position, PhD opportunity, PhD opening, PhD vacancy |
+| `-o, --output` | Output CSV filename | `phd_positions.csv` |
+| `-l, --limit` | Max results per query | 50 |
+
+### Examples
+
+```bash
 # Custom search queries
 python bluesky_search.py -q "postdoc position" -q "research fellow"
 
@@ -40,11 +46,11 @@ python bluesky_search.py -q "postdoc position" -q "research fellow"
 python bluesky_search.py -o results.csv -l 100
 ```
 
-Outputs results to `phd_positions.csv` (default) with columns:
-- `message` - Post text
-- `url` - Link to the post on Bluesky
-- `user` - Author handle
-- `created` - Post timestamp
+## Output
+
+CSV file with columns: `message`, `url`, `user`, `created`
+
+See [sample_output.csv](sample_output.csv) for example results.
 
 ## Dependencies
 
