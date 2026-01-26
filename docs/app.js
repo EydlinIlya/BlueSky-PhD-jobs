@@ -123,7 +123,7 @@ const columnDefs = [
     {
         field: 'created_at',
         headerName: 'Date',
-        width: 120,
+        width: 140,
         sort: 'desc',
         filter: 'agDateColumnFilter',
         filterParams: {
@@ -176,14 +176,18 @@ const columnDefs = [
         cellClass: 'message-cell',
         autoHeight: true,
         wrapText: true,
+        tooltipField: 'message',
         cellRenderer: (params) => {
             if (!params.value) return '';
-            // Truncate long messages
             const maxLength = 300;
-            const text = params.value.length > maxLength
+            const isTruncated = params.value.length > maxLength;
+            const text = isTruncated
                 ? params.value.substring(0, maxLength) + '...'
                 : params.value;
-            return `<div class="py-1">${escapeHtml(text)}</div>`;
+            const expandBtn = isTruncated
+                ? `<button class="expand-btn" onclick="showFullText(event, '${params.node.id}')">[ read more ]</button>`
+                : '';
+            return `<div class="py-1">${escapeHtml(text)}${expandBtn}</div>`;
         }
     },
     {
@@ -248,6 +252,36 @@ function updateRowCount() {
 function clearAllFilters() {
     gridApi.setFilterModel(null);
 }
+
+// Show full text in modal
+function showFullText(event, nodeId) {
+    event.stopPropagation();
+    const rowNode = gridApi.getRowNode(nodeId);
+    if (!rowNode) return;
+
+    const data = rowNode.data;
+    const modal = document.getElementById('text-modal');
+    const content = document.getElementById('modal-content');
+    const link = document.getElementById('modal-link');
+
+    content.textContent = data.message;
+    link.href = data.url;
+
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+// Close modal
+function closeModal() {
+    const modal = document.getElementById('text-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+// Close modal on escape key
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeModal();
+});
 
 // Fetch data from Supabase
 async function fetchPositions() {
