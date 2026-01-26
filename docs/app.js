@@ -9,6 +9,9 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_
 // Grid API reference
 let gridApi;
 
+// Current discipline filter
+let selectedDiscipline = '';
+
 // AG Grid column definitions
 const columnDefs = [
     {
@@ -41,11 +44,7 @@ const columnDefs = [
         field: 'discipline',
         headerName: 'Discipline',
         width: 180,
-        filter: 'agSetColumnFilter',
-        filterParams: {
-            buttons: ['reset', 'apply'],
-            closeOnApply: true,
-        },
+        filter: false,
         cellRenderer: (params) => {
             if (!params.value) return '<span class="text-gray-400">—</span>';
             return `<span class="discipline-badge">${params.value}</span>`;
@@ -96,6 +95,16 @@ const columnDefs = [
     }
 ];
 
+// External filter for discipline dropdown
+function isExternalFilterPresent() {
+    return selectedDiscipline !== '';
+}
+
+function doesExternalFilterPass(node) {
+    if (!selectedDiscipline) return true;
+    return node.data.discipline === selectedDiscipline;
+}
+
 // AG Grid options
 const gridOptions = {
     columnDefs: columnDefs,
@@ -113,6 +122,8 @@ const gridOptions = {
     paginationPageSize: 50,
     paginationPageSizeSelector: [25, 50, 100],
     domLayout: 'normal',
+    isExternalFilterPresent: isExternalFilterPresent,
+    doesExternalFilterPass: doesExternalFilterPass,
     onFilterChanged: updateRowCount,
     onGridReady: (params) => {
         gridApi = params.api;
@@ -137,6 +148,33 @@ function updateRowCount() {
     } else {
         countEl.textContent = `Showing ${displayed} of ${total} positions`;
     }
+}
+
+// Populate discipline dropdown with unique values from data
+function populateDisciplineFilter(positions) {
+    const select = document.getElementById('discipline-filter');
+    const disciplines = [...new Set(positions.map(p => p.discipline).filter(Boolean))].sort();
+
+    disciplines.forEach(discipline => {
+        const option = document.createElement('option');
+        option.value = discipline;
+        option.textContent = discipline;
+        select.appendChild(option);
+    });
+
+    // Add change listener
+    select.addEventListener('change', (e) => {
+        selectedDiscipline = e.target.value;
+        gridApi.onFilterChanged();
+    });
+}
+
+// Clear all filters including dropdown
+function clearAllFilters() {
+    selectedDiscipline = '';
+    document.getElementById('discipline-filter').value = '';
+    gridApi.setFilterModel(null);
+    gridApi.onFilterChanged();
 }
 
 // Fetch data from Supabase
@@ -170,6 +208,9 @@ async function init() {
         // Hide loading, show grid
         loadingEl.classList.add('hidden');
         gridContainer.classList.remove('hidden');
+
+        // Populate discipline dropdown
+        populateDisciplineFilter(positions);
 
         // Create grid
         agGrid.createGrid(gridEl, {
