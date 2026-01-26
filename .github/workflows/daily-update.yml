@@ -3,7 +3,7 @@ name: Daily PhD Position Update
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0,15,30,45 * * * *"
+    - cron: "40 6 * * *"  # Daily at 6:40 AM UTC
 
 jobs:
   update:
