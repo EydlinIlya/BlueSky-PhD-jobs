@@ -1,11 +1,9 @@
 name: Daily PhD Position Update
 
 on:
-  schedule:
-    # Temporary: every 15 minutes for testing
-    - cron: '*/15 * * * *'
   workflow_dispatch:
-    # Allow manual trigger
+  schedule:
+    - cron: "0,15,30,45 * * * *"
 
 jobs:
   update:
