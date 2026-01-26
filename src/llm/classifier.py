@@ -78,17 +78,23 @@ class JobClassifier:
 
         return "Other"
 
-    def classify_post(self, text: str) -> dict | None:
-        """Classify a post, returning None if it's not a real job.
+    def classify_post(self, text: str) -> dict:
+        """Classify a post, determining if it's a real job and its discipline.
 
         Args:
             text: The post text to analyze
 
         Returns:
-            Dict with 'is_verified_job' and 'discipline' keys, or None if not a job
+            Dict with 'is_verified_job' and 'discipline' keys.
+            Non-jobs have is_verified_job=False and discipline=None.
         """
-        if not self.is_real_job(text):
-            return None
+        is_job = self.is_real_job(text)
+
+        if not is_job:
+            return {
+                "is_verified_job": False,
+                "discipline": None,
+            }
 
         discipline = self.get_discipline(text)
         return {

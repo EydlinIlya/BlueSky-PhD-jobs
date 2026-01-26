@@ -48,6 +48,17 @@ const columnDefs = [
         }
     },
     {
+        field: 'user_handle',
+        headerName: 'Author',
+        width: 150,
+        filter: 'agTextColumnFilter',
+        cellRenderer: (params) => {
+            if (!params.value) return '';
+            const profileUrl = `https://bsky.app/profile/${params.value}`;
+            return `<a href="${profileUrl}" target="_blank" rel="noopener noreferrer">@${params.value}</a>`;
+        }
+    },
+    {
         field: 'message',
         headerName: 'Position',
         flex: 2,
@@ -69,7 +80,9 @@ const columnDefs = [
     {
         field: 'url',
         headerName: 'Link',
-        width: 100,
+        minWidth: 100,
+        maxWidth: 150,
+        flex: 0.5,
         filter: false,
         sortable: false,
         cellRenderer: (params) => {
@@ -127,7 +140,8 @@ async function fetchPositions() {
     try {
         const { data, error } = await supabaseClient
             .from('phd_positions')
-            .select('created_at, discipline, message, url')
+            .select('created_at, discipline, user_handle, message, url')
+            .eq('is_verified_job', true)
             .order('created_at', { ascending: false });
 
         if (error) throw error;

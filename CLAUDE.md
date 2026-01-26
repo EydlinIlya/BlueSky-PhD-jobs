@@ -78,12 +78,14 @@ python bluesky_search.py --full-sync        # Ignore previous sync state
 - `supabase.py` - Supabase PostgreSQL storage
 
 ### Data Flow
-1. Fetch posts from Bluesky API
+1. Fetch posts from Bluesky API (sorted by relevance, not date)
 2. Deduplicate by URI
 3. Filter by timestamp (incremental sync)
-4. LLM classification (if enabled): filter non-jobs, assign discipline
-5. Save to storage backend
+4. LLM classification (if enabled): mark is_verified_job, assign discipline
+5. Save ALL posts to storage backend (non-jobs included for analysis)
 6. Update sync state
+
+Note: Frontend filters to show only is_verified_job=true posts.
 
 ## Key Dependencies
 

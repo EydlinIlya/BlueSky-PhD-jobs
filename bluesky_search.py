@@ -196,11 +196,10 @@ def search_phd_calls(
             # Apply LLM classification if available
             if classifier:
                 classification = classifier.classify_post(post.record.text)
-                if classification is None:
-                    filtered_count += 1
-                    logger.debug(f"Filtered out: {post.record.text[:50]}...")
-                    continue
                 post_data.update(classification)
+                if not classification["is_verified_job"]:
+                    filtered_count += 1
+                    logger.debug(f"Non-job post: {post.record.text[:50]}...")
 
             results.append(post_data)
 
@@ -209,7 +208,7 @@ def search_phd_calls(
     if skipped_old > 0:
         logger.info(f"Skipped {skipped_old} posts older than last sync")
     if classifier and filtered_count > 0:
-        logger.info(f"Filtered out {filtered_count} non-job posts via LLM")
+        logger.info(f"Classified {filtered_count} posts as non-jobs (still saved for analysis)")
 
     return results, seen_uris
 
