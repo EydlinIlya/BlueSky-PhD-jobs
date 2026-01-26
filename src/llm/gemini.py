@@ -7,19 +7,15 @@ from google import genai
 from google.genai import errors as genai_errors
 
 from .base import LLMProvider
+from .config import DEFAULT_MODEL, MAX_RETRIES, BASE_DELAY, MAX_DELAY
 
 logger = logging.getLogger("bluesky_search")
-
-# Rate limit settings
-MAX_RETRIES = 5
-BASE_DELAY = 10  # seconds
-MAX_DELAY = 120  # seconds
 
 
 class GeminiProvider(LLMProvider):
     """Google Gemini LLM provider."""
 
-    def __init__(self, api_key: str, model: str = "gemma-3-1b-it"):
+    def __init__(self, api_key: str, model: str = DEFAULT_MODEL):
         """Initialize Gemini provider.
 
         Args:

@@ -1,7 +1,8 @@
 """LLM integration for job filtering and classification."""
 
 from .base import LLMProvider
-from .classifier import JobClassifier, DISCIPLINES
+from .classifier import JobClassifier
+from .config import DISCIPLINES, DEFAULT_MODEL
 from .gemini import GeminiProvider
 
-__all__ = ["LLMProvider", "GeminiProvider", "JobClassifier", "DISCIPLINES"]
+__all__ = ["LLMProvider", "GeminiProvider", "JobClassifier", "DISCIPLINES", "DEFAULT_MODEL"]

@@ -68,8 +68,9 @@ python bluesky_search.py --full-sync        # Ignore previous sync state
 **`src/logger.py`** - Logging configuration
 
 **`src/llm/`** - LLM integration
+- `config.py` - Model settings, prompts, and discipline list (edit this to tune behavior)
 - `base.py` - Abstract `LLMProvider` class
-- `gemini.py` - Google Gemini/Gemma implementation (default: gemma-3-1b-it)
+- `gemini.py` - Google Gemini/Gemma implementation
 - `classifier.py` - `JobClassifier` for filtering and discipline classification
 
 **`src/storage/`** - Storage backends

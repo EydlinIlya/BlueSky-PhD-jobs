@@ -1,27 +1,7 @@
 """Job filtering and discipline classification."""
 
 from .base import LLMProvider
-
-DISCIPLINES = [
-    "Computer Science",
-    "Biology",
-    "Chemistry",
-    "Physics",
-    "Mathematics",
-    "Engineering",
-    "Medicine",
-    "Psychology",
-    "Economics",
-    "Environmental Science",
-    "Linguistics",
-    "History",
-    "Political Science",
-    "Sociology",
-    "Law",
-    "Arts & Humanities",
-    "Education",
-    "Other",
-]
+from .config import DISCIPLINES, IS_REAL_JOB_PROMPT, DISCIPLINE_PROMPT_TEMPLATE
 
 
 class JobClassifier:
@@ -44,14 +24,7 @@ class JobClassifier:
         Returns:
             True if this appears to be a real job posting, False otherwise
         """
-        prompt = (
-            "Is this a real PhD or academic job posting? "
-            "A real job posting should advertise an actual position with application details. "
-            "Exclude: jokes, complaints about job searching, news articles about academia, "
-            "personal announcements (like someone accepting a position), or general discussions. "
-            "Answer only YES or NO."
-        )
-        response = self.llm.classify(text, prompt)
+        response = self.llm.classify(text, IS_REAL_JOB_PROMPT)
         return "YES" in response.upper()
 
     def get_discipline(self, text: str) -> str:
@@ -64,11 +37,7 @@ class JobClassifier:
             The discipline name from DISCIPLINES list
         """
         disciplines_str = ", ".join(DISCIPLINES)
-        prompt = (
-            f"Classify this academic job posting into one of these disciplines: "
-            f"{disciplines_str}. "
-            f"Answer with just the discipline name, nothing else."
-        )
+        prompt = DISCIPLINE_PROMPT_TEMPLATE.format(disciplines=disciplines_str)
         response = self.llm.classify(text, prompt).strip()
 
         # Validate response is in our list
