@@ -2,8 +2,8 @@ name: Daily PhD Position Update
 
 on:
   schedule:
-    # Run daily at 6:40 AM UTC (off-peak for better reliability)
-    - cron: '40 6 * * *'
+    # Temporary: every 15 minutes for testing
+    - cron: '*/15 * * * *'
   workflow_dispatch:
     # Allow manual trigger
 
