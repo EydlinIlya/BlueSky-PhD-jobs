@@ -252,13 +252,13 @@ function updateRowCount() {
     }
 }
 
-// Clear all filters
-function clearAllFilters() {
+// Clear all filters - attached to window for inline onclick
+window.clearAllFilters = function() {
     gridApi.setFilterModel(null);
 }
 
-// Toggle row expansion
-function toggleExpand(event, nodeId) {
+// Toggle row expansion - attached to window for inline onclick
+window.toggleExpand = function(event, nodeId) {
     event.stopPropagation();
 
     if (expandedRows.has(nodeId)) {
