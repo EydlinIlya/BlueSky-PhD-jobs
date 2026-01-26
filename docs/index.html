@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhD Positions | Bluesky Search</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- AG Grid -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.0.2/styles/ag-grid.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.0.2/styles/ag-theme-alpine.css">
+    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@32.0.2/dist/ag-grid-community.min.js"></script>
+
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col">
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+            <h1 class="text-2xl font-semibold text-gray-900">PhD Positions</h1>
+            <p class="mt-1 text-sm text-gray-500">
+                Academic positions found on Bluesky, updated daily
+            </p>
+        </div>
+    </header>
+
+    <!-- Main content -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-6 sm:px-6 lg:px-8">
+        <!-- Loading state -->
+        <div id="loading" class="flex items-center justify-center py-12">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <span class="ml-3 text-gray-600">Loading positions...</span>
+        </div>
+
+        <!-- Error state -->
+        <div id="error" class="hidden bg-red-50 border border-red-200 rounded-lg p-4">
+            <p class="text-red-800">Failed to load data. Please try again later.</p>
+        </div>
+
+        <!-- Grid container -->
+        <div id="grid-container" class="hidden">
+            <div class="mb-4 flex items-center justify-between">
+                <p id="row-count" class="text-sm text-gray-600"></p>
+                <button
+                    onclick="gridApi.setFilterModel(null)"
+                    class="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                >
+                    Clear filters
+                </button>
+            </div>
+            <div id="positions-grid" class="ag-theme-alpine w-full" style="height: 600px;"></div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-gray-200 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
+            <p class="text-sm text-gray-500 text-center">
+                Data sourced from
+                <a href="https://bsky.app" target="_blank" class="text-blue-600 hover:underline">Bluesky</a>
+                 |
+                <a href="https://github.com/EydlinIlya/bluesky_search" target="_blank" class="text-blue-600 hover:underline">View on GitHub</a>
+            </p>
+        </div>
+    </footer>
+
+    <!-- App script -->
+    <script src="app.js"></script>
+</body>
+</html>

@@ -113,6 +113,35 @@ The included workflow runs daily at 6 AM UTC. To enable:
 3. Add secrets: `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`, `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`
 4. The workflow will run automatically or trigger manually from Actions tab
 
+## GitHub Pages Frontend
+
+A web interface to browse PhD positions is available at the `/docs` folder.
+
+### Setup
+
+1. **Add RLS policy** to Supabase (SQL Editor):
+   ```sql
+   ALTER TABLE phd_positions ENABLE ROW LEVEL SECURITY;
+   CREATE POLICY "Allow public read" ON phd_positions FOR SELECT USING (true);
+   ```
+
+2. **Update `docs/app.js`** with your Supabase anon key (Settings → API → anon public)
+
+3. **Enable GitHub Pages**:
+   - Go to repo Settings → Pages
+   - Source: Deploy from branch
+   - Branch: main, folder: /docs
+   - Save
+
+4. Site will be live at: `https://<username>.github.io/bluesky_search/`
+
+### Features
+
+- Sortable columns (click headers)
+- Filterable by date, discipline, and text
+- Pagination (25/50/100 per page)
+- Direct links to Bluesky posts
+
 ## Dependencies
 
 - [atproto](https://atproto.blue/) - AT Protocol SDK for Python

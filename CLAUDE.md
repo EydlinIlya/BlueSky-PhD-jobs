@@ -19,6 +19,7 @@ bluesky_search searches Bluesky social network for PhD position announcements us
 - Incremental updates (only fetch new posts)
 - Multiple storage backends (CSV, Supabase)
 - GitHub Actions for automated daily updates
+- GitHub Pages frontend for browsing positions
 
 ## Development Setup
 
@@ -119,3 +120,31 @@ Required secrets:
 - `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`
 - `GEMINI_API_KEY`
 - `SUPABASE_URL`, `SUPABASE_KEY`
+
+## Frontend (`docs/`)
+
+Static GitHub Pages site for browsing PhD positions:
+
+**`docs/index.html`** - Main page with CDN imports:
+- Tailwind CSS for styling
+- AG Grid for data table
+- Supabase JS SDK for data fetching
+
+**`docs/styles.css`** - AG Grid theme customization
+
+**`docs/app.js`** - Application logic:
+- Initializes Supabase client (anon key)
+- Fetches from `phd_positions` table
+- Configures AG Grid columns with filters/sorting
+
+### RLS Policy Required
+
+The frontend uses the public anon key, so RLS must be enabled:
+```sql
+ALTER TABLE phd_positions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow public read" ON phd_positions FOR SELECT USING (true);
+```
+
+### Local Testing
+
+Open `docs/index.html` directly in a browser (no server required).
