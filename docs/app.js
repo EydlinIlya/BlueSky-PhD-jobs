@@ -153,7 +153,13 @@ function updateRowCount() {
 // Populate discipline dropdown with unique values from data
 function populateDisciplineFilter(positions) {
     const select = document.getElementById('discipline-filter');
-    const disciplines = [...new Set(positions.map(p => p.discipline).filter(Boolean))].sort();
+    let disciplines = [...new Set(positions.map(p => p.discipline).filter(Boolean))].sort();
+
+    // Move "Other" to the end if present
+    if (disciplines.includes('Other')) {
+        disciplines = disciplines.filter(d => d !== 'Other');
+        disciplines.push('Other');
+    }
 
     disciplines.forEach(discipline => {
         const option = document.createElement('option');
