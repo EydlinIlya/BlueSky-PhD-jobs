@@ -1,25 +1,126 @@
-/* AG Grid theme customization */
+/* Custom fonts */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+:root {
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    --font-display: 'Space Grotesk', system-ui, sans-serif;
+    --color-primary: #6366f1;
+    --color-primary-dark: #4f46e5;
+    --color-accent: #10b981;
+    --color-bg: #0f172a;
+    --color-bg-light: #1e293b;
+    --color-bg-card: #1e293b;
+    --color-text: #e2e8f0;
+    --color-text-muted: #94a3b8;
+    --color-border: #334155;
+}
+
+/* Base styles */
+body {
+    font-family: var(--font-display);
+    background: var(--color-bg);
+    color: var(--color-text);
+}
+
+/* Header */
+.site-header {
+    background: linear-gradient(135deg, var(--color-bg-light) 0%, var(--color-bg) 100%);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.site-title {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.site-subtitle {
+    font-family: var(--font-mono);
+    color: var(--color-text-muted);
+}
+
+/* AI badge */
+.ai-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
+    border-radius: 9999px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: white;
+}
+
+.ai-badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    background: var(--color-accent);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Stats bar */
+.stats-bar {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--color-text-muted);
+}
+
+/* Buttons */
+.btn-clear {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--color-primary);
+    transition: color 0.2s;
+}
+
+.btn-clear:hover {
+    color: var(--color-accent);
+}
+
+/* Loading spinner */
+.loading-text {
+    font-family: var(--font-mono);
+    color: var(--color-text-muted);
+}
+
+/* AG Grid theme - dark scientific */
 .ag-theme-alpine {
-    --ag-header-background-color: #f9fafb;
-    --ag-odd-row-background-color: #ffffff;
-    --ag-row-hover-color: #f3f4f6;
-    --ag-selected-row-background-color: #eff6ff;
-    --ag-range-selection-border-color: #3b82f6;
-    --ag-font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    --ag-font-size: 14px;
-    --ag-borders: none;
+    --ag-background-color: var(--color-bg-card);
+    --ag-header-background-color: #0f172a;
+    --ag-odd-row-background-color: var(--color-bg-card);
+    --ag-row-hover-color: #334155;
+    --ag-selected-row-background-color: #3730a3;
+    --ag-range-selection-border-color: var(--color-primary);
+    --ag-font-family: var(--font-mono);
+    --ag-font-size: 13px;
+    --ag-foreground-color: var(--color-text);
+    --ag-secondary-foreground-color: var(--color-text-muted);
+    --ag-borders: solid 1px;
+    --ag-border-color: var(--color-border);
     --ag-row-border-width: 1px;
-    --ag-row-border-color: #e5e7eb;
+    --ag-row-border-color: var(--color-border);
+    --ag-header-foreground-color: var(--color-text);
 }
 
 /* Header styling */
 .ag-theme-alpine .ag-header {
-    border-bottom: 2px solid #e5e7eb;
+    border-bottom: 2px solid var(--color-primary);
 }
 
 .ag-theme-alpine .ag-header-cell {
     font-weight: 600;
-    color: #374151;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.05em;
 }
 
 /* Cell styling */
@@ -30,48 +131,127 @@
 
 /* Link styling in grid */
 .ag-theme-alpine a {
-    color: #2563eb;
+    color: var(--color-primary);
     text-decoration: none;
     font-weight: 500;
+    transition: color 0.2s;
 }
 
 .ag-theme-alpine a:hover {
-    text-decoration: underline;
+    color: var(--color-accent);
+    text-decoration: none;
 }
 
 /* Message column - allow text wrapping */
 .ag-theme-alpine .message-cell {
     white-space: normal;
-    line-height: 1.4;
+    line-height: 1.5;
+    font-family: var(--font-display);
+    font-size: 14px;
 }
 
-/* Discipline badge */
+/* Discipline badge - colorful based on category */
 .discipline-badge {
     display: inline-block;
-    padding: 2px 8px;
-    border-radius: 9999px;
-    font-size: 12px;
-    font-weight: 500;
-    background-color: #e0e7ff;
-    color: #3730a3;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
+    color: white;
 }
 
 /* Filter icons */
 .ag-theme-alpine .ag-icon-filter {
-    color: #6b7280;
+    color: var(--color-text-muted);
 }
 
 .ag-theme-alpine .ag-header-cell-filtered .ag-icon-filter {
-    color: #2563eb;
+    color: var(--color-accent);
+}
+
+/* Pagination */
+.ag-theme-alpine .ag-paging-panel {
+    border-top: 1px solid var(--color-border);
+    color: var(--color-text-muted);
+}
+
+/* Custom filter popup */
+.ag-theme-alpine .ag-popup {
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+}
+
+.discipline-filter-container {
+    background: var(--color-bg-card);
+    color: var(--color-text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+}
+
+.discipline-filter-container input[type="checkbox"] {
+    accent-color: var(--color-primary);
+}
+
+/* Footer */
+.site-footer {
+    background: var(--color-bg-light);
+    border-top: 1px solid var(--color-border);
+    font-family: var(--font-mono);
+    font-size: 13px;
+}
+
+.site-footer a {
+    color: var(--color-primary);
+    transition: color 0.2s;
+}
+
+.site-footer a:hover {
+    color: var(--color-accent);
+}
+
+/* Terminal-style decorations */
+.terminal-prompt::before {
+    content: '>';
+    color: var(--color-accent);
+    margin-right: 8px;
+    font-weight: bold;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--color-bg);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-muted);
 }
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .ag-theme-alpine {
-        --ag-font-size: 13px;
+        --ag-font-size: 12px;
     }
 
     .ag-theme-alpine .ag-cell {
         padding: 8px 12px;
+    }
+
+    .site-title {
+        font-size: 1.25rem;
     }
 }
