@@ -12,6 +12,9 @@ let gridApi;
 // Store all positions for filter options
 let allPositions = [];
 
+// Track expanded rows
+const expandedRows = new Set();
+
 // Custom Discipline Filter Component
 class DisciplineFilter {
     init(params) {
@@ -176,18 +179,19 @@ const columnDefs = [
         cellClass: 'message-cell',
         autoHeight: true,
         wrapText: true,
-        tooltipField: 'message',
         cellRenderer: (params) => {
             if (!params.value) return '';
             const maxLength = 300;
             const isTruncated = params.value.length > maxLength;
-            const text = isTruncated
-                ? params.value.substring(0, maxLength) + '...'
-                : params.value;
-            const expandBtn = isTruncated
-                ? `<button class="expand-btn" onclick="showFullText(event, '${params.node.id}')">[ read more ]</button>`
-                : '';
-            return `<div class="py-1">${escapeHtml(text)}${expandBtn}</div>`;
+            const isExpanded = expandedRows.has(params.node.id);
+
+            if (!isTruncated) {
+                return `<div class="py-1">${escapeHtml(params.value)}</div>`;
+            }
+
+            const text = isExpanded ? params.value : params.value.substring(0, maxLength) + '...';
+            const btnText = isExpanded ? '[ show less ]' : '[ read more ]';
+            return `<div class="py-1">${escapeHtml(text)}<button class="expand-btn" onclick="toggleExpand(event, '${params.node.id}')">${btnText}</button></div>`;
         }
     },
     {
@@ -253,35 +257,24 @@ function clearAllFilters() {
     gridApi.setFilterModel(null);
 }
 
-// Show full text in modal
-function showFullText(event, nodeId) {
+// Toggle row expansion
+function toggleExpand(event, nodeId) {
     event.stopPropagation();
+
+    if (expandedRows.has(nodeId)) {
+        expandedRows.delete(nodeId);
+    } else {
+        expandedRows.add(nodeId);
+    }
+
+    // Refresh the row to re-render
     const rowNode = gridApi.getRowNode(nodeId);
-    if (!rowNode) return;
-
-    const data = rowNode.data;
-    const modal = document.getElementById('text-modal');
-    const content = document.getElementById('modal-content');
-    const link = document.getElementById('modal-link');
-
-    content.textContent = data.message;
-    link.href = data.url;
-
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
+    if (rowNode) {
+        gridApi.refreshCells({ rowNodes: [rowNode], force: true });
+        // Reset row height after content change
+        setTimeout(() => gridApi.resetRowHeights(), 10);
+    }
 }
-
-// Close modal
-function closeModal() {
-    const modal = document.getElementById('text-modal');
-    modal.classList.add('hidden');
-    modal.classList.remove('flex');
-}
-
-// Close modal on escape key
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeModal();
-});
 
 // Fetch data from Supabase
 async function fetchPositions() {
