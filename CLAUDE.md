@@ -13,7 +13,7 @@ When making changes:
 
 ## Project Overview
 
-bluesky_search searches Bluesky social network for PhD position announcements using the AT Protocol SDK. Features include:
+BlueSky-PhD-jobs searches Bluesky social network for PhD position announcements using the AT Protocol SDK. Features include:
 - LLM-based filtering to identify real job postings
 - Discipline classification (18 academic categories)
 - Incremental updates (only fetch new posts)

@@ -1,4 +1,4 @@
-# bluesky_search
+# BlueSky-PhD-jobs
 
 Search Bluesky for PhD position announcements using the AT Protocol SDK.
 
@@ -133,7 +133,7 @@ A web interface to browse PhD positions is available at the `/docs` folder.
    - Branch: main, folder: /docs
    - Save
 
-4. Site will be live at: `https://<username>.github.io/bluesky_search/`
+4. Site will be live at: `https://eydlinilya.github.io/BlueSky-PhD-jobs/`
 
 ### Features
 
