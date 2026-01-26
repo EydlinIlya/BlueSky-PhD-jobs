@@ -5,8 +5,9 @@ DEFAULT_MODEL = "gemma-3-1b-it"
 
 # Rate limit settings
 MAX_RETRIES = 5
-BASE_DELAY = 10  # seconds
-MAX_DELAY = 120  # seconds
+BASE_DELAY = 10  # seconds (initial backoff on rate limit)
+MAX_DELAY = 120  # seconds (max backoff)
+REQUEST_COOLDOWN = 2  # seconds between requests (free tier: 30 req/min = 2s)
 
 # Academic disciplines for classification
 DISCIPLINES = [
@@ -31,12 +32,13 @@ DISCIPLINES = [
 IS_REAL_JOB_PROMPT = (
     "Is this a real PhD or academic job posting? "
     "A real job posting should advertise an actual position with application details. "
-    "Exclude: jokes, complaints about job searching, news articles about academia, "
+    "Exclude: jokes, complaints about job searching, news articles about academia, summer schools, awards, "
     "personal announcements (like someone accepting a position), or general discussions. "
     "Answer only YES or NO."
 )
 
 DISCIPLINE_PROMPT_TEMPLATE = (
     "Classify this academic job posting into one of these disciplines: {disciplines}. "
+    "If it's a university-wide program without specific subject - use General call oprion"
     "Answer with just the discipline name, nothing else."
 )

@@ -7,7 +7,7 @@ from google import genai
 from google.genai import errors as genai_errors
 
 from .base import LLMProvider
-from .config import DEFAULT_MODEL, MAX_RETRIES, BASE_DELAY, MAX_DELAY
+from .config import DEFAULT_MODEL, MAX_RETRIES, BASE_DELAY, MAX_DELAY, REQUEST_COOLDOWN
 
 logger = logging.getLogger("bluesky_search")
 
@@ -43,6 +43,9 @@ class GeminiProvider(LLMProvider):
                     model=self.model,
                     contents=full_prompt,
                 )
+                # Cooldown to stay within rate limits
+                if REQUEST_COOLDOWN > 0:
+                    time.sleep(REQUEST_COOLDOWN)
                 return response.text
 
             except genai_errors.ClientError as e:
