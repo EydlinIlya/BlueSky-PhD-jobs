@@ -9,25 +9,6 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_
 // Grid API reference
 let gridApi;
 
-// Predefined disciplines (matches backend config)
-const DISCIPLINES = [
-    "Computer Science",
-    "Biology",
-    "Chemistry & Materials Science",
-    "Physics",
-    "Mathematics",
-    "Medicine",
-    "Psychology",
-    "Economics",
-    "Linguistics",
-    "History",
-    "Sociology & Political Science",
-    "Arts & Humanities",
-    "Education",
-    "Other",
-    "General call",
-];
-
 // AG Grid column definitions
 const columnDefs = [
     {
@@ -62,7 +43,6 @@ const columnDefs = [
         width: 180,
         filter: 'agSetColumnFilter',
         filterParams: {
-            values: DISCIPLINES,
             buttons: ['reset', 'apply'],
             closeOnApply: true,
         },
