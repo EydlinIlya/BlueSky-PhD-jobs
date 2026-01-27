@@ -222,16 +222,11 @@ def search_phd_calls(
 
             # Apply LLM classification if available
             # Use raw text for job detection (bio confuses the small model)
-            # Use bio + embed context for discipline classification (improves accuracy)
+            # Use bio + embed context for metadata extraction (improves accuracy)
             if classifier:
-                is_job = classifier.is_real_job(raw_text)
-                if is_job:
-                    embed_ctx = extract_embed_context(post)
-                    disc_text = f"{message}\n\n{embed_ctx}" if embed_ctx else message
-                    disciplines = classifier.get_disciplines(disc_text)
-                    classification = {"is_verified_job": True, "disciplines": disciplines}
-                else:
-                    classification = {"is_verified_job": False, "disciplines": None}
+                embed_ctx = extract_embed_context(post)
+                metadata_text = f"{message}\n\n{embed_ctx}" if embed_ctx else message
+                classification = classifier.classify_post(raw_text, metadata_text=metadata_text)
                 post_data.update(classification)
                 if not classification["is_verified_job"]:
                     filtered_count += 1
@@ -265,7 +260,7 @@ def write_csv(results: list[dict], filename: str = "phd_positions.csv"):
 
     # Determine fieldnames based on what fields are present
     base_fields = ["message", "url", "user", "created"]
-    extra_fields = ["disciplines", "is_verified_job"]
+    extra_fields = ["disciplines", "is_verified_job", "country", "position_type"]
 
     # Check if any result has extra fields
     fieldnames = base_fields.copy()

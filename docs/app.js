@@ -18,112 +18,127 @@ let allPositions = [];
 // Track expanded rows
 const expandedRows = new Set();
 
-// Custom Discipline Filter Component
-class DisciplineFilter {
-    init(params) {
-        this.params = params;
-        this.selectedValues = new Set();
+// Generic checkbox set filter factory
+function createCheckboxSetFilter(fieldName, extractValues) {
+    return class CheckboxSetFilter {
+        init(params) {
+            this.params = params;
+            this.selectedValues = new Set();
 
-        // Get unique disciplines from data (flatMap for array field), with "Other" at end
-        let disciplines = [...new Set(allPositions.flatMap(p => p.disciplines || []))].sort();
-        if (disciplines.includes('Other')) {
-            disciplines = disciplines.filter(d => d !== 'Other');
-            disciplines.push('Other');
-        }
-        this.disciplines = disciplines;
+            // Get unique values from data
+            let values = [...new Set(allPositions.flatMap(p => extractValues(p)))].sort();
+            // Move "Other" and "Unknown" to end if present
+            for (const tail of ['Other', 'Unknown']) {
+                if (values.includes(tail)) {
+                    values = values.filter(v => v !== tail);
+                    values.push(tail);
+                }
+            }
+            this.values = values;
 
-        // Create filter UI
-        this.gui = document.createElement('div');
-        this.gui.className = 'discipline-filter-container';
-        this.gui.innerHTML = `
-            <div style="padding: 10px; min-width: 200px;">
-                <div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #e5e7eb;">
-                    <label style="display: flex; align-items: center; cursor: pointer;">
-                        <input type="checkbox" id="select-all" checked style="margin-right: 8px;">
-                        <span style="font-weight: 500;">(Select All)</span>
-                    </label>
-                </div>
-                <div id="discipline-options" style="max-height: 250px; overflow-y: auto;">
-                    ${this.disciplines.map(d => `
-                        <label style="display: flex; align-items: center; cursor: pointer; padding: 4px 0;">
-                            <input type="checkbox" value="${d}" checked style="margin-right: 8px;">
-                            <span>${d}</span>
+            // Create filter UI
+            this.gui = document.createElement('div');
+            this.gui.className = 'checkbox-filter-container';
+            this.gui.innerHTML = `
+                <div style="padding: 10px; min-width: 200px;">
+                    <div style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #e5e7eb;">
+                        <label style="display: flex; align-items: center; cursor: pointer;">
+                            <input type="checkbox" data-select-all="true" checked style="margin-right: 8px;">
+                            <span style="font-weight: 500;">(Select All)</span>
                         </label>
-                    `).join('')}
+                    </div>
+                    <div data-options="true" style="max-height: 250px; overflow-y: auto;">
+                        ${this.values.map(v => `
+                            <label style="display: flex; align-items: center; cursor: pointer; padding: 4px 0;">
+                                <input type="checkbox" value="${escapeHtml(v)}" checked style="margin-right: 8px;">
+                                <span>${escapeHtml(v)}</span>
+                            </label>
+                        `).join('')}
+                    </div>
                 </div>
-            </div>
-        `;
+            `;
 
-        // Initialize all as selected
-        this.disciplines.forEach(d => this.selectedValues.add(d));
+            // Initialize all as selected
+            this.values.forEach(v => this.selectedValues.add(v));
 
-        // Add event listeners
-        this.gui.querySelector('#select-all').addEventListener('change', (e) => {
-            const checkboxes = this.gui.querySelectorAll('#discipline-options input[type="checkbox"]');
-            checkboxes.forEach(cb => {
-                cb.checked = e.target.checked;
-                if (e.target.checked) {
-                    this.selectedValues.add(cb.value);
-                } else {
-                    this.selectedValues.delete(cb.value);
-                }
-            });
-            this.params.filterChangedCallback();
-        });
+            const selectAll = this.gui.querySelector('[data-select-all]');
+            const optionsContainer = this.gui.querySelector('[data-options]');
 
-        this.gui.querySelectorAll('#discipline-options input[type="checkbox"]').forEach(cb => {
-            cb.addEventListener('change', (e) => {
-                if (e.target.checked) {
-                    this.selectedValues.add(e.target.value);
-                } else {
-                    this.selectedValues.delete(e.target.value);
-                }
-                // Update "Select All" checkbox
-                const allChecked = this.selectedValues.size === this.disciplines.length;
-                this.gui.querySelector('#select-all').checked = allChecked;
+            // Select All handler
+            selectAll.addEventListener('change', (e) => {
+                const checkboxes = optionsContainer.querySelectorAll('input[type="checkbox"]');
+                checkboxes.forEach(cb => {
+                    cb.checked = e.target.checked;
+                    if (e.target.checked) {
+                        this.selectedValues.add(cb.value);
+                    } else {
+                        this.selectedValues.delete(cb.value);
+                    }
+                });
                 this.params.filterChangedCallback();
             });
-        });
-    }
 
-    getGui() {
-        return this.gui;
-    }
-
-    doesFilterPass(params) {
-        // If all selected, pass everything
-        if (this.selectedValues.size === this.disciplines.length) {
-            return true;
-        }
-        const disciplines = params.data.disciplines || [];
-        return disciplines.some(d => this.selectedValues.has(d));
-    }
-
-    isFilterActive() {
-        return this.selectedValues.size !== this.disciplines.length;
-    }
-
-    getModel() {
-        if (!this.isFilterActive()) {
-            return null;
-        }
-        return { values: Array.from(this.selectedValues) };
-    }
-
-    setModel(model) {
-        if (model === null) {
-            // Reset to all selected
-            this.selectedValues = new Set(this.disciplines);
-            this.gui.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
-        } else {
-            this.selectedValues = new Set(model.values);
-            this.gui.querySelectorAll('#discipline-options input[type="checkbox"]').forEach(cb => {
-                cb.checked = this.selectedValues.has(cb.value);
+            // Individual checkbox handlers
+            optionsContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                cb.addEventListener('change', (e) => {
+                    if (e.target.checked) {
+                        this.selectedValues.add(e.target.value);
+                    } else {
+                        this.selectedValues.delete(e.target.value);
+                    }
+                    selectAll.checked = this.selectedValues.size === this.values.length;
+                    this.params.filterChangedCallback();
+                });
             });
-            this.gui.querySelector('#select-all').checked = this.selectedValues.size === this.disciplines.length;
         }
-    }
+
+        getGui() {
+            return this.gui;
+        }
+
+        doesFilterPass(params) {
+            if (this.selectedValues.size === this.values.length) {
+                return true;
+            }
+            const cellValues = extractValues(params.data);
+            return cellValues.some(v => this.selectedValues.has(v));
+        }
+
+        isFilterActive() {
+            return this.selectedValues.size !== this.values.length;
+        }
+
+        getModel() {
+            if (!this.isFilterActive()) {
+                return null;
+            }
+            return { values: Array.from(this.selectedValues) };
+        }
+
+        setModel(model) {
+            const selectAll = this.gui.querySelector('[data-select-all]');
+            const optionsContainer = this.gui.querySelector('[data-options]');
+            if (model === null) {
+                this.selectedValues = new Set(this.values);
+                this.gui.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
+            } else {
+                this.selectedValues = new Set(model.values);
+                optionsContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                    cb.checked = this.selectedValues.has(cb.value);
+                });
+                selectAll.checked = this.selectedValues.size === this.values.length;
+            }
+        }
+    };
 }
+
+// Create filter classes from factory
+const DisciplineFilter = createCheckboxSetFilter('disciplines', p => p.disciplines || []);
+const CountryFilter = createCheckboxSetFilter('country', p => {
+    const v = p.country;
+    return (v && v !== 'Unknown') ? [v] : ['Unknown'];
+});
+const PositionTypeFilter = createCheckboxSetFilter('position_type', p => p.position_type || []);
 
 // AG Grid column definitions
 const columnDefs = [
@@ -159,9 +174,31 @@ const columnDefs = [
         width: 220,
         filter: DisciplineFilter,
         cellRenderer: (params) => {
-            if (!params.value?.length) return '<span class="text-gray-400">—</span>';
+            if (!params.value?.length) return '<span class="text-gray-400">\u2014</span>';
             return params.value
                 .map(d => `<span class="discipline-badge">${escapeHtml(d)}</span>`)
+                .join(' ');
+        }
+    },
+    {
+        field: 'country',
+        headerName: 'Country',
+        width: 130,
+        filter: CountryFilter,
+        cellRenderer: (params) => {
+            if (!params.value || params.value === 'Unknown') return '<span class="text-gray-400">\u2014</span>';
+            return `<span class="country-badge">${escapeHtml(params.value)}</span>`;
+        }
+    },
+    {
+        field: 'position_type',
+        headerName: 'Type',
+        width: 160,
+        filter: PositionTypeFilter,
+        cellRenderer: (params) => {
+            if (!params.value?.length) return '<span class="text-gray-400">\u2014</span>';
+            return params.value
+                .map(t => `<span class="position-type-badge">${escapeHtml(t)}</span>`)
                 .join(' ');
         }
     },
@@ -294,7 +331,7 @@ async function fetchMockPositions() {
 async function fetchSupabasePositions() {
     const { data, error } = await supabaseClient
         .from('phd_positions')
-        .select('created_at, disciplines, user_handle, message, url')
+        .select('created_at, disciplines, country, position_type, user_handle, message, url')
         .eq('is_verified_job', true)
         .order('created_at', { ascending: false });
 

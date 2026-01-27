@@ -53,3 +53,46 @@ DISCIPLINE_PROMPT_TEMPLATE = (
     "If it's a university-wide program, use 'General call'. "
     "Answer with discipline names only, nothing else."
 )
+
+# Position types for classification
+POSITION_TYPES = [
+    "PhD Student",
+    "Postdoc",
+    "Master Student",
+    "Research Assistant",
+]
+
+METADATA_PROMPT_TEMPLATE = (
+    "Extract metadata from this academic job posting as JSON.\n\n"
+    "Return a JSON object with these fields:\n"
+    '  "disciplines": array of 1-3 disciplines from this list: {disciplines}\n'
+    '  "country": country where the position is located (standard name, or "Unknown")\n'
+    '  "position_type": array of position types from: PhD Student, Postdoc, Master Student, Research Assistant\n\n'
+    "DISCIPLINE rules:\n"
+    "- Pick 1-3 that best match. For cross-disciplinary work, list all (e.g., bioinformatics = Biology + Computer Science).\n"
+    "- If it's a university-wide program, use 'General call'.\n\n"
+    "COUNTRY rules:\n"
+    "- Use standard country names: USA, UK, Germany, France, Switzerland, etc.\n"
+    "- Identify country from university names, domains, or city names.\n"
+    "- If not determinable, use 'Unknown'.\n\n"
+    "POSITION TYPE rules:\n"
+    "- PhD Student: any doctoral/PhD position (including 'PhD Position', 'Doctoral Researcher', 'predoctoral')\n"
+    "- Postdoc: postdoctoral position, research fellow, or any role that REQUIRES a PhD/doctorate\n"
+    "- Master Student: master's thesis or MSc position\n"
+    "- Research Assistant: lab assistant, research aide, RA position (non-doctoral)\n"
+    "- If the post advertises multiple types, list all that apply (e.g., [\"PhD Student\", \"Postdoc\"])\n\n"
+    "Examples:\n"
+    'Input: "PhD position at University of Oxford in computational biology"\n'
+    'Output: {{"disciplines": ["Biology", "Computer Science"], "country": "UK", "position_type": ["PhD Student"]}}\n\n'
+    'Input: "Postdoc and PhD positions at MIT in physics"\n'
+    'Output: {{"disciplines": ["Physics"], "country": "USA", "position_type": ["PhD Student", "Postdoc"]}}\n\n'
+    'Input: "Doctoral Research Position at Friedrich-Schiller-Universitat Jena in archaeology"\n'
+    'Output: {{"disciplines": ["History"], "country": "Germany", "position_type": ["PhD Student"]}}\n\n'
+    'Input: "Research assistant at Aarhus University, Denmark in microbial biology"\n'
+    'Output: {{"disciplines": ["Biology"], "country": "Denmark", "position_type": ["Research Assistant"]}}\n\n'
+    'Input: "MS opportunity in machine learning, apply via link"\n'
+    'Output: {{"disciplines": ["Computer Science"], "country": "Unknown", "position_type": ["Master Student"]}}\n\n'
+    'Input: "Hiring one postdoctoral and two predoctoral researchers in neuroscience"\n'
+    'Output: {{"disciplines": ["Psychology"], "country": "Unknown", "position_type": ["PhD Student", "Postdoc"]}}\n\n'
+    "Return ONLY the JSON object, no other text."
+)

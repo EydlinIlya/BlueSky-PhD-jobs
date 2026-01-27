@@ -34,6 +34,10 @@ class MockStorage(StorageBackend):
                 record["disciplines"] = post["disciplines"]
             if "is_verified_job" in post:
                 record["is_verified_job"] = post["is_verified_job"]
+            if "country" in post and post["country"] is not None:
+                record["country"] = post["country"]
+            if "position_type" in post and post["position_type"] is not None:
+                record["position_type"] = post["position_type"]
 
             # Upsert: overwrite if uri exists
             self.posts[uri] = record

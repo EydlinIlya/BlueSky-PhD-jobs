@@ -206,14 +206,40 @@ body {
     border-radius: 8px;
 }
 
-.discipline-filter-container {
+/* Country badge - green tones */
+.country-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    letter-spacing: 0.03em;
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+    color: white;
+}
+
+/* Position type badge - amber tones */
+.position-type-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    letter-spacing: 0.03em;
+    background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
+    color: white;
+}
+
+.checkbox-filter-container {
     background: var(--color-bg-card);
     color: var(--color-text);
     font-family: var(--font-mono);
     font-size: 13px;
 }
 
-.discipline-filter-container input[type="checkbox"] {
+.checkbox-filter-container input[type="checkbox"] {
     accent-color: var(--color-primary);
 }
 

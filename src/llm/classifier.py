@@ -1,7 +1,10 @@
 """Job filtering and discipline classification."""
 
+import json
+import re
+
 from .base import LLMProvider
-from .config import DISCIPLINES, IS_REAL_JOB_PROMPT, DISCIPLINE_PROMPT_TEMPLATE
+from .config import DISCIPLINES, POSITION_TYPES, IS_REAL_JOB_PROMPT, METADATA_PROMPT_TEMPLATE
 
 
 class JobClassifier:
@@ -27,41 +30,102 @@ class JobClassifier:
         response = self.llm.classify(text, IS_REAL_JOB_PROMPT)
         return "YES" in response.upper()
 
-    def get_disciplines(self, text: str) -> list[str]:
-        """Classify the job posting into 1-3 academic disciplines.
+    def get_metadata(self, text: str) -> dict:
+        """Extract disciplines, country, and position type from a job posting.
 
         Args:
-            text: The post text to analyze
+            text: The post text to analyze (bio + post + embed context)
 
         Returns:
-            List of discipline names from DISCIPLINES list (max 3)
+            Dict with 'disciplines' (list), 'country' (str), 'position_type' (list)
         """
         disciplines_str = ", ".join(DISCIPLINES)
-        prompt = DISCIPLINE_PROMPT_TEMPLATE.format(disciplines=disciplines_str)
+        prompt = METADATA_PROMPT_TEMPLATE.format(disciplines=disciplines_str)
         response = self.llm.classify(text, prompt).strip()
 
-        # Parse comma-separated response and validate each part
+        # Strip markdown fences if present
+        response = re.sub(r'^```(?:json)?\s*', '', response)
+        response = re.sub(r'\s*```$', '', response)
+
+        # Parse JSON
+        try:
+            data = json.loads(response)
+        except (json.JSONDecodeError, ValueError):
+            return {
+                "disciplines": ["Other"],
+                "country": "Unknown",
+                "position_type": ["PhD Student"],
+            }
+
+        # Validate and extract disciplines
+        raw_disciplines = data.get("disciplines", [])
+        if isinstance(raw_disciplines, str):
+            raw_disciplines = [d.strip() for d in raw_disciplines.split(",")]
         matched = []
-        for part in response.split(','):
-            part = part.strip()
-            for discipline in DISCIPLINES:
-                if discipline.lower() in part.lower():
-                    if discipline not in matched:
-                        matched.append(discipline)
+        for part in raw_disciplines:
+            if isinstance(part, str):
+                part = part.strip()
+                for discipline in DISCIPLINES:
+                    if discipline.lower() in part.lower():
+                        if discipline not in matched:
+                            matched.append(discipline)
+                        break
+        disciplines = matched[:3] if matched else ["Other"]
+
+        # Validate country
+        country = data.get("country", "Unknown")
+        if not isinstance(country, str) or not country.strip():
+            country = "Unknown"
+        else:
+            country = country.strip()
+
+        # Validate position_type as array with fuzzy matching per element
+        raw_position = data.get("position_type", ["PhD Student"])
+        if isinstance(raw_position, str):
+            raw_position = [raw_position]
+        if not isinstance(raw_position, list) or not raw_position:
+            raw_position = ["PhD Student"]
+
+        position_type = []
+        for rp in raw_position:
+            if not isinstance(rp, str):
+                continue
+            rp_lower = rp.strip().lower()
+            matched_pt = None
+            # Exact match first
+            for pt in POSITION_TYPES:
+                if pt.lower() == rp_lower:
+                    matched_pt = pt
                     break
+            # Fuzzy fallback
+            if matched_pt is None:
+                for pt in POSITION_TYPES:
+                    if pt.lower() in rp_lower:
+                        matched_pt = pt
+                        break
+            if matched_pt and matched_pt not in position_type:
+                position_type.append(matched_pt)
 
-        # Limit to 3, default to ["Other"]
-        return matched[:3] if matched else ["Other"]
+        if not position_type:
+            position_type = ["PhD Student"]
 
-    def classify_post(self, text: str) -> dict:
-        """Classify a post, determining if it's a real job and its disciplines.
+        return {
+            "disciplines": disciplines,
+            "country": country,
+            "position_type": position_type,
+        }
+
+    def classify_post(self, text: str, metadata_text: str | None = None) -> dict:
+        """Classify a post, determining if it's a real job and extracting metadata.
 
         Args:
-            text: The post text to analyze
+            text: The raw post text (used for job detection)
+            metadata_text: Enriched text with bio + embed context (used for metadata
+                extraction). Falls back to text if not provided.
 
         Returns:
-            Dict with 'is_verified_job' and 'disciplines' keys.
-            Non-jobs have is_verified_job=False and disciplines=None.
+            Dict with 'is_verified_job', 'disciplines', 'country', 'position_type'.
+            Non-jobs have is_verified_job=False and None for other fields.
         """
         is_job = self.is_real_job(text)
 
@@ -69,10 +133,14 @@ class JobClassifier:
             return {
                 "is_verified_job": False,
                 "disciplines": None,
+                "country": None,
+                "position_type": None,
             }
 
-        disciplines = self.get_disciplines(text)
+        metadata = self.get_metadata(metadata_text or text)
         return {
             "is_verified_job": True,
-            "disciplines": disciplines,
+            "disciplines": metadata["disciplines"],
+            "country": metadata["country"],
+            "position_type": metadata["position_type"],
         }

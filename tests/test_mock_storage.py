@@ -3,7 +3,8 @@
 from tests.mock_storage import MockStorage
 
 
-def make_post(uri="at://test/1", message="Test PhD position", disciplines=None, is_verified_job=True):
+def make_post(uri="at://test/1", message="Test PhD position", disciplines=None,
+              is_verified_job=True, country=None, position_type=None):
     """Helper to create a post dict."""
     post = {
         "uri": uri,
@@ -15,6 +16,10 @@ def make_post(uri="at://test/1", message="Test PhD position", disciplines=None, 
     if disciplines is not None:
         post["disciplines"] = disciplines
     post["is_verified_job"] = is_verified_job
+    if country is not None:
+        post["country"] = country
+    if position_type is not None:
+        post["position_type"] = position_type
     return post
 
 
@@ -104,3 +109,39 @@ class TestMockStorage:
         record = storage.get_post("at://test/1")
         assert record["is_verified_job"] is False
         assert "disciplines" not in record
+
+    def test_country_and_position_type_stored(self):
+        storage = MockStorage()
+        post = make_post(
+            disciplines=["Physics"],
+            country="Switzerland",
+            position_type=["Postdoc"]
+        )
+        storage.save_posts([post])
+
+        record = storage.get_post("at://test/1")
+        assert record["country"] == "Switzerland"
+        assert record["position_type"] == ["Postdoc"]
+
+    def test_multiple_position_types_stored(self):
+        storage = MockStorage()
+        post = make_post(
+            disciplines=["Biology"],
+            country="Turkey",
+            position_type=["PhD Student", "Postdoc"]
+        )
+        storage.save_posts([post])
+
+        record = storage.get_post("at://test/1")
+        assert record["position_type"] == ["PhD Student", "Postdoc"]
+
+    def test_non_job_no_country_or_position_type(self):
+        storage = MockStorage()
+        post = make_post(is_verified_job=False, disciplines=None)
+        post["country"] = None
+        post["position_type"] = None
+        storage.save_posts([post])
+
+        record = storage.get_post("at://test/1")
+        assert "country" not in record
+        assert "position_type" not in record

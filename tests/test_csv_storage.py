@@ -8,7 +8,8 @@ import tempfile
 from src.storage.csv_storage import CSVStorage
 
 
-def make_post(uri="at://test/1", disciplines=None, is_verified_job=True):
+def make_post(uri="at://test/1", disciplines=None, is_verified_job=True,
+              country=None, position_type=None):
     """Helper to create a post dict."""
     post = {
         "uri": uri,
@@ -20,6 +21,10 @@ def make_post(uri="at://test/1", disciplines=None, is_verified_job=True):
     if disciplines is not None:
         post["disciplines"] = disciplines
     post["is_verified_job"] = is_verified_job
+    if country is not None:
+        post["country"] = country
+    if position_type is not None:
+        post["position_type"] = position_type
     return post
 
 
@@ -104,3 +109,45 @@ class TestCSVStorage:
         assert "Biology" in parsed
         assert "Chemistry & Materials Science" in parsed
         assert "Medicine" in parsed
+
+    def test_country_and_position_type_roundtrip(self):
+        post = make_post(
+            disciplines=["Physics"],
+            country="Switzerland",
+            position_type=["Postdoc"]
+        )
+        self.storage.save_posts([post])
+
+        with open(self.tmpfile.name, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+
+        assert len(rows) == 1
+        assert rows[0]["country"] == "Switzerland"
+        assert json.loads(rows[0]["position_type"]) == ["Postdoc"]
+        assert json.loads(rows[0]["disciplines"]) == ["Physics"]
+
+    def test_multiple_position_types_roundtrip(self):
+        post = make_post(
+            disciplines=["Biology"],
+            country="Turkey",
+            position_type=["PhD Student", "Postdoc"]
+        )
+        self.storage.save_posts([post])
+
+        with open(self.tmpfile.name, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+
+        assert json.loads(rows[0]["position_type"]) == ["PhD Student", "Postdoc"]
+
+    def test_country_and_position_type_absent(self):
+        post = make_post(disciplines=["Biology"])
+        self.storage.save_posts([post])
+
+        with open(self.tmpfile.name, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+
+        assert "country" not in rows[0]
+        assert "position_type" not in rows[0]

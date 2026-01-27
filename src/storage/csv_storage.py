@@ -18,7 +18,7 @@ class CSVStorage(StorageBackend):
         """
         self.filename = filename
         self.base_fields = ["uri", "message", "url", "user", "created"]
-        self.extra_fields = ["disciplines", "is_verified_job"]
+        self.extra_fields = ["disciplines", "is_verified_job", "country", "position_type"]
 
     def save_posts(self, posts: list[dict]) -> int:
         """Save posts to CSV file.
@@ -43,6 +43,8 @@ class CSVStorage(StorageBackend):
             row = dict(post)
             if "disciplines" in row and isinstance(row["disciplines"], list):
                 row["disciplines"] = json.dumps(row["disciplines"])
+            if "position_type" in row and isinstance(row["position_type"], list):
+                row["position_type"] = json.dumps(row["position_type"])
             rows.append(row)
 
         with open(self.filename, "w", newline="", encoding="utf-8") as f:

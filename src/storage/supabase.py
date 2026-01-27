@@ -65,6 +65,10 @@ class SupabaseStorage(StorageBackend):
                 record["disciplines"] = post["disciplines"]  # PostgreSQL handles list as array
             if "is_verified_job" in post:
                 record["is_verified_job"] = post["is_verified_job"]
+            if "country" in post:
+                record["country"] = post["country"]
+            if "position_type" in post:
+                record["position_type"] = post["position_type"]
 
             records.append(record)
 

@@ -15,9 +15,9 @@ When making changes:
 
 BlueSky-PhD-jobs searches Bluesky social network for PhD position announcements using the AT Protocol SDK. Features include:
 - LLM-based filtering to identify real job postings
-- Multi-discipline classification (1-3 academic categories per post)
-- Author bio enrichment for improved discipline classification
-- Embed link preview metadata used for discipline context (no HTTP fetch needed)
+- Single JSON metadata extraction: disciplines (1-3), country, and position type per post
+- Author bio enrichment for improved classification
+- Embed link preview metadata used for classification context (no HTTP fetch needed)
 - Incremental updates (only fetch new posts)
 - Multiple storage backends (CSV, Supabase)
 - GitHub Actions for automated daily updates
@@ -71,10 +71,10 @@ python bluesky_search.py --full-sync        # Ignore previous sync state
 **`src/logger.py`** - Logging configuration
 
 **`src/llm/`** - LLM integration
-- `config.py` - Model settings, prompts, and discipline list (edit this to tune behavior)
+- `config.py` - Model settings, prompts, discipline list, and position types (edit this to tune behavior)
 - `base.py` - Abstract `LLMProvider` class
 - `nvidia.py` - NVIDIA API (Llama 4 Maverick) implementation
-- `classifier.py` - `JobClassifier` for filtering and discipline classification
+- `classifier.py` - `JobClassifier` for filtering and metadata extraction (disciplines, country, position type)
 
 **`src/storage/`** - Storage backends
 - `base.py` - Abstract `StorageBackend` class
@@ -88,7 +88,7 @@ python bluesky_search.py --full-sync        # Ignore previous sync state
 4. Fetch author bio (`post.author.description`) and prepend to message as `[Bio: ...]`
 5. LLM classification (if enabled):
    - Job detection uses **raw post text only** (bio confuses the small model, causing false rejections)
-   - Discipline classification uses **bio + embed context** (bio provides author discipline context; embed link preview title/description provides job posting details — no HTTP fetch needed, ~70% of posts have embeds)
+   - Metadata extraction (disciplines, country, position type) uses **bio + embed context** via single JSON prompt (bio provides author context; embed link preview title/description provides job details — no HTTP fetch needed, ~70% of posts have embeds)
 6. Save ALL posts to storage backend (non-jobs included for analysis)
 7. Update sync state
 
@@ -129,11 +129,17 @@ CREATE TABLE phd_positions (
     created_at TIMESTAMPTZ NOT NULL,
     disciplines TEXT[],
     is_verified_job BOOLEAN DEFAULT TRUE,
+    country TEXT,
+    position_type TEXT,
     indexed_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 3. Get URL and anon key from Settings → API
 4. Add to `.env`: `SUPABASE_URL` and `SUPABASE_KEY`
+
+Migrations (in `migrations/`):
+- `001_discipline_to_disciplines_array.sql` - Converts single discipline to array
+- `002_add_country_position_type.sql` - Adds country and position_type columns
 
 ## GitHub Actions
 
@@ -157,7 +163,8 @@ Static GitHub Pages site for browsing PhD positions:
 
 **`docs/app.js`** - Application logic:
 - Initializes Supabase client (anon key)
-- Fetches from `phd_positions` table
+- Fetches from `phd_positions` table (including country, position_type)
+- Generic `createCheckboxSetFilter()` factory for discipline, country, and position type filters
 - Configures AG Grid columns with filters/sorting
 - Column drag-to-hide disabled (`suppressDragLeaveHidesColumns`)
 

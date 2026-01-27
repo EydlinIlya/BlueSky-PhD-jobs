@@ -7,7 +7,9 @@ Search Bluesky for PhD position announcements using the AT Protocol SDK.
 - Search multiple PhD-related queries on Bluesky
 - **LLM filtering** - Automatically filter out non-job posts (jokes, discussions, etc.)
 - **Multi-discipline classification** - Categorize positions into 1-3 academic disciplines
-- **Author bio enrichment** - Prepends author profile bio for better discipline classification
+- **Country detection** - Identifies position country from university, domain, or city names
+- **Position type extraction** - Classifies as PhD Student, Postdoc, Master Student, Research Assistant, or Multiple
+- **Author bio enrichment** - Prepends author profile bio for better classification
 - **Embed link context** - Uses link preview metadata from shared URLs to improve classification
 - **Incremental updates** - Only fetch new posts since last run
 - **Multiple storage backends** - CSV (local) or Supabase (cloud PostgreSQL)
@@ -77,13 +79,17 @@ python bluesky_search.py --no-llm -l 10
 
 ## Output
 
-CSV columns: `uri`, `message`, `url`, `user`, `created`, `disciplines`, `is_verified_job`
+CSV columns: `uri`, `message`, `url`, `user`, `created`, `disciplines`, `is_verified_job`, `country`, `position_type`
 
 The `message` field includes the author's profile bio prepended as `[Bio: ...]` when available, followed by the post text. This provides discipline context (e.g. "Professor of Biology at MIT").
 
 Each post can have 1-3 disciplines. In CSV output, `disciplines` is a JSON array (e.g. `["Biology", "Computer Science"]`).
 
 Disciplines: Computer Science, Biology, Chemistry & Materials Science, Physics, Mathematics, Medicine, Psychology, Economics, Linguistics, History, Sociology & Political Science, Arts & Humanities, Education, Other, General call
+
+Position types: PhD Student, Postdoc, Master Student, Research Assistant, Multiple
+
+Country: Standard country names (USA, UK, Germany, etc.) or "Unknown" if not determinable
 
 ## Supabase Setup
 
@@ -100,11 +106,15 @@ CREATE TABLE phd_positions (
     created_at TIMESTAMPTZ NOT NULL,
     disciplines TEXT[],
     is_verified_job BOOLEAN DEFAULT TRUE,
+    country TEXT,
+    position_type TEXT,
     indexed_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 
-If upgrading from an existing table with a single `discipline` TEXT column, run the migration at `migrations/001_discipline_to_disciplines_array.sql`.
+**Migrations** (run in order if upgrading an existing table):
+- `migrations/001_discipline_to_disciplines_array.sql` — Converts single `discipline` TEXT to `disciplines` TEXT[]
+- `migrations/002_add_country_position_type.sql` — Adds `country` and `position_type` columns
 
 3. Go to Settings → API and copy:
    - Project URL → `SUPABASE_URL`
@@ -146,7 +156,7 @@ A web interface to browse PhD positions is available at the `/docs` folder.
 ### Features
 
 - Sortable columns (click headers)
-- Filterable by date, discipline, and text
+- Filterable by date, discipline, country, position type, and text
 - Pagination (25/50/100 per page)
 - Direct links to Bluesky posts
 
