@@ -30,10 +30,19 @@ DISCIPLINES = [
 
 # Prompts
 IS_REAL_JOB_PROMPT = (
-    "Is this a real PhD or academic job posting? "
-    "A real job posting should advertise an actual position with application details. "
-    "Exclude: jokes, complaints about job searching, news articles about academia, summer schools, awards, "
-    "personal announcements (like someone accepting a position), or general discussions. "
+    "Decide if this social media post is sharing an academic job/position opening.\n\n"
+    "Examples:\n"
+    "- 'PhD position available in my lab at Durham! Email me for details.' → YES\n"
+    "- 'Open postdoc position in movement ecology - Deadline Feb 15' → YES\n"
+    "- 'We have a PhD studentship opportunity, closing date 20th Feb' → YES\n"
+    "- 'We will be hiring 14 PhD researchers next month' → YES\n"
+    "- 'So tired of applying to PhD positions with no response' → NO\n"
+    "- 'Congratulations to Dr. Smith on completing her PhD!' → NO\n"
+    "- 'Interesting article about the state of academic hiring' → NO\n"
+    "- 'Join our advisory panel for early career researchers' → NO\n\n"
+    "Answer YES if the post shares/advertises an open position (even briefly, "
+    "even if details are in an external link). "
+    "Answer NO if it's not advertising a position. "
     "Answer only YES or NO."
 )
 
