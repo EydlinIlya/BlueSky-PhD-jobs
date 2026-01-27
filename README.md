@@ -8,6 +8,7 @@ Search Bluesky for PhD position announcements using the AT Protocol SDK.
 - **LLM filtering** - Automatically filter out non-job posts (jokes, discussions, etc.)
 - **Multi-discipline classification** - Categorize positions into 1-3 academic disciplines
 - **Author bio enrichment** - Prepends author profile bio for better discipline classification
+- **Embed link context** - Uses link preview metadata from shared URLs to improve classification
 - **Incremental updates** - Only fetch new posts since last run
 - **Multiple storage backends** - CSV (local) or Supabase (cloud PostgreSQL)
 - **GitHub Actions** - Automated daily updates
@@ -51,7 +52,7 @@ python bluesky_search.py
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `-q, --query` | Search query (repeatable) | PhD position, PhD call, etc. |
+| `-q, --query` | Search query (repeatable) | 11 academic job queries |
 | `-o, --output` | Output CSV filename | `phd_positions.csv` |
 | `-l, --limit` | Max results per query | 50 |
 | `--no-llm` | Disable LLM filtering | LLM enabled if key set |

@@ -17,6 +17,7 @@ BlueSky-PhD-jobs searches Bluesky social network for PhD position announcements 
 - LLM-based filtering to identify real job postings
 - Multi-discipline classification (1-3 academic categories per post)
 - Author bio enrichment for improved discipline classification
+- Embed link preview metadata used for discipline context (no HTTP fetch needed)
 - Incremental updates (only fetch new posts)
 - Multiple storage backends (CSV, Supabase)
 - GitHub Actions for automated daily updates
@@ -61,6 +62,7 @@ python bluesky_search.py --full-sync        # Ignore previous sync state
 - `get_classifier()` - Creates LLM classifier if API key available
 - `get_storage()` - Creates storage backend (CSV or Supabase)
 - `search_with_retry()` - Handles rate limits with exponential backoff
+- `extract_embed_context()` - Extracts link preview title/description from post embeds
 - `search_phd_calls()` - Runs queries, deduplicates, applies LLM filter
 - `load_sync_state()` / `save_sync_state()` - Incremental update tracking
 
@@ -86,7 +88,7 @@ python bluesky_search.py --full-sync        # Ignore previous sync state
 4. Fetch author bio (`post.author.description`) and prepend to message as `[Bio: ...]`
 5. LLM classification (if enabled):
    - Job detection uses **raw post text only** (bio confuses the small model, causing false rejections)
-   - Discipline classification uses **bio-enriched text** (bio provides critical discipline context, e.g. "Professor of Biology")
+   - Discipline classification uses **bio + embed context** (bio provides author discipline context; embed link preview title/description provides job posting details — no HTTP fetch needed, ~70% of posts have embeds)
 6. Save ALL posts to storage backend (non-jobs included for analysis)
 7. Update sync state
 

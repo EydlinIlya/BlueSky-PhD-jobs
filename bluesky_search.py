@@ -90,6 +90,11 @@ DEFAULT_QUERIES = [
     "PhD opportunity",
     "PhD opening",
     "PhD vacancy",
+    "postdoc position",
+    "call for postdocs",
+    "join my lab",
+    "call for master students",
+    "research assistant position",
 ]
 
 from atproto import Client
@@ -139,6 +144,23 @@ def search_with_retry(client: Client, query: str, limit: int = 25) -> list | Non
                 logger.error(f"Failed after {MAX_RETRIES} attempts: {e}")
                 return None
     return None
+
+
+def extract_embed_context(post) -> str:
+    """Extract title and description from a post's embedded link preview.
+
+    Bluesky stores link preview metadata (title, description) in the post's
+    embed field. This is free data from the API — no HTTP fetch needed.
+    """
+    embed = getattr(post.record, 'embed', None)
+    if not embed or not hasattr(embed, 'external'):
+        return ""
+    ext = embed.external
+    title = getattr(ext, 'title', '') or ''
+    desc = getattr(ext, 'description', '') or ''
+    if title or desc:
+        return f"[Linked page - {title}: {desc}]"
+    return ""
 
 
 def search_phd_calls(
@@ -200,11 +222,13 @@ def search_phd_calls(
 
             # Apply LLM classification if available
             # Use raw text for job detection (bio confuses the small model)
-            # Use bio-enriched text for discipline classification (bio improves accuracy)
+            # Use bio + embed context for discipline classification (improves accuracy)
             if classifier:
                 is_job = classifier.is_real_job(raw_text)
                 if is_job:
-                    disciplines = classifier.get_disciplines(message)
+                    embed_ctx = extract_embed_context(post)
+                    disc_text = f"{message}\n\n{embed_ctx}" if embed_ctx else message
+                    disciplines = classifier.get_disciplines(disc_text)
                     classification = {"is_verified_job": True, "disciplines": disciplines}
                 else:
                     classification = {"is_verified_job": False, "disciplines": None}
