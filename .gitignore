@@ -6,3 +6,4 @@ __pycache__/
 phd_positions.csv
 last_sync.json
 .claude/
+experiments/

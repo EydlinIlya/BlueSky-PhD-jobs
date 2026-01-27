@@ -1,7 +1,7 @@
 """LLM configuration: model settings and prompts."""
 
 # Model configuration
-DEFAULT_MODEL = "gemma-3-1b-it"
+DEFAULT_MODEL = "meta/llama-4-maverick-17b-128e-instruct"
 
 # Rate limit settings
 MAX_RETRIES = 5

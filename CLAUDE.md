@@ -41,7 +41,7 @@ BLUESKY_PASSWORD=your-app-password
 
 Optional:
 ```
-GEMINI_API_KEY=your-gemini-api-key    # For LLM filtering
+NVIDIA_API_KEY=your-nvidia-api-key    # For LLM filtering
 SUPABASE_URL=https://xxx.supabase.co  # For Supabase storage
 SUPABASE_KEY=your-anon-key            # For Supabase storage
 ```
@@ -73,7 +73,7 @@ python bluesky_search.py --full-sync        # Ignore previous sync state
 **`src/llm/`** - LLM integration
 - `config.py` - Model settings, prompts, and discipline list (edit this to tune behavior)
 - `base.py` - Abstract `LLMProvider` class
-- `gemini.py` - Google Gemini/Gemma implementation
+- `nvidia.py` - NVIDIA API (Llama 4 Maverick) implementation
 - `classifier.py` - `JobClassifier` for filtering and discipline classification
 
 **`src/storage/`** - Storage backends
@@ -112,7 +112,7 @@ Test files:
 
 - `atproto` - AT Protocol SDK
 - `python-dotenv` - Environment variables
-- `google-genai` - Gemini/Gemma API
+- `requests` - NVIDIA API (Llama 4 Maverick)
 - `supabase` - Supabase client
 
 ## Supabase Setup
@@ -141,7 +141,7 @@ The workflow at `.github/workflows/daily-update.yml` runs daily at 6 AM UTC.
 
 Required secrets:
 - `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`
-- `GEMINI_API_KEY`
+- `NVIDIA_API_KEY`
 - `SUPABASE_URL`, `SUPABASE_KEY`
 
 ## Frontend (`docs/`)

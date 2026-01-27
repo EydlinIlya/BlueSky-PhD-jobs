@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from src.logger import setup_logger
-from src.llm import GeminiProvider, JobClassifier
+from src.llm import NvidiaProvider, JobClassifier
 from src.storage import StorageBackend, CSVStorage, SupabaseStorage
 
 # Fix Windows console encoding
@@ -21,10 +21,10 @@ logger = setup_logger()
 
 def get_classifier() -> JobClassifier | None:
     """Create a job classifier if API key is available."""
-    api_key = os.environ.get("GEMINI_API_KEY")
+    api_key = os.environ.get("NVIDIA_API_KEY")
     if not api_key:
         return None
-    llm = GeminiProvider(api_key)
+    llm = NvidiaProvider(api_key)
     return JobClassifier(llm)
 
 
@@ -302,7 +302,7 @@ def main():
     parser.add_argument(
         "--no-llm",
         action="store_true",
-        help="Disable LLM filtering (uses GEMINI_API_KEY env var when enabled)",
+        help="Disable LLM filtering (uses NVIDIA_API_KEY env var when enabled)",
     )
     parser.add_argument(
         "--full-sync",
@@ -357,9 +357,9 @@ def main():
     if not args.no_llm:
         classifier = get_classifier()
         if classifier:
-            logger.info("LLM filtering enabled (Gemini)")
+            logger.info("LLM filtering enabled (Llama)")
         else:
-            logger.info("LLM filtering disabled (no GEMINI_API_KEY)")
+            logger.info("LLM filtering disabled (no NVIDIA_API_KEY)")
 
     logger.info("Connecting to Bluesky...")
     try:

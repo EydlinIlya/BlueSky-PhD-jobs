@@ -32,7 +32,7 @@ BLUESKY_HANDLE=your-handle.bsky.social
 BLUESKY_PASSWORD=your-app-password
 
 # Optional - LLM filtering (recommended)
-GEMINI_API_KEY=your-gemini-api-key
+NVIDIA_API_KEY=your-nvidia-api-key
 
 # Optional - Supabase storage
 SUPABASE_URL=https://xxx.supabase.co
@@ -40,7 +40,7 @@ SUPABASE_KEY=your-anon-key
 ```
 
 Get a Bluesky app password at Settings → App Passwords.
-Get a Gemini API key at https://aistudio.google.com/apikey
+Get an NVIDIA API key at https://build.nvidia.com
 
 ## Usage
 
@@ -118,7 +118,7 @@ The included workflow runs daily at 6 AM UTC. To enable:
 
 1. Push to GitHub
 2. Go to Settings → Secrets and variables → Actions
-3. Add secrets: `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`, `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`
+3. Add secrets: `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`, `NVIDIA_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`
 4. The workflow will run automatically or trigger manually from Actions tab
 
 ## GitHub Pages Frontend
@@ -153,7 +153,7 @@ A web interface to browse PhD positions is available at the `/docs` folder.
 ## Dependencies
 
 - [atproto](https://atproto.blue/) - AT Protocol SDK for Python
-- [google-genai](https://github.com/google-gemini/generative-ai-python) - Gemini/Gemma API
+- [requests](https://requests.readthedocs.io/) - NVIDIA API (Llama 4 Maverick)
 - [supabase](https://supabase.com/docs/reference/python) - Supabase client
 - python-dotenv - Environment variable management
 
