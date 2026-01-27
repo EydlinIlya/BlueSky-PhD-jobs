@@ -7,6 +7,7 @@ Search Bluesky for PhD position announcements using the AT Protocol SDK.
 - Search multiple PhD-related queries on Bluesky
 - **LLM filtering** - Automatically filter out non-job posts (jokes, discussions, etc.)
 - **Multi-discipline classification** - Categorize positions into 1-3 academic disciplines
+- **Author bio enrichment** - Prepends author profile bio for better discipline classification
 - **Incremental updates** - Only fetch new posts since last run
 - **Multiple storage backends** - CSV (local) or Supabase (cloud PostgreSQL)
 - **GitHub Actions** - Automated daily updates
@@ -76,6 +77,8 @@ python bluesky_search.py --no-llm -l 10
 ## Output
 
 CSV columns: `uri`, `message`, `url`, `user`, `created`, `disciplines`, `is_verified_job`
+
+The `message` field includes the author's profile bio prepended as `[Bio: ...]` when available, followed by the post text. This provides discipline context (e.g. "Professor of Biology at MIT").
 
 Each post can have 1-3 disciplines. In CSV output, `disciplines` is a JSON array (e.g. `["Biology", "Computer Science"]`).
 

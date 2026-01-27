@@ -40,6 +40,7 @@ IS_REAL_JOB_PROMPT = (
 DISCIPLINE_PROMPT_TEMPLATE = (
     "Classify this academic job posting into 1-3 disciplines from this list: {disciplines}. "
     "If it spans multiple fields, list all that apply (comma-separated, max 3). "
+    "For example bioinformatics should be both Biology and Computer Science. "
     "If it's a university-wide program, use 'General call'. "
     "Answer with discipline names only, nothing else."
 )

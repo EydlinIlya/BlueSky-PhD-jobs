@@ -185,21 +185,33 @@ def search_phd_calls(
                 skipped_old += 1
                 continue
 
+            # Prepend author bio for discipline context
+            bio = getattr(post.author, 'description', '') or ''
+            raw_text = post.record.text
+            message = f"[Bio: {bio.strip()}]\n\n{raw_text}" if bio else raw_text
+
             post_data = {
                 "uri": post.uri,
-                "message": post.record.text,
+                "message": message,
                 "url": uri_to_url(post.uri, post.author.handle),
                 "user": post.author.handle,
                 "created": post.record.created_at,
             }
 
             # Apply LLM classification if available
+            # Use raw text for job detection (bio confuses the small model)
+            # Use bio-enriched text for discipline classification (bio improves accuracy)
             if classifier:
-                classification = classifier.classify_post(post.record.text)
+                is_job = classifier.is_real_job(raw_text)
+                if is_job:
+                    disciplines = classifier.get_disciplines(message)
+                    classification = {"is_verified_job": True, "disciplines": disciplines}
+                else:
+                    classification = {"is_verified_job": False, "disciplines": None}
                 post_data.update(classification)
                 if not classification["is_verified_job"]:
                     filtered_count += 1
-                    logger.debug(f"Non-job post: {post.record.text[:50]}...")
+                    logger.debug(f"Non-job post: {raw_text[:50]}...")
 
             results.append(post_data)
 

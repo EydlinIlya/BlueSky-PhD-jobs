@@ -226,6 +226,7 @@ const gridOptions = {
             closeOnApply: true
         }
     },
+    suppressDragLeaveHidesColumns: true,
     rowData: [],
     animateRows: true,
     pagination: true,
