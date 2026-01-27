@@ -6,7 +6,7 @@ Search Bluesky for PhD position announcements using the AT Protocol SDK.
 
 - Search multiple PhD-related queries on Bluesky
 - **LLM filtering** - Automatically filter out non-job posts (jokes, discussions, etc.)
-- **Discipline classification** - Categorize positions into 18 academic disciplines
+- **Multi-discipline classification** - Categorize positions into 1-3 academic disciplines
 - **Incremental updates** - Only fetch new posts since last run
 - **Multiple storage backends** - CSV (local) or Supabase (cloud PostgreSQL)
 - **GitHub Actions** - Automated daily updates
@@ -75,9 +75,11 @@ python bluesky_search.py --no-llm -l 10
 
 ## Output
 
-CSV columns: `uri`, `message`, `url`, `user`, `created`, `discipline`, `is_verified_job`
+CSV columns: `uri`, `message`, `url`, `user`, `created`, `disciplines`, `is_verified_job`
 
-Disciplines: Computer Science, Biology, Chemistry, Physics, Mathematics, Engineering, Medicine, Psychology, Economics, Environmental Science, Linguistics, History, Political Science, Sociology, Law, Arts & Humanities, Education, Other
+Each post can have 1-3 disciplines. In CSV output, `disciplines` is a JSON array (e.g. `["Biology", "Computer Science"]`).
+
+Disciplines: Computer Science, Biology, Chemistry & Materials Science, Physics, Mathematics, Medicine, Psychology, Economics, Linguistics, History, Sociology & Political Science, Arts & Humanities, Education, Other, General call
 
 ## Supabase Setup
 
@@ -92,11 +94,13 @@ CREATE TABLE phd_positions (
     url TEXT NOT NULL,
     user_handle TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
-    discipline TEXT,
+    disciplines TEXT[],
     is_verified_job BOOLEAN DEFAULT TRUE,
     indexed_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
+
+If upgrading from an existing table with a single `discipline` TEXT column, run the migration at `migrations/001_discipline_to_disciplines_array.sql`.
 
 3. Go to Settings → API and copy:
    - Project URL → `SUPABASE_URL`

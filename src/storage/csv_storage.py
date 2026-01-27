@@ -1,6 +1,7 @@
 """CSV storage backend."""
 
 import csv
+import json
 from pathlib import Path
 
 from .base import StorageBackend
@@ -17,7 +18,7 @@ class CSVStorage(StorageBackend):
         """
         self.filename = filename
         self.base_fields = ["uri", "message", "url", "user", "created"]
-        self.extra_fields = ["discipline", "is_verified_job"]
+        self.extra_fields = ["disciplines", "is_verified_job"]
 
     def save_posts(self, posts: list[dict]) -> int:
         """Save posts to CSV file.
@@ -36,12 +37,20 @@ class CSVStorage(StorageBackend):
         if any(f in posts[0] for f in self.extra_fields):
             fieldnames.extend([f for f in self.extra_fields if f in posts[0]])
 
+        # Serialize list fields to JSON for CSV compatibility
+        rows = []
+        for post in posts:
+            row = dict(post)
+            if "disciplines" in row and isinstance(row["disciplines"], list):
+                row["disciplines"] = json.dumps(row["disciplines"])
+            rows.append(row)
+
         with open(self.filename, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
             writer.writeheader()
-            writer.writerows(posts)
+            writer.writerows(rows)
 
-        return len(posts)
+        return len(rows)
 
     def get_existing_uris(self) -> set[str]:
         """Get URIs from existing CSV file.

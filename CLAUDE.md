@@ -15,7 +15,7 @@ When making changes:
 
 BlueSky-PhD-jobs searches Bluesky social network for PhD position announcements using the AT Protocol SDK. Features include:
 - LLM-based filtering to identify real job postings
-- Discipline classification (18 academic categories)
+- Multi-discipline classification (1-3 academic categories per post)
 - Incremental updates (only fetch new posts)
 - Multiple storage backends (CSV, Supabase)
 - GitHub Actions for automated daily updates
@@ -82,11 +82,25 @@ python bluesky_search.py --full-sync        # Ignore previous sync state
 1. Fetch posts from Bluesky API (sorted by relevance, not date)
 2. Deduplicate by URI
 3. Filter by timestamp (incremental sync)
-4. LLM classification (if enabled): mark is_verified_job, assign discipline
+4. LLM classification (if enabled): mark is_verified_job, assign 1-3 disciplines
 5. Save ALL posts to storage backend (non-jobs included for analysis)
 6. Update sync state
 
 Note: Frontend filters to show only is_verified_job=true posts.
+
+## Testing
+
+```bash
+python -m pytest tests/ -v
+```
+
+Tests use a `MockStorage` backend (`tests/mock_storage.py`) that simulates Supabase-like behavior in memory (upsert semantics, disciplines as arrays). No external services needed.
+
+Test files:
+- `tests/test_classifier.py` - LLM classifier with mock LLM provider
+- `tests/test_csv_storage.py` - CSV storage with disciplines array serialization
+- `tests/test_mock_storage.py` - Mock storage backend behavior
+- `tests/test_integration.py` - End-to-end classifier → storage pipeline
 
 ## Key Dependencies
 
@@ -107,7 +121,7 @@ CREATE TABLE phd_positions (
     url TEXT NOT NULL,
     user_handle TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
-    discipline TEXT,
+    disciplines TEXT[],
     is_verified_job BOOLEAN DEFAULT TRUE,
     indexed_at TIMESTAMPTZ DEFAULT NOW()
 );

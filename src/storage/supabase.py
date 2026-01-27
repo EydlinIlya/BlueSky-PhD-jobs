@@ -61,8 +61,8 @@ class SupabaseStorage(StorageBackend):
             }
 
             # Add optional fields if present
-            if "discipline" in post:
-                record["discipline"] = post["discipline"]
+            if "disciplines" in post:
+                record["disciplines"] = post["disciplines"]  # PostgreSQL handles list as array
             if "is_verified_job" in post:
                 record["is_verified_job"] = post["is_verified_job"]
 

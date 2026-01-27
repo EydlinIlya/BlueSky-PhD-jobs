@@ -27,46 +27,52 @@ class JobClassifier:
         response = self.llm.classify(text, IS_REAL_JOB_PROMPT)
         return "YES" in response.upper()
 
-    def get_discipline(self, text: str) -> str:
-        """Classify the job posting into an academic discipline.
+    def get_disciplines(self, text: str) -> list[str]:
+        """Classify the job posting into 1-3 academic disciplines.
 
         Args:
             text: The post text to analyze
 
         Returns:
-            The discipline name from DISCIPLINES list
+            List of discipline names from DISCIPLINES list (max 3)
         """
         disciplines_str = ", ".join(DISCIPLINES)
         prompt = DISCIPLINE_PROMPT_TEMPLATE.format(disciplines=disciplines_str)
         response = self.llm.classify(text, prompt).strip()
 
-        # Validate response is in our list
-        for discipline in DISCIPLINES:
-            if discipline.lower() in response.lower():
-                return discipline
+        # Parse comma-separated response and validate each part
+        matched = []
+        for part in response.split(','):
+            part = part.strip()
+            for discipline in DISCIPLINES:
+                if discipline.lower() in part.lower():
+                    if discipline not in matched:
+                        matched.append(discipline)
+                    break
 
-        return "Other"
+        # Limit to 3, default to ["Other"]
+        return matched[:3] if matched else ["Other"]
 
     def classify_post(self, text: str) -> dict:
-        """Classify a post, determining if it's a real job and its discipline.
+        """Classify a post, determining if it's a real job and its disciplines.
 
         Args:
             text: The post text to analyze
 
         Returns:
-            Dict with 'is_verified_job' and 'discipline' keys.
-            Non-jobs have is_verified_job=False and discipline=None.
+            Dict with 'is_verified_job' and 'disciplines' keys.
+            Non-jobs have is_verified_job=False and disciplines=None.
         """
         is_job = self.is_real_job(text)
 
         if not is_job:
             return {
                 "is_verified_job": False,
-                "discipline": None,
+                "disciplines": None,
             }
 
-        discipline = self.get_discipline(text)
+        disciplines = self.get_disciplines(text)
         return {
             "is_verified_job": True,
-            "discipline": discipline,
+            "disciplines": disciplines,
         }

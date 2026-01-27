@@ -1,10 +1,13 @@
+// Mock mode: add ?mock to the URL to load from mock_data.json instead of Supabase
+const USE_MOCK = new URLSearchParams(window.location.search).has('mock');
+
 // Supabase configuration
 // Note: This is the anon (public) key - safe to expose because RLS restricts to read-only
 const SUPABASE_URL = 'https://qenpxgztlptegosdhhhi.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_149HAw6pWDQTRPF_NLISmA_oSCU7q3_';  // Get from Supabase: Settings → API → anon public
 
-// Initialize Supabase client
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Initialize Supabase client (skip if mock mode)
+const supabaseClient = USE_MOCK ? null : window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // Grid API reference
 let gridApi;
@@ -21,8 +24,8 @@ class DisciplineFilter {
         this.params = params;
         this.selectedValues = new Set();
 
-        // Get unique disciplines from data, with "Other" at end
-        let disciplines = [...new Set(allPositions.map(p => p.discipline).filter(Boolean))].sort();
+        // Get unique disciplines from data (flatMap for array field), with "Other" at end
+        let disciplines = [...new Set(allPositions.flatMap(p => p.disciplines || []))].sort();
         if (disciplines.includes('Other')) {
             disciplines = disciplines.filter(d => d !== 'Other');
             disciplines.push('Other');
@@ -92,7 +95,8 @@ class DisciplineFilter {
         if (this.selectedValues.size === this.disciplines.length) {
             return true;
         }
-        return this.selectedValues.has(params.data.discipline);
+        const disciplines = params.data.disciplines || [];
+        return disciplines.some(d => this.selectedValues.has(d));
     }
 
     isFilterActive() {
@@ -150,13 +154,15 @@ const columnDefs = [
         }
     },
     {
-        field: 'discipline',
+        field: 'disciplines',
         headerName: 'Discipline',
-        width: 180,
+        width: 220,
         filter: DisciplineFilter,
         cellRenderer: (params) => {
-            if (!params.value) return '<span class="text-gray-400">—</span>';
-            return `<span class="discipline-badge">${params.value}</span>`;
+            if (!params.value?.length) return '<span class="text-gray-400">—</span>';
+            return params.value
+                .map(d => `<span class="discipline-badge">${escapeHtml(d)}</span>`)
+                .join(' ');
         }
     },
     {
@@ -276,21 +282,32 @@ window.toggleExpand = function(event, nodeId) {
     }
 }
 
-// Fetch data from Supabase
-async function fetchPositions() {
-    try {
-        const { data, error } = await supabaseClient
-            .from('phd_positions')
-            .select('created_at, discipline, user_handle, message, url')
-            .eq('is_verified_job', true)
-            .order('created_at', { ascending: false });
+// Fetch data from mock JSON file
+async function fetchMockPositions() {
+    const response = await fetch('mock_data.json');
+    if (!response.ok) throw new Error(`Failed to load mock data: ${response.status}`);
+    return response.json();
+}
 
-        if (error) throw error;
-        return data;
-    } catch (error) {
-        console.error('Error fetching positions:', error);
-        throw error;
+// Fetch data from Supabase
+async function fetchSupabasePositions() {
+    const { data, error } = await supabaseClient
+        .from('phd_positions')
+        .select('created_at, disciplines, user_handle, message, url')
+        .eq('is_verified_job', true)
+        .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data;
+}
+
+// Fetch positions from the active data source
+async function fetchPositions() {
+    if (USE_MOCK) {
+        console.log('Loading mock data...');
+        return fetchMockPositions();
     }
+    return fetchSupabasePositions();
 }
 
 // Initialize the application

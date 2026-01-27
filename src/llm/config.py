@@ -38,7 +38,8 @@ IS_REAL_JOB_PROMPT = (
 )
 
 DISCIPLINE_PROMPT_TEMPLATE = (
-    "Classify this academic job posting into one of these disciplines: {disciplines}. "
-    "If it's a university-wide program without specific subject - use General call oprion"
-    "Answer with just the discipline name, nothing else."
+    "Classify this academic job posting into 1-3 disciplines from this list: {disciplines}. "
+    "If it spans multiple fields, list all that apply (comma-separated, max 3). "
+    "If it's a university-wide program, use 'General call'. "
+    "Answer with discipline names only, nothing else."
 )

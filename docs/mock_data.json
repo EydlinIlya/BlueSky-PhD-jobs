@@ -1,0 +1,72 @@
+[
+  {
+    "created_at": "2025-01-20T14:30:00Z",
+    "disciplines": ["Computer Science"],
+    "user_handle": "cs-dept.bsky.social",
+    "message": "PhD position in Machine Learning at ETH Zurich. We are looking for motivated candidates to work on large language models and their applications in scientific discovery. Apply by March 1, 2025.",
+    "url": "https://bsky.app/profile/cs-dept.bsky.social/post/abc123"
+  },
+  {
+    "created_at": "2025-01-19T09:15:00Z",
+    "disciplines": ["Biology", "Computer Science"],
+    "user_handle": "bioinfo-lab.bsky.social",
+    "message": "Fully funded PhD in Bioinformatics at University of Cambridge. Project focuses on single-cell RNA sequencing analysis using deep learning methods. Strong programming background required.",
+    "url": "https://bsky.app/profile/bioinfo-lab.bsky.social/post/def456"
+  },
+  {
+    "created_at": "2025-01-18T16:45:00Z",
+    "disciplines": ["Physics", "Mathematics"],
+    "user_handle": "quantum-group.bsky.social",
+    "message": "PhD opening in Quantum Computing Theory at MIT. Research on topological quantum error correction codes. Background in mathematical physics or theoretical CS preferred. Full funding + stipend.",
+    "url": "https://bsky.app/profile/quantum-group.bsky.social/post/ghi789"
+  },
+  {
+    "created_at": "2025-01-17T11:00:00Z",
+    "disciplines": ["Medicine", "Biology", "Chemistry & Materials Science"],
+    "user_handle": "pharma-research.bsky.social",
+    "message": "PhD position in Drug Discovery & Pharmacology at Karolinska Institute. Interdisciplinary project combining medicinal chemistry, molecular biology, and computational drug design.",
+    "url": "https://bsky.app/profile/pharma-research.bsky.social/post/jkl012"
+  },
+  {
+    "created_at": "2025-01-16T08:20:00Z",
+    "disciplines": ["Economics"],
+    "user_handle": "econ-dept.bsky.social",
+    "message": "Doctoral position in Behavioral Economics at University of Zurich. Experimental research on decision-making under uncertainty. Teaching duties included. Competitive salary.",
+    "url": "https://bsky.app/profile/econ-dept.bsky.social/post/mno345"
+  },
+  {
+    "created_at": "2025-01-15T13:30:00Z",
+    "disciplines": ["Linguistics", "Computer Science"],
+    "user_handle": "nlp-lab.bsky.social",
+    "message": "PhD position in Computational Linguistics at University of Edinburgh. Working on multilingual NLP and low-resource language processing. Experience with Python and transformer models expected.",
+    "url": "https://bsky.app/profile/nlp-lab.bsky.social/post/pqr678"
+  },
+  {
+    "created_at": "2025-01-14T10:00:00Z",
+    "disciplines": ["Psychology"],
+    "user_handle": "cog-sci.bsky.social",
+    "message": "Funded PhD in Cognitive Psychology at Max Planck Institute. Investigating memory consolidation during sleep using fMRI and EEG. Start date: September 2025.",
+    "url": "https://bsky.app/profile/cog-sci.bsky.social/post/stu901"
+  },
+  {
+    "created_at": "2025-01-13T15:45:00Z",
+    "disciplines": ["General call"],
+    "user_handle": "university-wide.bsky.social",
+    "message": "University of Oxford Graduate Scholarship Programme 2025. Full scholarships available across all disciplines for outstanding doctoral candidates. Deadline: January 2026.",
+    "url": "https://bsky.app/profile/university-wide.bsky.social/post/vwx234"
+  },
+  {
+    "created_at": "2025-01-12T09:30:00Z",
+    "disciplines": ["History", "Arts & Humanities"],
+    "user_handle": "humanities-dept.bsky.social",
+    "message": "PhD studentship in Digital Humanities at King's College London. Project on computational analysis of medieval manuscripts. Background in history or literary studies with digital skills preferred.",
+    "url": "https://bsky.app/profile/humanities-dept.bsky.social/post/yza567"
+  },
+  {
+    "created_at": "2025-01-11T12:15:00Z",
+    "disciplines": ["Sociology & Political Science", "Education"],
+    "user_handle": "social-research.bsky.social",
+    "message": "PhD position in Education Policy & Social Inequality at Sciences Po Paris. Mixed-methods research on access to higher education across European countries. Fluency in French and English required.",
+    "url": "https://bsky.app/profile/social-research.bsky.social/post/bcd890"
+  }
+]

@@ -229,7 +229,7 @@ def write_csv(results: list[dict], filename: str = "phd_positions.csv"):
 
     # Determine fieldnames based on what fields are present
     base_fields = ["message", "url", "user", "created"]
-    extra_fields = ["discipline", "is_verified_job"]
+    extra_fields = ["disciplines", "is_verified_job"]
 
     # Check if any result has extra fields
     fieldnames = base_fields.copy()
