@@ -144,7 +144,7 @@ CREATE TABLE phd_positions (
 
 ## GitHub Actions
 
-The workflow at `.github/workflows/daily-update.yml` runs daily at 6 AM UTC.
+The workflow at `.github/workflows/scheduled-search.yml` runs daily at 6:50 AM UTC.
 
 Required secrets:
 - `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`
