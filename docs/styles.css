@@ -142,6 +142,12 @@ body {
     text-decoration: none;
 }
 
+/* Date column - allow wrapping */
+.ag-theme-alpine .date-cell {
+    white-space: normal;
+    line-height: 1.3;
+}
+
 /* Message column - allow text wrapping */
 .ag-theme-alpine .message-cell {
     white-space: normal;
@@ -298,6 +304,7 @@ body {
 .badge-collapsed {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: center;
     gap: 4px;
 }

@@ -148,8 +148,10 @@ const columnDefs = [
     {
         field: 'created_at',
         headerName: 'Date',
-        width: 120,
+        width: 100,
         sort: 'desc',
+        autoHeight: true,
+        cellClass: 'date-cell',
         filter: 'agDateColumnFilter',
         filterParams: {
             comparator: (filterDate, cellValue) => {
@@ -161,20 +163,18 @@ const columnDefs = [
                 return 0;
             }
         },
-        valueFormatter: (params) => {
+        cellRenderer: (params) => {
             if (!params.value) return '';
             const date = new Date(params.value);
-            return date.toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric'
-            });
+            const monthDay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            const year = date.getFullYear();
+            return `<div>${monthDay}<br>${year}</div>`;
         }
     },
     {
         field: 'disciplines',
         headerName: 'Discipline',
-        width: 180,
+        width: 220,
         filter: DisciplineFilter,
         autoHeight: true,
         cellRenderer: (params) => renderCollapsibleBadges(params, 'discipline-badge', 'disciplines')
@@ -212,14 +212,14 @@ const columnDefs = [
         field: 'message',
         headerName: 'Position',
         flex: 2,
-        minWidth: 300,
+        minWidth: 200,
         filter: 'agTextColumnFilter',
         cellClass: 'message-cell',
         autoHeight: true,
         wrapText: true,
         cellRenderer: (params) => {
             if (!params.value) return '';
-            const maxLength = 300;
+            const maxLength = 150;
             const isTruncated = params.value.length > maxLength;
             const isExpanded = expandedRows.has(params.node.id);
 
