@@ -1,6 +1,6 @@
 # BlueSky-PhD-jobs
 
-Search Bluesky for PhD position announcements using the AT Protocol SDK.
+Search Bluesky for PhD and other early career academic position announcements using the AT Protocol SDK.
 
 ## Features
 
@@ -9,10 +9,6 @@ Search Bluesky for PhD position announcements using the AT Protocol SDK.
 - **Multi-discipline classification** - Categorize positions into 1-3 academic disciplines
 - **Country detection** - Identifies position country from university, domain, or city names
 - **Position type extraction** - Classifies as PhD Student, Postdoc, Master Student, Research Assistant, or Multiple
-- **Author bio enrichment** - Prepends author profile bio for better classification
-- **Embed link context** - Uses link preview metadata from shared URLs to improve classification
-- **Incremental updates** - Only fetch new posts since last run
-- **Multiple storage backends** - CSV (local) or Supabase (cloud PostgreSQL)
 - **GitHub Actions** - Automated daily updates
 
 ## Setup
@@ -107,14 +103,10 @@ CREATE TABLE phd_positions (
     disciplines TEXT[],
     is_verified_job BOOLEAN DEFAULT TRUE,
     country TEXT,
-    position_type TEXT,
+    position_type TEXT[],
     indexed_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
-
-**Migrations** (run in order if upgrading an existing table):
-- `migrations/001_discipline_to_disciplines_array.sql` — Converts single `discipline` TEXT to `disciplines` TEXT[]
-- `migrations/002_add_country_position_type.sql` — Adds `country` and `position_type` columns
 
 3. Go to Settings → API and copy:
    - Project URL → `SUPABASE_URL`
@@ -137,7 +129,7 @@ A web interface to browse PhD positions is available at the `/docs` folder.
 
 ### Setup
 
-1. **Add RLS policy** to Supabase (SQL Editor):
+1. **Add RLS policy** to Supabase (Recommended):
    ```sql
    ALTER TABLE phd_positions ENABLE ROW LEVEL SECURITY;
    CREATE POLICY "Allow public read" ON phd_positions FOR SELECT USING (true);
@@ -150,15 +142,6 @@ A web interface to browse PhD positions is available at the `/docs` folder.
    - Source: Deploy from branch
    - Branch: main, folder: /docs
    - Save
-
-4. Site will be live at: `https://eydlinilya.github.io/BlueSky-PhD-jobs/`
-
-### Features
-
-- Sortable columns (click headers)
-- Filterable by date, discipline, country, position type, and text
-- Pagination (25/50/100 per page)
-- Direct links to Bluesky posts
 
 ## Dependencies
 

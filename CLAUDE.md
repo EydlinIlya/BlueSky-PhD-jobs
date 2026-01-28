@@ -11,6 +11,11 @@ When making changes:
 2. Update CLAUDE.md if architecture, modules, or development practices change
 3. Verify both files are current before committing
 
+**README.md style guidelines:**
+- Keep it compact — show only the final state, not migration history
+- Users don't need to know about schema migrations or intermediate steps
+- Focus on setup, usage, and current features
+
 ## Project Overview
 
 BlueSky-PhD-jobs searches Bluesky social network for PhD position announcements using the AT Protocol SDK. Features include:
@@ -130,16 +135,12 @@ CREATE TABLE phd_positions (
     disciplines TEXT[],
     is_verified_job BOOLEAN DEFAULT TRUE,
     country TEXT,
-    position_type TEXT,
+    position_type TEXT[],
     indexed_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 3. Get URL and anon key from Settings → API
 4. Add to `.env`: `SUPABASE_URL` and `SUPABASE_KEY`
-
-Migrations (in `migrations/`):
-- `001_discipline_to_disciplines_array.sql` - Converts single discipline to array
-- `002_add_country_position_type.sql` - Adds country and position_type columns
 
 ## GitHub Actions
 
