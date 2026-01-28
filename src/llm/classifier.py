@@ -57,10 +57,12 @@ class JobClassifier:
                 "position_type": ["PhD Student"],
             }
 
-        # Validate and extract disciplines
+        # Validate and extract disciplines (limit input length to prevent memory issues)
         raw_disciplines = data.get("disciplines", [])
         if isinstance(raw_disciplines, str):
+            raw_disciplines = raw_disciplines[:500]  # Limit string length
             raw_disciplines = [d.strip() for d in raw_disciplines.split(",")]
+        raw_disciplines = raw_disciplines[:20]  # Limit array length
         matched = []
         for part in raw_disciplines:
             if isinstance(part, str):

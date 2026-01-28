@@ -240,7 +240,16 @@ const columnDefs = [
         sortable: false,
         cellRenderer: (params) => {
             if (!params.value) return '';
-            return `<a href="${params.value}" target="_blank" rel="noopener noreferrer">View Post</a>`;
+            // Validate URL scheme to prevent javascript: injection
+            try {
+                const url = new URL(params.value);
+                if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+                    return '<span class="text-gray-400">Invalid URL</span>';
+                }
+                return `<a href="${escapeHtml(params.value)}" target="_blank" rel="noopener noreferrer">View Post</a>`;
+            } catch {
+                return '<span class="text-gray-400">Invalid URL</span>';
+            }
         }
     }
 ];

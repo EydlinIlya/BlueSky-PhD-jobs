@@ -1,11 +1,14 @@
 """Supabase storage backend."""
 
+import logging
 import os
 from datetime import datetime
 
 from supabase import create_client, Client
 
 from .base import StorageBackend
+
+logger = logging.getLogger(__name__)
 
 
 class SupabaseStorage(StorageBackend):
@@ -73,9 +76,12 @@ class SupabaseStorage(StorageBackend):
             records.append(record)
 
         # Upsert to avoid duplicates (uri is unique)
-        self.client.table(self.table).upsert(records, on_conflict="uri").execute()
-
-        return len(records)
+        try:
+            self.client.table(self.table).upsert(records, on_conflict="uri").execute()
+            return len(records)
+        except Exception as e:
+            logger.error(f"Failed to save posts to Supabase: {e}")
+            return 0
 
     def get_existing_uris(self) -> set[str]:
         """Get all URIs from Supabase.

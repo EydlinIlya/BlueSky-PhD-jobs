@@ -202,8 +202,8 @@ def search_phd_calls(
                 continue
             seen_uris.add(post.uri)
 
-            # Skip posts older than our last sync
-            if since_timestamp and post.record.created_at <= since_timestamp:
+            # Skip posts older than our last sync (use < to include posts at exact timestamp)
+            if since_timestamp and post.record.created_at < since_timestamp:
                 skipped_old += 1
                 continue
 
