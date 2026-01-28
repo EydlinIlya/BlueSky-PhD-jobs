@@ -3,7 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PhD Positions | Bluesky Search</title>
+    <title>PhD & Postdoc Positions from Bluesky | Academic Job Board</title>
+    <meta name="description" content="Browse PhD, postdoc, and research positions aggregated from Bluesky social network. AI-powered filtering updated daily. Find academic jobs in STEM, humanities, and social sciences worldwide.">
+    <meta name="keywords" content="PhD positions, postdoc jobs, academic jobs, research positions, Bluesky, university jobs, faculty positions, doctoral research, STEM careers">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://eydlinilya.github.io/BlueSky-PhD-jobs/">
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="PhD & Postdoc Positions from Bluesky | Academic Job Board">
+    <meta property="og:description" content="Browse PhD, postdoc, and research positions aggregated from Bluesky social network. AI-powered filtering updated daily.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://eydlinilya.github.io/BlueSky-PhD-jobs/">
+    <meta property="og:site_name" content="BlueSky PhD Jobs">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="PhD & Postdoc Positions from Bluesky | Academic Job Board">
+    <meta name="twitter:description" content="Browse PhD, postdoc, and research positions aggregated from Bluesky social network. AI-powered filtering updated daily.">
+
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "BlueSky PhD Jobs",
+        "url": "https://eydlinilya.github.io/BlueSky-PhD-jobs/",
+        "description": "Browse PhD, postdoc, and research positions aggregated from Bluesky social network. AI-powered filtering updated daily.",
+        "potentialAction": {
+            "@type": "SearchAction",
+            "target": "https://eydlinilya.github.io/BlueSky-PhD-jobs/?q={search_term_string}",
+            "query-input": "required name=search_term_string"
+        }
+    }
+    </script>
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -28,9 +60,9 @@
                     <h1 class="site-title text-2xl sm:text-3xl text-white">
                         <span class="text-indigo-400">&gt;</span> PhD_Positions
                     </h1>
-                    <p class="site-subtitle mt-2 text-sm">
-                        // Academic openings from Bluesky, updated daily
-                    </p>
+                    <h2 class="site-subtitle mt-2 text-sm">
+                        Browse PhD, postdoc, and research positions from Bluesky, updated daily
+                    </h2>
                 </div>
                 <div class="flex items-center gap-3">
                     <span class="ai-badge">
@@ -67,13 +99,16 @@
                     [ clear filters ]
                 </button>
             </div>
-            <div id="positions-grid" class="ag-theme-alpine w-full rounded-lg overflow-hidden" style="height: 600px;"></div>
+            <div id="positions-grid" class="ag-theme-alpine w-full rounded-lg overflow-hidden grid-viewport"></div>
         </div>
     </main>
 
     <!-- Footer -->
     <footer class="site-footer mt-auto">
         <div class="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+            <p class="disclaimer-section">
+                This is an open-source project that aggregates publicly available data from the Bluesky social network via the AT Protocol. Position listings are user-generated content and are not verified for accuracy. This service is provided "as is" without warranty of any kind. Always verify positions directly with the posting institution.
+            </p>
             <div class="flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-400">
                 <p>
                     Data sourced from

@@ -287,6 +287,56 @@ body {
     background: var(--color-text-muted);
 }
 
+/* Collapsible badge layout */
+.badge-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+}
+
+.badge-collapsed {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+}
+
+.badge-toggle {
+    display: inline-block;
+    padding: 1px 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--color-text-muted);
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+    white-space: nowrap;
+}
+
+.badge-toggle:hover {
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+/* Dynamic grid height */
+.grid-viewport {
+    height: calc(100vh - 220px);
+    min-height: 400px;
+}
+
+/* Disclaimer */
+.disclaimer-section {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    font-family: var(--font-display);
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--color-border);
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .ag-theme-alpine {

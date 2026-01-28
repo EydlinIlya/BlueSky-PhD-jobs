@@ -18,6 +18,9 @@ let allPositions = [];
 // Track expanded rows
 const expandedRows = new Set();
 
+// Track expanded badge cells (keyed by "nodeId:fieldName")
+const expandedBadgeCells = new Set();
+
 // Generic checkbox set filter factory
 function createCheckboxSetFilter(fieldName, extractValues) {
     return class CheckboxSetFilter {
@@ -145,7 +148,7 @@ const columnDefs = [
     {
         field: 'created_at',
         headerName: 'Date',
-        width: 140,
+        width: 120,
         sort: 'desc',
         filter: 'agDateColumnFilter',
         filterParams: {
@@ -171,19 +174,15 @@ const columnDefs = [
     {
         field: 'disciplines',
         headerName: 'Discipline',
-        width: 220,
+        width: 180,
         filter: DisciplineFilter,
-        cellRenderer: (params) => {
-            if (!params.value?.length) return '<span class="text-gray-400">\u2014</span>';
-            return params.value
-                .map(d => `<span class="discipline-badge">${escapeHtml(d)}</span>`)
-                .join(' ');
-        }
+        autoHeight: true,
+        cellRenderer: (params) => renderCollapsibleBadges(params, 'discipline-badge', 'disciplines')
     },
     {
         field: 'country',
         headerName: 'Country',
-        width: 130,
+        width: 110,
         filter: CountryFilter,
         cellRenderer: (params) => {
             if (!params.value || params.value === 'Unknown') return '<span class="text-gray-400">\u2014</span>';
@@ -193,14 +192,10 @@ const columnDefs = [
     {
         field: 'position_type',
         headerName: 'Type',
-        width: 160,
+        width: 140,
         filter: PositionTypeFilter,
-        cellRenderer: (params) => {
-            if (!params.value?.length) return '<span class="text-gray-400">\u2014</span>';
-            return params.value
-                .map(t => `<span class="position-type-badge">${escapeHtml(t)}</span>`)
-                .join(' ');
-        }
+        autoHeight: true,
+        cellRenderer: (params) => renderCollapsibleBadges(params, 'position-type-badge', 'position_type')
     },
     {
         field: 'user_handle',
@@ -240,9 +235,7 @@ const columnDefs = [
     {
         field: 'url',
         headerName: 'Link',
-        minWidth: 100,
-        maxWidth: 150,
-        flex: 0.5,
+        width: 110,
         filter: false,
         sortable: false,
         cellRenderer: (params) => {
@@ -320,6 +313,48 @@ window.toggleExpand = function(event, nodeId) {
     }
 }
 
+// Render collapsible badges for array columns
+function renderCollapsibleBadges(params, badgeClass, fieldName) {
+    const values = params.value;
+    if (!values || !values.length) return '<span class="text-gray-400">\u2014</span>';
+
+    if (values.length === 1) {
+        return `<span class="${badgeClass}">${escapeHtml(values[0])}</span>`;
+    }
+
+    const cellKey = params.node.id + ':' + fieldName;
+    const isExpanded = expandedBadgeCells.has(cellKey);
+
+    if (isExpanded) {
+        const badges = values
+            .map(v => `<span class="${badgeClass}">${escapeHtml(v)}</span>`)
+            .join('');
+        return `<div class="badge-stack">${badges}<button class="badge-toggle" onclick="toggleBadgeExpand(event, '${cellKey}')">\u25b4 less</button></div>`;
+    }
+
+    const first = `<span class="${badgeClass}">${escapeHtml(values[0])}</span>`;
+    const remaining = values.length - 1;
+    return `<div class="badge-collapsed">${first}<button class="badge-toggle" onclick="toggleBadgeExpand(event, '${cellKey}')">+${remaining} \u25be</button></div>`;
+}
+
+// Toggle badge expand/collapse - attached to window for inline onclick
+window.toggleBadgeExpand = function(event, cellKey) {
+    event.stopPropagation();
+
+    if (expandedBadgeCells.has(cellKey)) {
+        expandedBadgeCells.delete(cellKey);
+    } else {
+        expandedBadgeCells.add(cellKey);
+    }
+
+    const nodeId = cellKey.split(':')[0];
+    const rowNode = gridApi.getRowNode(nodeId);
+    if (rowNode) {
+        gridApi.refreshCells({ rowNodes: [rowNode], force: true });
+        setTimeout(() => gridApi.resetRowHeights(), 10);
+    }
+}
+
 // Fetch data from mock JSON file
 async function fetchMockPositions() {
     const response = await fetch('mock_data.json');
@@ -331,8 +366,9 @@ async function fetchMockPositions() {
 async function fetchSupabasePositions() {
     const { data, error } = await supabaseClient
         .from('phd_positions')
-        .select('created_at, disciplines, country, position_type, user_handle, message, url')
+        .select('created_at, disciplines, country, position_type, user_handle, message, url, indexed_at')
         .eq('is_verified_job', true)
+        .gte('indexed_at', '2026-01-27')
         .order('created_at', { ascending: false });
 
     if (error) throw error;
