@@ -21,6 +21,9 @@ const expandedRows = new Set();
 // Track expanded badge cells (keyed by "nodeId:fieldName")
 const expandedBadgeCells = new Set();
 
+// Track expanded card messages
+const expandedCards = new Set();
+
 // Generic checkbox set filter factory
 function createCheckboxSetFilter(fieldName, extractValues) {
     return class CheckboxSetFilter {
@@ -393,12 +396,123 @@ async function fetchPositions() {
     return fetchSupabasePositions();
 }
 
+// Create HTML for a single position card
+function createCard(position, index) {
+    const date = position.created_at ? new Date(position.created_at) : null;
+    const dateStr = date ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+
+    const disciplines = position.disciplines || [];
+    const disciplineBadges = disciplines.map(d =>
+        `<span class="discipline-badge">${escapeHtml(d)}</span>`
+    ).join('');
+
+    const positionTypes = position.position_type || [];
+    const typeBadges = positionTypes.map(t =>
+        `<span class="position-type-badge">${escapeHtml(t)}</span>`
+    ).join('');
+
+    const country = position.country && position.country !== 'Unknown' ? position.country : null;
+
+    const profileUrl = position.user_handle ? `https://bsky.app/profile/${position.user_handle}` : '#';
+
+    const message = position.message || '';
+    const isTruncated = message.length > 200;
+    const isExpanded = expandedCards.has(index);
+    const messageClass = isTruncated && !isExpanded ? 'card-message truncated' : 'card-message expanded';
+
+    // Validate URL
+    let validUrl = null;
+    if (position.url) {
+        try {
+            const url = new URL(position.url);
+            if (url.protocol === 'https:' || url.protocol === 'http:') {
+                validUrl = position.url;
+            }
+        } catch {
+            // Invalid URL
+        }
+    }
+
+    return `
+        <article class="position-card" data-index="${index}">
+            <div class="card-header">
+                <div class="card-badges">
+                    ${disciplineBadges}
+                    ${typeBadges}
+                </div>
+                ${dateStr ? `<span class="card-date">📅 ${dateStr}</span>` : ''}
+            </div>
+
+            <div class="card-meta">
+                ${country ? `<span class="card-meta-item">🌍 ${escapeHtml(country)}</span>` : ''}
+            </div>
+
+            <div class="card-author">
+                <a href="${escapeHtml(profileUrl)}" target="_blank" rel="noopener noreferrer">@${escapeHtml(position.user_handle || '')}</a>
+            </div>
+
+            <div class="${messageClass}" id="card-msg-${index}">${escapeHtml(message)}</div>
+            ${isTruncated ? `<button class="card-expand-btn" onclick="toggleCardMessage(${index})">${isExpanded ? '[ show less ]' : '[ read more ]'}</button>` : ''}
+
+            <div class="card-actions">
+                ${validUrl ? `<a href="${escapeHtml(validUrl)}" target="_blank" rel="noopener noreferrer" class="card-link-btn">View Post →</a>` : '<span class="text-gray-400 text-sm">No link</span>'}
+            </div>
+        </article>
+    `;
+}
+
+// Render all cards
+function renderCards(positions) {
+    const container = document.getElementById('cards-list');
+    container.innerHTML = positions.map((pos, idx) => createCard(pos, idx)).join('');
+
+    const countEl = document.getElementById('card-count');
+    countEl.textContent = `${positions.length} positions`;
+}
+
+// Toggle card message expansion - attached to window for inline onclick
+window.toggleCardMessage = function(index) {
+    if (expandedCards.has(index)) {
+        expandedCards.delete(index);
+    } else {
+        expandedCards.add(index);
+    }
+
+    const msgEl = document.getElementById(`card-msg-${index}`);
+    const card = msgEl.closest('.position-card');
+    const btn = card.querySelector('.card-expand-btn');
+
+    if (expandedCards.has(index)) {
+        msgEl.classList.remove('truncated');
+        msgEl.classList.add('expanded');
+        btn.textContent = '[ show less ]';
+    } else {
+        msgEl.classList.add('truncated');
+        msgEl.classList.remove('expanded');
+        btn.textContent = '[ read more ]';
+    }
+}
+
+// Filter cards based on search query
+function filterCards(query) {
+    const q = query.toLowerCase();
+    const filtered = allPositions.filter(p =>
+        (p.message || '').toLowerCase().includes(q) ||
+        (p.user_handle || '').toLowerCase().includes(q) ||
+        (p.disciplines || []).some(d => d.toLowerCase().includes(q)) ||
+        (p.country || '').toLowerCase().includes(q) ||
+        (p.position_type || []).some(t => t.toLowerCase().includes(q))
+    );
+    renderCards(filtered);
+}
+
 // Initialize the application
 async function init() {
     const loadingEl = document.getElementById('loading');
     const errorEl = document.getElementById('error');
     const gridContainer = document.getElementById('grid-container');
     const gridEl = document.getElementById('positions-grid');
+    const cardsContainer = document.getElementById('cards-container');
 
     try {
         // Fetch data
@@ -407,14 +521,29 @@ async function init() {
         // Store for filter component
         allPositions = positions;
 
-        // Hide loading, show grid
+        // Hide loading
         loadingEl.classList.add('hidden');
+
+        // Show grid (desktop)
         gridContainer.classList.remove('hidden');
 
-        // Create grid
+        // Show cards (mobile) - CSS handles visibility based on viewport
+        cardsContainer.classList.remove('hidden');
+        cardsContainer.classList.add('visible');
+
+        // Create grid for desktop
         agGrid.createGrid(gridEl, {
             ...gridOptions,
             rowData: positions
+        });
+
+        // Render cards for mobile
+        renderCards(positions);
+
+        // Set up card search
+        const searchInput = document.getElementById('card-search');
+        searchInput.addEventListener('input', (e) => {
+            filterCards(e.target.value);
         });
 
         // Update count after grid is ready
