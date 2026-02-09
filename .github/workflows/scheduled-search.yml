@@ -22,7 +22,7 @@ jobs:
         run: pip install -e .
 
       - name: Run PhD position search
-        run: python bluesky_search.py --storage supabase
+        run: python bluesky_search.py --storage supabase --sources bluesky,scholarshipdb
         env:
           BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
           BLUESKY_PASSWORD: ${{ secrets.BLUESKY_PASSWORD }}

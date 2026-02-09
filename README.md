@@ -1,14 +1,20 @@
-# BlueSky-PhD-jobs
+# PhD Position Finder
 
-Search Bluesky for PhD and other early career academic position announcements using the AT Protocol SDK.
+Aggregate PhD and academic position announcements from multiple sources into a unified database.
+
+## Data Sources
+
+- **Bluesky** - Social network posts via AT Protocol SDK with LLM filtering
+- **ScholarshipDB** - Academic job listings from scholarshipdb.net (pre-classified)
 
 ## Features
 
-- Search multiple PhD-related queries on Bluesky
-- **LLM filtering** - Automatically filter out non-job posts (jokes, discussions, etc.)
+- **Multi-source aggregation** - Combine positions from multiple sources
+- **LLM filtering** - Automatically filter out non-job posts from Bluesky
 - **Multi-discipline classification** - Categorize positions into 1-3 academic disciplines
 - **Country detection** - Identifies position country from university, domain, or city names
-- **Position type extraction** - Classifies as PhD Student, Postdoc, Master Student, Research Assistant, or Multiple
+- **Position type extraction** - PhD Student, Postdoc, Master Student, Research Assistant
+- **Incremental sync** - Only fetch new positions since last run
 - **GitHub Actions** - Automated daily updates
 
 ## Setup
@@ -25,11 +31,11 @@ pip install -e .
 Create a `.env` file:
 
 ```bash
-# Required - Bluesky credentials
+# Required (for Bluesky source)
 BLUESKY_HANDLE=your-handle.bsky.social
 BLUESKY_PASSWORD=your-app-password
 
-# Optional - LLM filtering (recommended)
+# Optional - LLM filtering (recommended for Bluesky)
 NVIDIA_API_KEY=your-nvidia-api-key
 
 # Optional - Supabase storage
@@ -43,31 +49,39 @@ Get an NVIDIA API key at https://build.nvidia.com
 ## Usage
 
 ```bash
-python bluesky_search.py
+python bluesky_search.py [options]
 ```
 
 ### Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `-q, --query` | Search query (repeatable) | 11 academic job queries |
-| `-o, --output` | Output CSV filename | `phd_positions.csv` |
-| `-l, --limit` | Max results per query | 50 |
-| `--no-llm` | Disable LLM filtering | LLM enabled if key set |
-| `--full-sync` | Ignore previous sync state | Incremental |
+| `--sources` | Comma-separated sources: `bluesky`, `scholarshipdb` | `bluesky` |
 | `--storage` | Storage backend: `csv` or `supabase` | `csv` |
+| `-q, --query` | Bluesky search query (repeatable) | 11 academic queries |
+| `-l, --limit` | Max results per Bluesky query | 50 |
+| `--scholarshipdb-pages` | Max pages per field for ScholarshipDB | 2 |
+| `--no-llm` | Disable LLM filtering for Bluesky | LLM enabled if key set |
+| `--full-sync` | Ignore previous sync state | Incremental |
+| `-o, --output` | Output CSV filename | `phd_positions.csv` |
 
 ### Examples
 
 ```bash
-# Basic search with LLM filtering
+# Bluesky only (default)
 python bluesky_search.py
 
-# Custom queries
-python bluesky_search.py -q "postdoc position" -q "research fellow"
+# Both sources
+python bluesky_search.py --sources bluesky,scholarshipdb
 
-# Full sync to Supabase
-python bluesky_search.py --storage supabase --full-sync
+# ScholarshipDB only, more pages
+python bluesky_search.py --sources scholarshipdb --scholarshipdb-pages 5
+
+# Both sources to Supabase
+python bluesky_search.py --sources bluesky,scholarshipdb --storage supabase
+
+# Full sync (reset incremental state)
+python bluesky_search.py --full-sync
 
 # Quick test without LLM
 python bluesky_search.py --no-llm -l 10
@@ -77,15 +91,12 @@ python bluesky_search.py --no-llm -l 10
 
 CSV columns: `uri`, `message`, `url`, `user`, `created`, `disciplines`, `is_verified_job`, `country`, `position_type`
 
-The `message` field includes the author's profile bio prepended as `[Bio: ...]` when available, followed by the post text. This provides discipline context (e.g. "Professor of Biology at MIT").
-
-Each post can have 1-3 disciplines. In CSV output, `disciplines` is a JSON array (e.g. `["Biology", "Computer Science"]`).
+- **Bluesky posts**: `message` includes author bio as `[Bio: ...]` prefix
+- **ScholarshipDB**: `is_verified_job` is always `True` (pre-verified from job site)
 
 Disciplines: Computer Science, Biology, Chemistry & Materials Science, Physics, Mathematics, Medicine, Psychology, Economics, Linguistics, History, Sociology & Political Science, Arts & Humanities, Education, Other, General call
 
-Position types: PhD Student, Postdoc, Master Student, Research Assistant, Multiple
-
-Country: Standard country names (USA, UK, Germany, etc.) or "Unknown" if not determinable
+Position types: PhD Student, Postdoc, Master Student, Research Assistant
 
 ## Supabase Setup
 
@@ -116,7 +127,7 @@ CREATE TABLE phd_positions (
 
 ## GitHub Actions
 
-The included workflow runs daily at 6 AM UTC. To enable:
+The included workflow runs daily at 8:30 AM UTC with both sources. To enable:
 
 1. Push to GitHub
 2. Go to Settings → Secrets and variables → Actions
@@ -129,26 +140,26 @@ A web interface to browse PhD positions is available at the `/docs` folder.
 
 ### Setup
 
-1. **Add RLS policy** to Supabase (Recommended):
+1. **Add RLS policy** to Supabase:
    ```sql
    ALTER TABLE phd_positions ENABLE ROW LEVEL SECURITY;
    CREATE POLICY "Allow public read" ON phd_positions FOR SELECT USING (true);
    ```
 
-2. **Update `docs/app.js`** with your Supabase anon key (Settings → API → anon public)
+2. **Update `docs/app.js`** with your Supabase anon key
 
 3. **Enable GitHub Pages**:
    - Go to repo Settings → Pages
    - Source: Deploy from branch
    - Branch: main, folder: /docs
-   - Save
 
 ## Dependencies
 
-- [atproto](https://atproto.blue/) - AT Protocol SDK for Python
-- [requests](https://requests.readthedocs.io/) - NVIDIA API (Llama 4 Maverick)
+- [atproto](https://atproto.blue/) - AT Protocol SDK for Bluesky
+- [httpx](https://www.python-httpx.org/) - HTTP client for ScholarshipDB
+- [beautifulsoup4](https://www.crummy.com/software/BeautifulSoup/) - HTML parsing
+- [requests](https://requests.readthedocs.io/) - NVIDIA API
 - [supabase](https://supabase.com/docs/reference/python) - Supabase client
-- python-dotenv - Environment variable management
 
 ## License
 
