@@ -188,6 +188,9 @@ body {
     letter-spacing: 0.03em;
     background: linear-gradient(135deg, var(--color-primary) 0%, #8b5cf6 100%);
     color: white;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: break-word;
 }
 
 /* Filter icons */
@@ -236,6 +239,9 @@ body {
     letter-spacing: 0.03em;
     background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
     color: white;
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: break-word;
 }
 
 .checkbox-filter-container {
