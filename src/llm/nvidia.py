@@ -6,7 +6,7 @@ import time
 import requests
 
 from .base import LLMProvider, LLMUnavailableError
-from .config import MAX_RETRIES, MAX_TIMEOUT_RETRIES, BASE_DELAY, MAX_DELAY, REQUEST_COOLDOWN
+from .config import MAX_RETRIES, MAX_TIMEOUT_RETRIES, BASE_DELAY, MAX_DELAY, REQUEST_COOLDOWN, REQUEST_TIMEOUT
 
 logger = logging.getLogger("bluesky_search")
 
@@ -40,7 +40,7 @@ class NvidiaProvider(LLMProvider):
         for attempt in range(MAX_RETRIES):
             try:
                 resp = requests.post(
-                    NVIDIA_API_URL, headers=headers, json=payload, timeout=30
+                    NVIDIA_API_URL, headers=headers, json=payload, timeout=REQUEST_TIMEOUT
                 )
 
                 if resp.status_code == 429:
