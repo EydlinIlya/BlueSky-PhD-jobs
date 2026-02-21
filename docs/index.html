@@ -104,11 +104,49 @@
 
         <!-- Cards container (mobile only) -->
         <div id="cards-container" class="hidden">
-            <div class="mb-4">
-                <input type="text" id="card-search" placeholder="Search positions..."
-                       class="w-full px-4 py-3 bg-slate-800 border border-slate-600 rounded-lg text-slate-200 placeholder-slate-400 font-mono text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+            <div class="filter-panel mb-4">
+                <!-- Level -->
+                <div class="filter-section">
+                    <button class="filter-section-header" onclick="toggleFilterSection('types')">
+                        <span class="filter-section-title">Level</span>
+                        <div class="filter-section-right">
+                            <span class="filter-badge" id="badge-types"></span>
+                            <span class="filter-chevron" id="chevron-types">▶</span>
+                        </div>
+                    </button>
+                    <div class="filter-section-body" id="body-types"></div>
+                </div>
+                <!-- Country -->
+                <div class="filter-section">
+                    <button class="filter-section-header" onclick="toggleFilterSection('countries')">
+                        <span class="filter-section-title">Country</span>
+                        <div class="filter-section-right">
+                            <span class="filter-badge" id="badge-countries"></span>
+                            <span class="filter-chevron" id="chevron-countries">▶</span>
+                        </div>
+                    </button>
+                    <div class="filter-section-body" id="body-countries">
+                        <input type="text" id="country-filter-search" placeholder="Search countries..."
+                               class="filter-search-input" oninput="filterCountryOptions(this.value)">
+                        <div id="country-options"></div>
+                    </div>
+                </div>
+                <!-- Area -->
+                <div class="filter-section filter-section-last">
+                    <button class="filter-section-header" onclick="toggleFilterSection('areas')">
+                        <span class="filter-section-title">Area</span>
+                        <div class="filter-section-right">
+                            <span class="filter-badge" id="badge-areas"></span>
+                            <span class="filter-chevron" id="chevron-areas">▶</span>
+                        </div>
+                    </button>
+                    <div class="filter-section-body" id="body-areas"></div>
+                </div>
             </div>
-            <p id="card-count" class="stats-bar mb-4"></p>
+            <div class="filter-footer mb-4">
+                <p id="card-count" class="stats-bar"></p>
+                <button onclick="clearCardFilters()" class="btn-clear">[ clear filters ]</button>
+            </div>
             <div id="cards-list"></div>
         </div>
     </main>

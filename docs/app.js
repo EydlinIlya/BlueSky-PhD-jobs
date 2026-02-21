@@ -493,18 +493,139 @@ window.toggleCardMessage = function(index) {
     }
 }
 
-// Filter cards based on search query
-function filterCards(query) {
+// Card filter state — empty set means "all" (no restriction)
+const cardFilters = {
+    types: new Set(),
+    countries: new Set(),
+    areas: new Set(),
+};
+
+// Stored option arrays for index-based lookup (avoids escaping issues in onclick)
+const filterOptions = { types: [], countries: [], areas: [] };
+
+// Track which accordion sections are open
+const openSections = new Set();
+
+window.toggleFilterSection = function(sectionId) {
+    const body = document.getElementById(`body-${sectionId}`);
+    const chevron = document.getElementById(`chevron-${sectionId}`);
+    if (openSections.has(sectionId)) {
+        openSections.delete(sectionId);
+        body.classList.remove('open');
+        chevron.textContent = '▶';
+    } else {
+        openSections.add(sectionId);
+        body.classList.add('open');
+        chevron.textContent = '▼';
+    }
+};
+
+window.toggleCardFilter = function(category, index) {
+    const value = filterOptions[category][index];
+    const set = cardFilters[category];
+    if (set.has(value)) {
+        set.delete(value);
+    } else {
+        set.add(value);
+    }
+    updateFilterBadge(category);
+    applyCardFilters();
+};
+
+function updateFilterBadge(category) {
+    const badge = document.getElementById(`badge-${category}`);
+    const count = cardFilters[category].size;
+    if (count > 0) {
+        badge.textContent = count;
+        badge.style.display = 'inline-flex';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function buildCheckboxList(containerId, category, values) {
+    filterOptions[category] = values;
+    const container = document.getElementById(containerId);
+    container.innerHTML = values.map((v, i) => `
+        <label class="filter-option">
+            <input type="checkbox" class="filter-checkbox"
+                   onchange="toggleCardFilter('${category}', ${i})">
+            <span>${escapeHtml(v)}</span>
+        </label>
+    `).join('');
+}
+
+function buildCardFilters(positions) {
+    // Level (position_type)
+    const types = [...new Set(positions.flatMap(p => p.position_type || []))].sort();
+    buildCheckboxList('body-types', 'types', types);
+
+    // Country — sort alphabetically, Unknown at end
+    let countries = [...new Set(positions.map(p => p.country).filter(Boolean))].sort();
+    countries = countries.filter(c => c !== 'Unknown');
+    if (positions.some(p => !p.country || p.country === 'Unknown')) {
+        countries.push('Unknown');
+    }
+    filterOptions.countries = countries;
+    buildCheckboxList('country-options', 'countries', countries);
+
+    // Area (disciplines)
+    const areas = [...new Set(positions.flatMap(p => p.disciplines || []))].sort();
+    buildCheckboxList('body-areas', 'areas', areas);
+}
+
+window.filterCountryOptions = function(query) {
     const q = query.toLowerCase();
-    const filtered = allPositions.filter(p =>
-        (p.message || '').toLowerCase().includes(q) ||
-        (p.user_handle || '').toLowerCase().includes(q) ||
-        (p.disciplines || []).some(d => d.toLowerCase().includes(q)) ||
-        (p.country || '').toLowerCase().includes(q) ||
-        (p.position_type || []).some(t => t.toLowerCase().includes(q))
-    );
+    const all = filterOptions.countries;
+    const container = document.getElementById('country-options');
+    container.innerHTML = all
+        .map((v, i) => ({ v, i }))
+        .filter(({ v }) => v.toLowerCase().includes(q))
+        .map(({ v, i }) => `
+            <label class="filter-option">
+                <input type="checkbox" class="filter-checkbox"
+                       onchange="toggleCardFilter('countries', ${i})"
+                       ${cardFilters.countries.has(v) ? 'checked' : ''}>
+                <span>${escapeHtml(v)}</span>
+            </label>
+        `).join('');
+};
+
+function applyCardFilters() {
+    let filtered = allPositions;
+
+    if (cardFilters.types.size > 0) {
+        filtered = filtered.filter(p =>
+            (p.position_type || []).some(t => cardFilters.types.has(t))
+        );
+    }
+    if (cardFilters.countries.size > 0) {
+        filtered = filtered.filter(p =>
+            cardFilters.countries.has(p.country || 'Unknown')
+        );
+    }
+    if (cardFilters.areas.size > 0) {
+        filtered = filtered.filter(p =>
+            (p.disciplines || []).some(d => cardFilters.areas.has(d))
+        );
+    }
+
     renderCards(filtered);
 }
+
+window.clearCardFilters = function() {
+    cardFilters.types.clear();
+    cardFilters.countries.clear();
+    cardFilters.areas.clear();
+
+    document.querySelectorAll('.filter-checkbox').forEach(cb => cb.checked = false);
+    ['types', 'countries', 'areas'].forEach(cat => updateFilterBadge(cat));
+
+    const countrySearch = document.getElementById('country-filter-search');
+    if (countrySearch) countrySearch.value = '';
+
+    renderCards(allPositions);
+};
 
 // Initialize the application
 async function init() {
@@ -537,14 +658,9 @@ async function init() {
             rowData: positions
         });
 
-        // Render cards for mobile
+        // Build accordion filters and render cards for mobile
+        buildCardFilters(positions);
         renderCards(positions);
-
-        // Set up card search
-        const searchInput = document.getElementById('card-search');
-        searchInput.addEventListener('input', (e) => {
-            filterCards(e.target.value);
-        });
 
         // Update count after grid is ready
         setTimeout(updateRowCount, 100);

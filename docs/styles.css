@@ -492,6 +492,127 @@ body {
     color: white;
 }
 
+/* Mobile accordion filter panel */
+.filter-panel {
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    padding: 0 1rem;
+}
+
+.filter-section {
+    border-bottom: 1px solid var(--color-border);
+}
+
+.filter-section-last {
+    border-bottom: none;
+}
+
+.filter-section-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text);
+}
+
+.filter-section-title {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-muted);
+}
+
+.filter-section-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.filter-chevron {
+    font-size: 10px;
+    color: var(--color-text-muted);
+}
+
+.filter-badge {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    background: var(--color-primary);
+    color: white;
+    border-radius: 9999px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+}
+
+.filter-section-body {
+    display: none;
+    padding-bottom: 12px;
+}
+
+.filter-section-body.open {
+    display: block;
+}
+
+.filter-search-input {
+    width: 100%;
+    padding: 7px 10px;
+    margin-bottom: 8px;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.filter-search-input:focus {
+    border-color: var(--color-primary);
+}
+
+.filter-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--color-text);
+    user-select: none;
+}
+
+.filter-checkbox {
+    accent-color: var(--color-primary);
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+#country-options {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.filter-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
 /* Responsive visibility */
 @media (min-width: 768px) {
     #cards-container {
