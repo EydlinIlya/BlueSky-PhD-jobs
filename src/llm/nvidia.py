@@ -10,7 +10,7 @@ from .config import MAX_RETRIES, MAX_TIMEOUT_RETRIES, BASE_DELAY, MAX_DELAY, REQ
 
 logger = logging.getLogger("bluesky_search")
 
-DEFAULT_NVIDIA_MODEL = "meta/llama-4-maverick-17b-128e-instruct"
+DEFAULT_NVIDIA_MODEL = "meta/llama-3.3-70b-instruct"
 NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 
 
