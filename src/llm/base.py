@@ -3,6 +3,10 @@
 from abc import ABC, abstractmethod
 
 
+class LLMUnavailableError(Exception):
+    """Raised when the LLM API is unreachable after all retries."""
+
+
 class LLMProvider(ABC):
     """Abstract base class for LLM providers."""
 

@@ -5,8 +5,8 @@ import time
 
 import requests
 
-from .base import LLMProvider
-from .config import MAX_RETRIES, BASE_DELAY, MAX_DELAY, REQUEST_COOLDOWN
+from .base import LLMProvider, LLMUnavailableError
+from .config import MAX_RETRIES, MAX_TIMEOUT_RETRIES, BASE_DELAY, MAX_DELAY, REQUEST_COOLDOWN
 
 logger = logging.getLogger("bluesky_search")
 
@@ -59,6 +59,20 @@ class NvidiaProvider(LLMProvider):
 
                 data = resp.json()
                 return data["choices"][0]["message"]["content"]
+
+            except requests.exceptions.Timeout as e:
+                # Timeouts suggest the API is unreachable — use a shorter retry budget
+                if attempt < MAX_TIMEOUT_RETRIES - 1:
+                    delay = BASE_DELAY
+                    logger.warning(
+                        f"NVIDIA timeout (attempt {attempt + 1}/{MAX_TIMEOUT_RETRIES}). "
+                        f"Retrying in {delay}s..."
+                    )
+                    time.sleep(delay)
+                else:
+                    raise LLMUnavailableError(
+                        f"NVIDIA API unreachable after {MAX_TIMEOUT_RETRIES} attempts: {e}"
+                    ) from e
 
             except requests.exceptions.RequestException as e:
                 if attempt < MAX_RETRIES - 1:

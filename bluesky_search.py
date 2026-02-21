@@ -7,7 +7,7 @@ import sys
 from datetime import datetime
 
 from src.logger import setup_logger
-from src.llm import NvidiaProvider, JobClassifier
+from src.llm import NvidiaProvider, JobClassifier, LLMUnavailableError
 from src.storage import StorageBackend, CSVStorage, SupabaseStorage
 from src.sync_state import SyncStateManager
 from src.sources import BlueskySource, ScholarshipDBSource
@@ -215,6 +215,11 @@ def main():
                     "timestamp": newest_timestamp,
                     "uris": seen_uris,
                 }
+
+        except LLMUnavailableError as e:
+            logger.error(f"LLM API unavailable: {e}")
+            logger.error("Stopping run — no posts classified today. Will retry tomorrow.")
+            sys.exit(0)
 
         except Exception as e:
             logger.error(f"Error fetching from {source_name}: {e}")

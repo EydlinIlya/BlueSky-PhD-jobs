@@ -4,7 +4,8 @@
 DEFAULT_MODEL = "meta/llama-4-maverick-17b-128e-instruct"
 
 # Rate limit settings
-MAX_RETRIES = 5
+MAX_RETRIES = 5        # retries for rate limits / transient errors
+MAX_TIMEOUT_RETRIES = 2  # retries for network timeouts (API may be down)
 BASE_DELAY = 10  # seconds (initial backoff on rate limit)
 MAX_DELAY = 120  # seconds (max backoff)
 REQUEST_COOLDOWN = 2  # seconds between requests (free tier: 30 req/min = 2s)
