@@ -411,6 +411,7 @@ body {
 
 .card-author {
     margin-bottom: 0.75rem;
+    min-width: 0;
 }
 
 .card-author a {
@@ -418,6 +419,10 @@ body {
     font-size: 13px;
     color: var(--color-primary);
     text-decoration: none;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .card-author a:hover {
