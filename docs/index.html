@@ -40,11 +40,6 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- AG Grid -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.0.2/styles/ag-grid.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.0.2/styles/ag-theme-alpine.css">
-    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@32.0.2/dist/ag-grid-community.min.js"></script>
-
     <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
@@ -88,22 +83,9 @@
             </p>
         </div>
 
-        <!-- Grid container (desktop only) -->
-        <div id="grid-container" class="hidden">
-            <div class="mb-4 flex items-center justify-between">
-                <p id="row-count" class="stats-bar"></p>
-                <button
-                    onclick="clearAllFilters()"
-                    class="btn-clear hover:underline"
-                >
-                    [ clear filters ]
-                </button>
-            </div>
-            <div id="positions-grid" class="ag-theme-alpine w-full rounded-lg overflow-hidden grid-viewport"></div>
-        </div>
-
-        <!-- Cards container (mobile only) -->
-        <div id="cards-container" class="hidden">
+        <!-- App container (all viewports) -->
+        <div id="app-container" class="hidden">
+            <!-- Filter panel -->
             <div class="filter-panel mb-4">
                 <!-- Level -->
                 <div class="filter-section">
@@ -143,11 +125,15 @@
                     <div class="filter-section-body" id="body-areas"></div>
                 </div>
             </div>
+
+            <!-- Count + clear -->
             <div class="filter-footer mb-4">
                 <p id="card-count" class="stats-bar"></p>
                 <button onclick="clearCardFilters()" class="btn-clear">[ clear filters ]</button>
             </div>
-            <div id="cards-list"></div>
+
+            <!-- Responsive card grid -->
+            <div id="cards-grid" class="cards-grid"></div>
         </div>
     </main>
 
