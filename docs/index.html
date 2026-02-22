@@ -40,6 +40,11 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
+    <!-- AG Grid (table mode) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.0.2/styles/ag-grid.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.0.2/styles/ag-theme-alpine.css">
+    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@32.0.2/dist/ag-grid-community.min.js"></script>
+
     <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
@@ -49,27 +54,35 @@
 <body class="min-h-screen flex flex-col">
     <!-- Header -->
     <header class="site-header">
-        <div class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                    <h1 class="site-title text-2xl sm:text-3xl text-white">
-                        <span class="text-indigo-400">&gt;</span> PhD_Positions
-                    </h1>
-                    <h2 class="site-subtitle mt-2 text-sm">
+        <div class="max-w-[1800px] mx-auto px-4 py-5 sm:px-6 lg:px-8">
+            <div class="header-inner">
+                <div class="header-left">
+                    <div class="header-left-top">
+                        <h1 class="site-title text-2xl text-white">
+                            <span class="text-indigo-400">&gt;</span> PhD_Positions
+                        </h1>
+                        <span class="ai-badge">AI-Powered by Llama</span>
+                    </div>
+                    <h2 class="site-subtitle text-sm">
                         Browse PhD, postdoc, and research positions from Bluesky, updated daily
                     </h2>
                 </div>
-                <div class="flex items-center gap-3">
-                    <span class="ai-badge">
-                        AI-Powered by Llama
-                    </span>
+                <div class="header-search-container" id="header-search-container">
+                    <div class="search-bar" id="search-bar-container">
+                        <span class="search-prompt">_search</span>
+                        <input type="text" id="global-search" class="search-input"
+                               placeholder="keyword, author, discipline, country..."
+                               autocomplete="off">
+                        <button id="btn-search-clear" class="search-clear-btn hidden" onclick="clearSearch()" title="Clear">✕</button>
+                        <button class="search-btn" onclick="applySearch()">Search</button>
+                    </div>
                 </div>
             </div>
         </div>
     </header>
 
     <!-- Main content -->
-    <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-6 sm:px-6 lg:px-8">
+    <main class="flex-1 max-w-[1800px] w-full mx-auto px-4 py-6 sm:px-6 lg:px-8">
         <!-- Loading state -->
         <div id="loading" class="flex items-center justify-center py-12">
             <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
@@ -86,7 +99,7 @@
         <!-- App container (all viewports) -->
         <div id="app-container" class="hidden">
             <!-- Filter panel -->
-            <div class="filter-panel mb-4">
+            <div class="filter-panel mb-4" id="filter-panel">
                 <!-- Level -->
                 <div class="filter-section">
                     <button class="filter-section-header" onclick="toggleFilterSection('types')">
@@ -126,14 +139,34 @@
                 </div>
             </div>
 
-            <!-- Count + clear -->
-            <div class="filter-footer mb-4">
+            <!-- Stats bar + view switcher -->
+            <div class="stats-switcher-bar mb-4">
                 <p id="card-count" class="stats-bar"></p>
-                <button onclick="clearCardFilters()" class="btn-clear">[ clear filters ]</button>
+                <div class="flex items-center gap-4">
+                    <div id="view-switcher" class="view-switcher">
+                        <button id="btn-cards" class="view-btn active" onclick="setView('cards')" title="Card view">
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="0" y="0" width="6" height="6" rx="1"/><rect x="8" y="0" width="6" height="6" rx="1"/><rect x="0" y="8" width="6" height="6" rx="1"/><rect x="8" y="8" width="6" height="6" rx="1"/></svg>
+                            Cards
+                        </button>
+                        <button id="btn-table" class="view-btn" onclick="setView('table')" title="Table view">
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="0" y="1" width="14" height="2" rx="1"/><rect x="0" y="6" width="14" height="2" rx="1"/><rect x="0" y="11" width="14" height="2" rx="1"/></svg>
+                            Table
+                        </button>
+                    </div>
+                    <button onclick="clearCardFilters()" id="btn-clear" class="btn-clear">[ clear filters ]</button>
+                </div>
             </div>
 
-            <!-- Responsive card grid -->
-            <div id="cards-grid" class="cards-grid"></div>
+            <!-- Card view -->
+            <div id="cards-view">
+                <div id="cards-grid" class="cards-grid"></div>
+                <div id="scroll-sentinel"></div>
+            </div>
+
+            <!-- Table view (desktop only) -->
+            <div id="table-view" class="hidden">
+                <div id="positions-grid" class="ag-theme-alpine w-full rounded-lg overflow-hidden grid-viewport"></div>
+            </div>
         </div>
     </main>
 
