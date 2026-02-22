@@ -69,12 +69,15 @@ def mark_old_duplicates(
     Returns:
         Number of old posts marked as duplicates
     """
+    logger.info(f"Dedup: checking {len(new_posts)} new posts for duplicates")
+
     # Only process Bluesky posts (have is_verified_job in dict)
     bluesky_new = [
         p for p in new_posts
         if p.get("is_verified_job") is True and p.get("uri", "").startswith("at://")
     ]
     if not bluesky_new:
+        logger.info("Dedup: no Bluesky job posts to check, skipping")
         return 0
 
     # Fetch existing canonical posts, excluding the ones we just saved
@@ -84,7 +87,10 @@ def mark_old_duplicates(
         if p["uri"] not in new_uris
     ]
     if not existing:
+        logger.info("Dedup: no existing canonical posts to compare against")
         return 0
+
+    logger.info(f"Dedup: comparing {len(bluesky_new)} new posts against {len(existing)} existing posts")
 
     # Preprocess all texts
     new_texts = [preprocess_text(p.get("message", "")) for p in bluesky_new]
@@ -94,6 +100,7 @@ def mark_old_duplicates(
     valid_new = [(i, t) for i, t in enumerate(new_texts) if t]
     valid_existing = [(i, t) for i, t in enumerate(existing_texts) if t]
     if not valid_new or not valid_existing:
+        logger.info("Dedup: no valid texts after preprocessing, skipping")
         return 0
 
     # Build TF-IDF matrix over all texts combined
@@ -116,6 +123,8 @@ def mark_old_duplicates(
         scores = cosine_similarity(new_matrix[new_idx:new_idx + 1], existing_matrix)[0]
         best_existing_idx = scores.argmax()
         best_score = float(scores[best_existing_idx])
+
+        logger.info(f"Dedup: new post {new_post['uri'][:60]} best score={best_score:.3f}")
 
         if best_score < LLM_THRESHOLD:
             continue
