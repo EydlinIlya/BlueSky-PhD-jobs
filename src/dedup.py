@@ -77,8 +77,12 @@ def mark_old_duplicates(
     if not bluesky_new:
         return 0
 
-    # Fetch existing canonical posts
-    existing = storage.get_posts_for_dedup()
+    # Fetch existing canonical posts, excluding the ones we just saved
+    new_uris = {p["uri"] for p in bluesky_new}
+    existing = [
+        p for p in storage.get_posts_for_dedup()
+        if p["uri"] not in new_uris
+    ]
     if not existing:
         return 0
 
