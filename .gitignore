@@ -8,3 +8,11 @@ last_sync.json
 .claude/
 .playwright-mcp/
 experiments/
+
+# Playwright screenshots and test artifacts
+*.png
+*.jpg
+*.jpeg
+*.webp
+test-results/
+playwright-report/

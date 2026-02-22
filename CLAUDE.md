@@ -29,6 +29,7 @@ Features include:
 - Single JSON metadata extraction: disciplines (1-3), country, and position type
 - Per-source incremental sync state
 - Multiple storage backends (CSV, Supabase)
+- Deduplication of reposted positions (TF-IDF + LLM verification)
 - GitHub Actions for automated daily updates
 - GitHub Pages frontend for browsing positions
 
@@ -108,7 +109,11 @@ python bluesky_search.py --no-llm
 **`src/storage/`** - Storage backends
 - `base.py` - Abstract `StorageBackend` class
 - `csv_storage.py` - Local CSV file storage
-- `supabase.py` - Supabase PostgreSQL storage
+- `supabase.py` - Supabase PostgreSQL storage (includes `get_posts_for_dedup()`, `mark_duplicate()`)
+
+**`src/dedup.py`** - Production deduplication
+- `preprocess_text()` - Cleans post text (strips bio, URLs, linked pages)
+- `mark_old_duplicates()` - Compares new posts against existing canonical posts using TF-IDF similarity; auto-accepts pairs >= 0.95, LLM-verifies 0.25–0.95 zone, marks older posts with `duplicate_of` pointing to newer canonical post
 
 ### Data Flow
 
@@ -131,7 +136,8 @@ python bluesky_search.py --no-llm
 1. Collect posts from all enabled sources
 2. Convert Post objects to dicts
 3. Save to storage backend
-4. Update per-source sync state
+4. Deduplication (Supabase only): compare new posts against existing canonical posts, mark older duplicates with `duplicate_of` → newest URI
+5. Update per-source sync state
 
 ## Testing
 
@@ -154,6 +160,7 @@ Test files:
 - `beautifulsoup4` - HTML parsing
 - `python-dotenv` - Environment variables
 - `requests` - NVIDIA API
+- `scikit-learn` - TF-IDF similarity (deduplication)
 - `supabase` - Supabase client
 
 ## Supabase Setup
@@ -172,11 +179,14 @@ CREATE TABLE phd_positions (
     is_verified_job BOOLEAN DEFAULT TRUE,
     country TEXT,
     position_type TEXT[],
-    indexed_at TIMESTAMPTZ DEFAULT NOW()
+    indexed_at TIMESTAMPTZ DEFAULT NOW(),
+    duplicate_of TEXT
 );
 ```
 3. Get URL and anon key from Settings → API
 4. Add to `.env`: `SUPABASE_URL` and `SUPABASE_KEY`
+
+**`duplicate_of` column:** `NULL` = canonical post (shown in UI). Contains URI of the newest (canonical) post in a duplicate group. When duplicates are detected, the older post gets `duplicate_of` set to the newer post's URI.
 
 ## GitHub Actions
 

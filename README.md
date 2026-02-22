@@ -14,6 +14,7 @@ Aggregate PhD and academic position announcements from multiple sources into a u
 - **Multi-discipline classification** - Categorize positions into 1-3 academic disciplines
 - **Country detection** - Identifies position country from university, domain, or city names
 - **Position type extraction** - PhD Student, Postdoc, Master Student, Research Assistant
+- **Deduplication** - TF-IDF + LLM-based detection of reposted positions
 - **Incremental sync** - Only fetch new positions since last run
 - **GitHub Actions** - Automated daily updates
 
@@ -115,7 +116,8 @@ CREATE TABLE phd_positions (
     is_verified_job BOOLEAN DEFAULT TRUE,
     country TEXT,
     position_type TEXT[],
-    indexed_at TIMESTAMPTZ DEFAULT NOW()
+    indexed_at TIMESTAMPTZ DEFAULT NOW(),
+    duplicate_of TEXT
 );
 ```
 
@@ -159,6 +161,7 @@ A web interface to browse PhD positions is available at the `/docs` folder.
 - [httpx](https://www.python-httpx.org/) - HTTP client for ScholarshipDB
 - [beautifulsoup4](https://www.crummy.com/software/BeautifulSoup/) - HTML parsing
 - [requests](https://requests.readthedocs.io/) - NVIDIA API
+- [scikit-learn](https://scikit-learn.org/) - TF-IDF similarity for deduplication
 - [supabase](https://supabase.com/docs/reference/python) - Supabase client
 
 ## License

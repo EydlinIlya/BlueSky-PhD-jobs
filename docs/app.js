@@ -11,6 +11,8 @@ let allPositions = [];
 let currentFilteredPositions = [];
 let gridApi = null;
 const expandedCards = new Set();
+const expandedEarlierPosts = new Set();
+let duplicateMap = {};  // canonical URI -> [{uri, url, user_handle, created_at}]
 let searchQuery = '';
 
 // Infinite scroll
@@ -37,12 +39,35 @@ async function fetchMockPositions() {
 async function fetchSupabasePositions() {
     const { data, error } = await supabaseClient
         .from('phd_positions')
-        .select('created_at, disciplines, country, position_type, user_handle, message, url, indexed_at')
+        .select('uri, created_at, disciplines, country, position_type, user_handle, message, url, indexed_at')
         .eq('is_verified_job', true)
+        .is('duplicate_of', null)
         .gte('indexed_at', '2026-01-27')
         .order('created_at', { ascending: false });
     if (error) throw error;
     return data;
+}
+
+async function fetchDuplicates() {
+    if (USE_MOCK) return {};
+    const { data, error } = await supabaseClient
+        .from('phd_positions')
+        .select('uri, url, user_handle, created_at, duplicate_of')
+        .not('duplicate_of', 'is', null)
+        .gte('indexed_at', '2026-01-27');
+    if (error) { console.error('Failed to fetch duplicates:', error); return {}; }
+
+    const map = {};
+    for (const row of data || []) {
+        const key = row.duplicate_of;
+        if (!map[key]) map[key] = [];
+        map[key].push(row);
+    }
+    // Sort each group oldest first
+    for (const key of Object.keys(map)) {
+        map[key].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    }
+    return map;
 }
 
 async function fetchPositions() {
@@ -77,6 +102,36 @@ function createCard(position, index) {
         } catch { /* invalid */ }
     }
 
+    // Earlier posts (duplicates pointing to this card)
+    const dupes = position.uri ? (duplicateMap[position.uri] || []) : [];
+    let earlierPostsHtml = '';
+    if (dupes.length > 0) {
+        const isEarlierExpanded = expandedEarlierPosts.has(index);
+        const dupeItems = dupes.map(d => {
+            const dDate = d.created_at ? new Date(d.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+            const dProfile = d.user_handle ? `@${escapeHtml(d.user_handle)}` : 'unknown';
+            let dLink = '';
+            if (d.url) {
+                try {
+                    const u = new URL(d.url);
+                    if (u.protocol === 'https:' || u.protocol === 'http:') dLink = `<a href="${escapeHtml(d.url)}" target="_blank" rel="noopener noreferrer" class="earlier-post-link">View →</a>`;
+                } catch {}
+            }
+            return `<div class="earlier-post-item"><span class="earlier-post-author">${dProfile}</span><span class="earlier-post-date">${dDate}</span>${dLink}</div>`;
+        }).join('');
+
+        earlierPostsHtml = `
+            <div class="earlier-posts-section">
+                <button class="earlier-posts-toggle" onclick="toggleEarlierPosts(${index})">
+                    <span class="earlier-posts-icon">${isEarlierExpanded ? '▼' : '▶'}</span>
+                    ${dupes.length} earlier post${dupes.length > 1 ? 's' : ''}
+                </button>
+                <div class="earlier-posts-list ${isEarlierExpanded ? 'open' : ''}" id="earlier-posts-${index}">
+                    ${dupeItems}
+                </div>
+            </div>`;
+    }
+
     return `
         <article class="position-card" data-index="${index}">
             <div class="card-header">
@@ -96,6 +151,7 @@ function createCard(position, index) {
                     ? `<a href="${escapeHtml(validUrl)}" target="_blank" rel="noopener noreferrer" class="card-link-btn">View Post →</a>`
                     : '<span class="text-gray-400 text-sm">No link</span>'}
             </div>
+            ${earlierPostsHtml}
         </article>`;
 }
 
@@ -164,6 +220,18 @@ window.toggleCardMessage = function(index) {
     msgEl.classList.toggle('truncated', !expanded);
     msgEl.classList.toggle('expanded', expanded);
     btn.textContent = expanded ? '[ show less ]' : '[ read more ]';
+};
+
+window.toggleEarlierPosts = function(index) {
+    if (expandedEarlierPosts.has(index)) expandedEarlierPosts.delete(index);
+    else expandedEarlierPosts.add(index);
+
+    const listEl = document.getElementById(`earlier-posts-${index}`);
+    const card = listEl.closest('.position-card');
+    const toggle = card.querySelector('.earlier-posts-toggle .earlier-posts-icon');
+    const expanded = expandedEarlierPosts.has(index);
+    listEl.classList.toggle('open', expanded);
+    toggle.textContent = expanded ? '▼' : '▶';
 };
 
 // ─── Global search ────────────────────────────────────────────────────────────
@@ -504,9 +572,10 @@ async function init() {
     const appContainer = document.getElementById('app-container');
 
     try {
-        const positions = await fetchPositions();
+        const [positions, dupes] = await Promise.all([fetchPositions(), fetchDuplicates()]);
         allPositions = positions;
         currentFilteredPositions = positions;
+        duplicateMap = dupes;
 
         loadingEl.classList.add('hidden');
         appContainer.classList.remove('hidden');

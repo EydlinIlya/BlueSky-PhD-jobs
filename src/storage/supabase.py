@@ -109,3 +109,65 @@ class SupabaseStorage(StorageBackend):
         if response.data:
             return response.data[0]["created_at"]
         return None
+
+    def get_posts_for_dedup(self) -> list[dict]:
+        """Get all canonical Bluesky posts for deduplication.
+
+        Returns posts where duplicate_of IS NULL and is_verified_job is True,
+        with only the fields needed for similarity comparison.
+        """
+        all_posts = []
+        page_size = 1000
+        offset = 0
+
+        while True:
+            response = (
+                self.client.table(self.table)
+                .select("uri, message, created_at")
+                .eq("is_verified_job", True)
+                .is_("duplicate_of", "null")
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+
+            if not response.data:
+                break
+
+            all_posts.extend(response.data)
+
+            if len(response.data) < page_size:
+                break
+            offset += page_size
+
+        return all_posts
+
+    def mark_duplicate(self, old_uri: str, new_uri: str) -> bool:
+        """Mark an old post as a duplicate of a newer post.
+
+        Args:
+            old_uri: URI of the older post to mark as duplicate
+            new_uri: URI of the newer (canonical) post
+        """
+        try:
+            self.client.table(self.table).update(
+                {"duplicate_of": new_uri}
+            ).eq("uri", old_uri).execute()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to mark duplicate {old_uri}: {e}")
+            return False
+
+    def mark_duplicates_batch(self, updates: list[tuple[str, str]]) -> int:
+        """Mark multiple posts as duplicates.
+
+        Args:
+            updates: List of (old_uri, canonical_uri) tuples
+
+        Returns:
+            Number of posts updated
+        """
+        count = 0
+        for old_uri, canonical_uri in updates:
+            if self.mark_duplicate(old_uri, canonical_uri):
+                count += 1
+        return count
