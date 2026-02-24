@@ -80,6 +80,35 @@ def uri_to_url(uri: str, handle: str) -> str:
     return f"https://bsky.app/profile/{handle}/post/{post_id}"
 
 
+def expand_shortened_links(text: str, facets) -> str:
+    """Replace truncated link text with full URLs from facets.
+
+    Bluesky truncates long URLs in post text (e.g. "example.com/very-lo...")
+    but stores the full URL in the facet's Link feature. This replaces each
+    truncated span with the actual URL.
+    """
+    if not facets:
+        return text
+
+    text_bytes = text.encode("utf-8")
+    # Process facets in reverse order so byte offsets stay valid
+    link_facets = []
+    for facet in facets:
+        for feature in facet.features:
+            if hasattr(feature, "uri"):
+                link_facets.append((facet.index.byte_start, facet.index.byte_end, feature.uri))
+
+    link_facets.sort(key=lambda x: x[0], reverse=True)
+
+    for byte_start, byte_end, uri in link_facets:
+        current_text = text_bytes[byte_start:byte_end].decode("utf-8", errors="replace")
+        # Only replace if the text looks truncated (ends with ellipsis or differs from URI)
+        if current_text != uri:
+            text_bytes = text_bytes[:byte_start] + uri.encode("utf-8") + text_bytes[byte_end:]
+
+    return text_bytes.decode("utf-8")
+
+
 def extract_embed_context(post) -> str:
     """Extract title and description from a post's embedded link preview.
 
@@ -166,9 +195,14 @@ class BlueskySource(DataSource):
                     skipped_old += 1
                     continue
 
+                # Expand truncated links with full URLs from facets
+                raw_text = expand_shortened_links(
+                    post.record.text,
+                    getattr(post.record, "facets", None),
+                )
+
                 # Prepend author bio for discipline context
                 bio = getattr(post.author, "description", "") or ""
-                raw_text = post.record.text
                 message = f"[Bio: {bio.strip()}]\n\n{raw_text}" if bio else raw_text
 
                 post_data = Post(
