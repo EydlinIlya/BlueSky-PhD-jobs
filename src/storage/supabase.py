@@ -110,25 +110,30 @@ class SupabaseStorage(StorageBackend):
             return response.data[0]["created_at"]
         return None
 
-    def get_posts_for_dedup(self) -> list[dict]:
-        """Get all canonical Bluesky posts for deduplication.
+    def get_canonical_posts(self, since: str | None = None) -> list[dict]:
+        """Get canonical posts for deduplication.
 
-        Returns posts where duplicate_of IS NULL and is_verified_job is True,
-        with only the fields needed for similarity comparison.
+        Args:
+            since: Optional ISO timestamp. If provided, only returns posts
+                   indexed after this time. If None, returns all canonical posts.
+
+        Returns posts where duplicate_of IS NULL and is_verified_job is True.
         """
         all_posts = []
         page_size = 1000
         offset = 0
 
         while True:
-            response = (
+            query = (
                 self.client.table(self.table)
-                .select("uri, message, created_at")
+                .select("uri, message, created_at, indexed_at")
                 .eq("is_verified_job", True)
                 .is_("duplicate_of", "null")
-                .range(offset, offset + page_size - 1)
-                .execute()
             )
+            if since:
+                query = query.gte("indexed_at", since)
+
+            response = query.range(offset, offset + page_size - 1).execute()
 
             if not response.data:
                 break

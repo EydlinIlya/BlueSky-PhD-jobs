@@ -51,61 +51,56 @@ def _verify_pair(llm: LLMProvider, text_a: str, text_b: str) -> bool:
         return False
 
 
+RECENT_WINDOW_DAYS = 3
+
+
 def mark_old_duplicates(
-    new_posts: list[dict],
     storage,
     llm: LLMProvider | None = None,
 ) -> int:
-    """Check new posts against existing canonical posts and mark old duplicates.
+    """Compare recent posts against older canonical posts and mark old duplicates.
 
-    For each new post that matches an existing canonical post, the old post
-    gets `duplicate_of` set to the new post's URI (the new post becomes canonical).
+    Queries posts indexed in the last RECENT_WINDOW_DAYS from the database,
+    so even if a previous run crashed, those posts will be picked up next time.
 
-    Args:
-        new_posts: List of post dicts that were just saved
-        storage: SupabaseStorage instance
-        llm: Optional LLM provider for middle-zone verification
+    For each recent post that matches an older canonical post, the older post
+    gets `duplicate_of` set to the recent post's URI (newer = canonical).
 
     Returns:
         Number of old posts marked as duplicates
     """
-    logger.info(f"Dedup: checking {len(new_posts)} new posts for duplicates")
+    from datetime import datetime, timedelta, timezone
 
-    # Only process Bluesky posts (have is_verified_job in dict)
-    bluesky_new = [
-        p for p in new_posts
-        if p.get("is_verified_job") is True and p.get("uri", "").startswith("at://")
-    ]
-    if not bluesky_new:
-        logger.info("Dedup: no Bluesky job posts to check, skipping")
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=RECENT_WINDOW_DAYS)).isoformat()
+    recent = storage.get_canonical_posts(since=cutoff)
+    if not recent:
+        logger.info("Dedup: no recent posts to check")
         return 0
 
-    # Fetch existing canonical posts, excluding the ones we just saved
-    new_uris = {p["uri"] for p in bluesky_new}
-    existing = [
-        p for p in storage.get_posts_for_dedup()
-        if p["uri"] not in new_uris
-    ]
-    if not existing:
-        logger.info("Dedup: no existing canonical posts to compare against")
+    older = storage.get_canonical_posts()
+    # Exclude recent posts from the older set
+    recent_uris = {p["uri"] for p in recent}
+    older = [p for p in older if p["uri"] not in recent_uris]
+    if not older:
+        logger.info("Dedup: no older canonical posts to compare against")
         return 0
 
-    logger.info(f"Dedup: comparing {len(bluesky_new)} new posts against {len(existing)} existing posts")
+    logger.info(f"Dedup: comparing {len(recent)} recent posts against {len(older)} older posts")
 
     # Preprocess all texts
-    new_texts = [preprocess_text(p.get("message", "")) for p in bluesky_new]
-    existing_texts = [preprocess_text(p["message"]) for p in existing]
+    recent_texts = [preprocess_text(p["message"]) for p in recent]
+    older_texts = [preprocess_text(p["message"]) for p in older]
 
     # Filter out empty texts
-    valid_new = [(i, t) for i, t in enumerate(new_texts) if t]
-    valid_existing = [(i, t) for i, t in enumerate(existing_texts) if t]
-    if not valid_new or not valid_existing:
+    valid_recent = [(i, t) for i, t in enumerate(recent_texts) if t]
+    valid_older = [(i, t) for i, t in enumerate(older_texts) if t]
+    if not valid_recent or not valid_older:
         logger.info("Dedup: no valid texts after preprocessing, skipping")
         return 0
 
     # Build TF-IDF matrix over all texts combined
-    all_texts = [t for _, t in valid_existing] + [t for _, t in valid_new]
-    n_existing = len(valid_existing)
+    all_texts = [t for _, t in valid_older] + [t for _, t in valid_recent]
+    n_older = len(valid_older)
 
     vectorizer = TfidfVectorizer(
         ngram_range=(1, 2),
@@ -114,24 +109,24 @@ def mark_old_duplicates(
     )
     tfidf_matrix = vectorizer.fit_transform(all_texts)
 
-    existing_matrix = tfidf_matrix[:n_existing]
-    new_matrix = tfidf_matrix[n_existing:]
+    older_matrix = tfidf_matrix[:n_older]
+    recent_matrix = tfidf_matrix[n_older:]
 
-    # For each new post, find best match among existing
+    # For each recent post, find best match among older posts
     marked_count = 0
-    for new_idx, (orig_new_idx, _) in enumerate(valid_new):
-        scores = cosine_similarity(new_matrix[new_idx:new_idx + 1], existing_matrix)[0]
-        best_existing_idx = scores.argmax()
-        best_score = float(scores[best_existing_idx])
+    for rec_idx, (orig_rec_idx, _) in enumerate(valid_recent):
+        scores = cosine_similarity(recent_matrix[rec_idx:rec_idx + 1], older_matrix)[0]
+        best_older_idx = scores.argmax()
+        best_score = float(scores[best_older_idx])
 
-        logger.info(f"Dedup: new post {bluesky_new[orig_new_idx]['uri'][:60]} best score={best_score:.3f}")
+        new_post = recent[orig_rec_idx]
+        logger.info(f"Dedup: post {new_post['uri'][:60]} best score={best_score:.3f}")
 
         if best_score < LLM_THRESHOLD:
             continue
 
-        orig_existing_idx = valid_existing[best_existing_idx][0]
-        old_post = existing[orig_existing_idx]
-        new_post = bluesky_new[orig_new_idx]
+        orig_older_idx = valid_older[best_older_idx][0]
+        old_post = older[orig_older_idx]
 
         is_duplicate = False
         if best_score >= AUTO_ACCEPT_THRESHOLD:
@@ -141,8 +136,8 @@ def mark_old_duplicates(
                 f"old={old_post['uri'][:50]}... → new={new_post['uri'][:50]}..."
             )
         elif llm:
-            old_text = valid_existing[best_existing_idx][1]
-            new_text = valid_new[new_idx][1]
+            old_text = valid_older[best_older_idx][1]
+            new_text = valid_recent[rec_idx][1]
             is_duplicate = _verify_pair(llm, old_text, new_text)
             if is_duplicate:
                 logger.info(

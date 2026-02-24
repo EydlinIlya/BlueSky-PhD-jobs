@@ -236,11 +236,10 @@ def main():
         saved_count = storage.save_posts(all_results)
         logger.info(f"Saved {saved_count} positions to {args.storage}")
 
-        # Mark old duplicates of newly saved posts (Supabase only)
+        # Mark old duplicates (Supabase only) — queries recent posts from DB
         if args.storage == "supabase":
             from src.dedup import mark_old_duplicates
             mark_old_duplicates(
-                all_results,
                 storage,
                 classifier.llm if classifier else None,
             )
