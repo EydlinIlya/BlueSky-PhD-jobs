@@ -248,6 +248,10 @@ def main():
         saved_count = storage.save_posts(all_results)
         logger.info(f"Saved {saved_count} positions to {args.storage}")
 
+        # Post Biology + CS positions to Telegram
+        from scripts.post_to_telegram import post_batch_to_telegram
+        post_batch_to_telegram(all_results)
+
         # Update sync state for CSV backend
         if args.storage == "csv":
             for source_name, state in all_sources_updated.items():

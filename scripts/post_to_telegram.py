@@ -1,24 +1,16 @@
 """Post Biology + Computer Science positions to Telegram channel.
 
-Queries Supabase for positions indexed in the last 25 hours that are tagged
-with BOTH Biology AND Computer Science disciplines, then posts them to a
-Telegram channel via Bot API.
+Called from bluesky_search.py with the current batch of positions.
+Filters for positions with BOTH Biology AND Computer Science disciplines
+(bioinformatics), formats them, and posts via Telegram Bot API.
 """
 
 import os
-import sys
-from datetime import datetime, timedelta, timezone
 
 import requests
 from dotenv import load_dotenv
-from supabase import create_client
 
 load_dotenv()
-
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID", "")
 
 TELEGRAM_MAX_LENGTH = 4096
 PAGES_URL = "https://eydlinilya.github.io/BlueSky-PhD-jobs/"
@@ -29,6 +21,8 @@ FOOTER = (
     f"[Browse all positions]({PAGES_URL}) \\| "
     f"[GitHub]({REPO_URL})"
 )
+
+SEPARATOR = "\n\n━━━━━━━━━━━━━━━\n\n"
 
 
 def escape_md(text):
@@ -44,12 +38,10 @@ def to_hashtag(text):
 
 
 def format_position(pos):
-    """Format a single position as a Markdown block."""
-    # Position type hashtags
+    """Format a single position as a MarkdownV2 block."""
     types = pos.get("position_type") or []
     type_tags = " \\| ".join(to_hashtag(t) for t in types)
 
-    # Country hashtag
     country = pos.get("country") or ""
     country_tag = ""
     if country and country != "Unknown":
@@ -57,17 +49,13 @@ def format_position(pos):
 
     header = f"{type_tags}{country_tag}" if type_tags else ""
 
-    # User handle
     handle = pos.get("user_handle") or ""
 
-    # Message text — truncate to ~400 chars
     message = pos.get("message") or ""
     if len(message) > 400:
         message = message[:397] + "..."
-
     message = escape_md(message)
 
-    # Post URL
     url = pos.get("url") or ""
     link = f"[View Post]({url})" if url else ""
 
@@ -85,14 +73,8 @@ def format_position(pos):
     return "\n".join(lines)
 
 
-SEPARATOR = "\n\n━━━━━━━━━━━━━━━\n\n"
-
-
 def build_messages(positions):
-    """Batch positions into messages under the Telegram character limit.
-
-    Returns a list of message strings. The last message gets a footer.
-    """
+    """Batch positions into messages under the Telegram character limit."""
     if not positions:
         return []
 
@@ -101,10 +83,9 @@ def build_messages(positions):
     messages = []
     current = ""
 
-    for i, block in enumerate(formatted):
+    for block in formatted:
         candidate = block if not current else current + SEPARATOR + block
 
-        # Check if adding this block (plus potential footer) exceeds limit
         if len(candidate) > TELEGRAM_MAX_LENGTH - len(FOOTER) - 10:
             if current:
                 messages.append(current)
@@ -115,7 +96,6 @@ def build_messages(positions):
     if current:
         messages.append(current)
 
-    # Add footer to last message
     if messages:
         messages[-1] += FOOTER
 
@@ -140,62 +120,38 @@ def send_telegram_message(token, channel_id, text):
     return True
 
 
-def fetch_recent_positions(client):
-    """Fetch positions indexed in the last 25 hours with Bio + CS disciplines."""
-    since = (datetime.now(timezone.utc) - timedelta(hours=25)).isoformat()
+def post_batch_to_telegram(all_results):
+    """Post Biology + CS positions from the current batch to Telegram.
 
-    result = (
-        client.table("phd_positions")
-        .select("uri, message, url, user_handle, created_at, disciplines, country, position_type")
-        .eq("is_verified_job", True)
-        .is_("duplicate_of", "null")
-        .gte("indexed_at", since)
-        .order("created_at", desc=True)
-        .execute()
-    )
+    Args:
+        all_results: List of position dicts from the current search batch.
+    """
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    channel_id = os.environ.get("TELEGRAM_CHANNEL_ID", "")
 
-    # Filter for positions with BOTH Biology AND Computer Science
+    if not token or not channel_id:
+        return
+
+    # Filter for bioinformatics: positions with BOTH Biology AND Computer Science
     positions = []
-    for pos in result.data:
+    for pos in all_results:
         disciplines = pos.get("disciplines") or []
         if "Biology" in disciplines and "Computer Science" in disciplines:
             positions.append(pos)
 
-    return positions
-
-
-def main():
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        print("Error: SUPABASE_URL and SUPABASE_KEY are required")
-        sys.exit(1)
-
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHANNEL_ID:
-        print("Warning: TELEGRAM_BOT_TOKEN or TELEGRAM_CHANNEL_ID not set, skipping")
-        sys.exit(0)
-
-    client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-    print("Fetching recent Biology + CS positions...")
-    positions = fetch_recent_positions(client)
-    print(f"Found {len(positions)} matching positions")
-
     if not positions:
-        print("No new Biology + CS positions to post")
+        print("No Biology + CS positions in this batch")
         return
 
-    messages = build_messages(positions)
-    print(f"Sending {len(messages)} message(s) to Telegram...")
+    print(f"Posting {len(positions)} Biology + CS positions to Telegram...")
 
+    messages = build_messages(positions)
     sent = 0
     for msg in messages:
-        if send_telegram_message(TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID, msg):
+        if send_telegram_message(token, channel_id, msg):
             sent += 1
         else:
-            print("Failed to send message, stopping")
-            sys.exit(1)
+            print("Failed to send Telegram message, stopping")
+            return
 
-    print(f"Posted {len(positions)} positions in {sent} message(s)")
-
-
-if __name__ == "__main__":
-    main()
+    print(f"Posted {len(positions)} positions in {sent} Telegram message(s)")
