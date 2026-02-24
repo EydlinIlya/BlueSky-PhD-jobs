@@ -3,9 +3,8 @@
 import json
 import pytest
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 
-from src.sync_state import SyncStateManager, load_sync_state, save_sync_state
+from src.sync_state import SyncStateManager
 
 
 class TestSyncStateManager:
@@ -79,80 +78,3 @@ class TestSyncStateManager:
         state = manager2.get_source_state("bluesky")
         assert state["last_timestamp"] == "2026-01-15T00:00:00Z"
         assert "uri1" in state["seen_uris"]
-
-
-class TestV1ToV2Migration:
-    """Tests for migrating v1 format to v2."""
-
-    @pytest.fixture
-    def v1_state_file(self, tmp_path):
-        """Create a v1 format state file."""
-        state_file = tmp_path / "v1_state.json"
-        v1_data = {
-            "last_timestamp": "2026-01-01T00:00:00Z",
-            "seen_uris": ["uri1", "uri2", "uri3"],
-            "updated_at": "2026-01-02T00:00:00Z",
-        }
-        state_file.write_text(json.dumps(v1_data))
-        return str(state_file)
-
-    def test_migrates_v1_to_v2(self, v1_state_file):
-        """Test that v1 format is migrated to v2."""
-        manager = SyncStateManager(v1_state_file)
-
-        # Should have migrated to bluesky source
-        state = manager.get_source_state("bluesky")
-        assert state["last_timestamp"] == "2026-01-01T00:00:00Z"
-        assert state["seen_uris"] == {"uri1", "uri2", "uri3"}
-
-    def test_migration_saves_v2_format(self, v1_state_file):
-        """Test that migration saves v2 format."""
-        manager = SyncStateManager(v1_state_file)
-
-        # Load file and check format
-        with open(v1_state_file) as f:
-            data = json.load(f)
-
-        assert data["version"] == 2
-        assert "sources" in data
-        assert "bluesky" in data["sources"]
-
-
-class TestLegacyFunctions:
-    """Tests for legacy compatibility functions."""
-
-    @pytest.fixture
-    def temp_state_file(self, tmp_path):
-        """Create a temporary state file path."""
-        return str(tmp_path / "legacy_state.json")
-
-    def test_load_sync_state_empty(self, temp_state_file):
-        """Test load_sync_state with no file."""
-        # Patch the default state file
-        import src.sync_state as sync_module
-        original = sync_module.DEFAULT_STATE_FILE
-        sync_module.DEFAULT_STATE_FILE = temp_state_file
-
-        try:
-            state = load_sync_state(temp_state_file)
-            assert state["last_timestamp"] is None
-            assert state["seen_uris"] == set()
-        finally:
-            sync_module.DEFAULT_STATE_FILE = original
-
-    def test_save_and_load_sync_state(self, temp_state_file):
-        """Test save_sync_state and load_sync_state work together."""
-        save_sync_state("2026-01-15T00:00:00Z", ["uri1", "uri2"], temp_state_file)
-        state = load_sync_state(temp_state_file)
-
-        assert state["last_timestamp"] == "2026-01-15T00:00:00Z"
-        assert "uri1" in state["seen_uris"]
-        assert "uri2" in state["seen_uris"]
-
-    def test_legacy_functions_use_bluesky_source(self, temp_state_file):
-        """Test that legacy functions use 'bluesky' source."""
-        save_sync_state("2026-01-15T00:00:00Z", ["uri1"], temp_state_file)
-
-        # Load directly to check source
-        manager = SyncStateManager(temp_state_file)
-        assert "bluesky" in manager.get_all_sources()

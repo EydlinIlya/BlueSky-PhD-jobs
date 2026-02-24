@@ -98,8 +98,6 @@ python bluesky_search.py --no-llm
 
 **`src/sync_state.py`** - Multi-source sync state management
 - `SyncStateManager` class for per-source state tracking
-- Automatic migration from v1 (single-source) to v2 (multi-source) format
-- Legacy functions for backward compatibility
 
 **`src/logger.py`** - Logging configuration
 
