@@ -26,27 +26,34 @@ REPO_URL = "https://github.com/EydlinIlya/BlueSky-PhD-jobs"
 
 FOOTER = (
     "\n\n"
-    f"[Browse all positions]({PAGES_URL}) | "
+    f"[Browse all positions]({PAGES_URL}) \\| "
     f"[GitHub]({REPO_URL})"
 )
 
 
+def escape_md(text):
+    """Escape MarkdownV2 special characters."""
+    for ch in ["\\", "_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!"]:
+        text = text.replace(ch, f"\\{ch}")
+    return text
+
+
 def to_hashtag(text):
     """Convert text to a Telegram hashtag: spaces → underscores, remove &."""
-    return "#" + text.replace("&", "").replace("  ", " ").replace(" ", "_")
+    return "\\#" + text.replace("&", "").replace("  ", " ").replace(" ", "_")
 
 
 def format_position(pos):
     """Format a single position as a Markdown block."""
     # Position type hashtags
     types = pos.get("position_type") or []
-    type_tags = " | ".join(to_hashtag(t) for t in types)
+    type_tags = " \\| ".join(to_hashtag(t) for t in types)
 
     # Country hashtag
     country = pos.get("country") or ""
     country_tag = ""
     if country and country != "Unknown":
-        country_tag = f" | {to_hashtag(country)}"
+        country_tag = f" \\| {to_hashtag(country)}"
 
     header = f"{type_tags}{country_tag}" if type_tags else ""
 
@@ -58,9 +65,7 @@ def format_position(pos):
     if len(message) > 400:
         message = message[:397] + "..."
 
-    # Escape Markdown special chars in message text
-    for ch in ["_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!"]:
-        message = message.replace(ch, f"\\{ch}")
+    message = escape_md(message)
 
     # Post URL
     url = pos.get("url") or ""
@@ -70,8 +75,7 @@ def format_position(pos):
     if header:
         lines.append(header)
     if handle:
-        escaped_handle = handle.replace(".", "\\.")
-        lines.append(f"by @{escaped_handle}")
+        lines.append(f"by {escape_md('@' + handle)}")
     lines.append("")
     lines.append(message)
     if link:
@@ -81,7 +85,7 @@ def format_position(pos):
     return "\n".join(lines)
 
 
-SEPARATOR = "\n━━━━━━━━━━━━━━━\n"
+SEPARATOR = "\n\n━━━━━━━━━━━━━━━\n\n"
 
 
 def build_messages(positions):
