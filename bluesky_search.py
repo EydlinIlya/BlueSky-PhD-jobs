@@ -233,16 +233,20 @@ def main():
     logger.info("="*40)
 
     if all_results:
-        saved_count = storage.save_posts(all_results)
-        logger.info(f"Saved {saved_count} positions to {args.storage}")
-
-        # Mark old duplicates (Supabase only) — queries recent posts from DB
+        # Deduplicate before saving (Supabase only)
         if args.storage == "supabase":
-            from src.dedup import mark_old_duplicates
-            mark_old_duplicates(
+            from src.dedup import deduplicate_new_posts
+            all_results, db_updates = deduplicate_new_posts(
+                all_results,
                 storage,
                 classifier.llm if classifier else None,
             )
+            # Apply duplicate marks to existing DB posts
+            if db_updates:
+                storage.mark_duplicates_batch(db_updates)
+
+        saved_count = storage.save_posts(all_results)
+        logger.info(f"Saved {saved_count} positions to {args.storage}")
 
         # Update sync state for CSV backend
         if args.storage == "csv":

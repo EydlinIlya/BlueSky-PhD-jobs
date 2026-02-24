@@ -72,6 +72,8 @@ class SupabaseStorage(StorageBackend):
                 record["country"] = post["country"]
             if "position_type" in post:
                 record["position_type"] = post["position_type"]
+            if "duplicate_of" in post:
+                record["duplicate_of"] = post["duplicate_of"]
 
             records.append(record)
 
@@ -110,12 +112,8 @@ class SupabaseStorage(StorageBackend):
             return response.data[0]["created_at"]
         return None
 
-    def get_canonical_posts(self, since: str | None = None) -> list[dict]:
-        """Get canonical posts for deduplication.
-
-        Args:
-            since: Optional ISO timestamp. If provided, only returns posts
-                   indexed after this time. If None, returns all canonical posts.
+    def get_canonical_posts(self) -> list[dict]:
+        """Get all canonical posts for deduplication.
 
         Returns posts where duplicate_of IS NULL and is_verified_job is True.
         """
@@ -124,16 +122,14 @@ class SupabaseStorage(StorageBackend):
         offset = 0
 
         while True:
-            query = (
+            response = (
                 self.client.table(self.table)
-                .select("uri, message, created_at, indexed_at")
+                .select("uri, message, created_at")
                 .eq("is_verified_job", True)
                 .is_("duplicate_of", "null")
+                .range(offset, offset + page_size - 1)
+                .execute()
             )
-            if since:
-                query = query.gte("indexed_at", since)
-
-            response = query.range(offset, offset + page_size - 1).execute()
 
             if not response.data:
                 break
