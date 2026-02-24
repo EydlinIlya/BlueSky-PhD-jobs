@@ -124,7 +124,7 @@ def mark_old_duplicates(
         best_existing_idx = scores.argmax()
         best_score = float(scores[best_existing_idx])
 
-        logger.info(f"Dedup: new post {new_post['uri'][:60]} best score={best_score:.3f}")
+        logger.info(f"Dedup: new post {bluesky_new[orig_new_idx]['uri'][:60]} best score={best_score:.3f}")
 
         if best_score < LLM_THRESHOLD:
             continue
