@@ -34,7 +34,8 @@ def escape_md(text):
 
 def to_hashtag(text):
     """Convert text to a Telegram hashtag: spaces → underscores, remove &."""
-    return "\\#" + text.replace("&", "").replace("  ", " ").replace(" ", "_")
+    tag = text.replace("&", "").replace("  ", " ").replace(" ", "_")
+    return "\\#" + tag.replace("_", "\\_")
 
 
 def format_position(pos):
@@ -57,7 +58,8 @@ def format_position(pos):
     message = escape_md(message)
 
     url = pos.get("url") or ""
-    link = f"[View Post]({url})" if url else ""
+    safe_url = url.replace("\\", "\\\\").replace(")", "\\)")
+    link = f"[View Post]({safe_url})" if url else ""
 
     lines = []
     if header:
