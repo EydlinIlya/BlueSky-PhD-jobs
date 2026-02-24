@@ -753,6 +753,39 @@ main {
     background: var(--color-primary-dark);
 }
 
+/* Filter loading state */
+.filter-panel.filters-loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.filter-panel.filters-loading .filter-section-header {
+    cursor: default;
+}
+
+.loading-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.loading-indicator .spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
 /* Mobile accordion filter panel */
 .filter-panel {
     background: var(--color-bg-card);

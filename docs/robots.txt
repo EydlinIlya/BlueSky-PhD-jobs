@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://eydlinilya.github.io/BlueSky-PhD-jobs/sitemap.xml

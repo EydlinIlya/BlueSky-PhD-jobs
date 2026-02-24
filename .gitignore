@@ -10,9 +10,9 @@ last_sync.json
 experiments/
 
 # Playwright screenshots and test artifacts
-*.png
-*.jpg
-*.jpeg
-*.webp
+/*.png
+/*.jpg
+/*.jpeg
+/*.webp
 test-results/
 playwright-report/

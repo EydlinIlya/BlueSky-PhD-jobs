@@ -14,6 +14,8 @@ const expandedCards = new Set();
 const expandedEarlierPosts = new Set();
 let duplicateMap = {};  // canonical URI -> [{uri, url, user_handle, created_at}]
 let searchQuery = '';
+let totalPositionCount = 0;  // from static data or full fetch
+let isFullDataLoaded = false;
 
 // Infinite scroll
 const BATCH_SIZE = 30;
@@ -184,17 +186,19 @@ function renderCardsBatch(reset = false) {
 function updateCardCount() {
     const shown = renderedCount;
     const filtered = currentFilteredPositions.length;
-    const total = allPositions.length;
+    const total = totalPositionCount || allPositions.length;
     const el = document.getElementById('card-count');
 
-    if (filtered === total) {
-        el.textContent = shown < total
-            ? `Showing ${shown} of ${total} positions`
-            : `${total} positions`;
+    if (!isFullDataLoaded && totalPositionCount > allPositions.length) {
+        el.textContent = `Showing ${shown} of ${total} positions`;
+    } else if (filtered === allPositions.length) {
+        el.textContent = shown < allPositions.length
+            ? `Showing ${shown} of ${allPositions.length} positions`
+            : `${allPositions.length} positions`;
     } else {
         el.textContent = shown < filtered
-            ? `Showing ${shown} of ${filtered} (filtered from ${total})`
-            : `${filtered} of ${total} positions`;
+            ? `Showing ${shown} of ${filtered} (filtered from ${allPositions.length})`
+            : `${filtered} of ${allPositions.length} positions`;
     }
 }
 
@@ -564,6 +568,77 @@ window.clearCardFilters = function() {
     renderCardsBatch(true);
 };
 
+// ─── Static data loading ──────────────────────────────────────────────────────
+
+function loadStaticData() {
+    const el = document.getElementById('static-positions');
+    if (!el) return null;
+    try {
+        const data = JSON.parse(el.textContent);
+        if (data && Array.isArray(data.positions) && data.positions.length > 0) {
+            return { positions: data.positions, total: data.total || data.positions.length };
+        }
+    } catch (e) {
+        console.warn('Failed to parse static positions:', e);
+    }
+    return null;
+}
+
+function setFiltersLoading(loading) {
+    const panel = document.getElementById('filter-panel');
+    const indicator = document.getElementById('loading-indicator');
+    if (loading) {
+        panel.classList.add('filters-loading');
+        if (indicator) indicator.classList.remove('hidden');
+    } else {
+        panel.classList.remove('filters-loading');
+        if (indicator) indicator.classList.add('hidden');
+    }
+}
+
+function onFullDataLoaded(positions, dupes) {
+    allPositions = positions;
+    duplicateMap = dupes;
+    totalPositionCount = positions.length;
+    isFullDataLoaded = true;
+
+    // Rebuild filters with complete data
+    cardFilters.types.clear();
+    cardFilters.countries.clear();
+    cardFilters.areas.clear();
+    buildCardFilters(positions);
+    setFiltersLoading(false);
+
+    // Re-render cards with full data
+    currentFilteredPositions = positions;
+    renderCardsBatch(true);
+
+    // Rebuild grid if it was initialized
+    if (gridApi) {
+        gridApi.setGridOption('rowData', positions);
+        gridApi.setGridOption('columnDefs', getColumnDefs());
+        updateTableCount();
+    }
+}
+
+function setupSearchListeners() {
+    const searchInput = document.getElementById('global-search');
+    const searchContainer = document.getElementById('header-search-container');
+
+    searchInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') applySearch();
+        if (e.key === 'Escape') { searchInput.blur(); }
+    });
+
+    searchInput.addEventListener('focus', () => {
+        searchContainer.classList.add('expanded');
+    });
+
+    searchInput.addEventListener('blur', () => {
+        if (!searchQuery) searchContainer.classList.remove('expanded');
+    });
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 async function init() {
@@ -571,43 +646,63 @@ async function init() {
     const errorEl = document.getElementById('error');
     const appContainer = document.getElementById('app-container');
 
-    try {
-        const [positions, dupes] = await Promise.all([fetchPositions(), fetchDuplicates()]);
-        allPositions = positions;
-        currentFilteredPositions = positions;
-        duplicateMap = dupes;
+    const staticData = loadStaticData();
+
+    if (staticData) {
+        // Render static data immediately
+        allPositions = staticData.positions;
+        currentFilteredPositions = staticData.positions;
+        totalPositionCount = staticData.total;
 
         loadingEl.classList.add('hidden');
         appContainer.classList.remove('hidden');
 
-        buildCardFilters(positions);
+        buildCardFilters(staticData.positions);
+        setFiltersLoading(true);
         renderCardsBatch(true);
         setupInfiniteScroll();
-
-        const searchInput = document.getElementById('global-search');
-        const searchContainer = document.getElementById('header-search-container');
-
-        searchInput.addEventListener('keydown', e => {
-            if (e.key === 'Enter') applySearch();
-            if (e.key === 'Escape') { searchInput.blur(); }
-        });
-
-        searchInput.addEventListener('focus', () => {
-            searchContainer.classList.add('expanded');
-        });
-
-        searchInput.addEventListener('blur', () => {
-            if (!searchQuery) searchContainer.classList.remove('expanded');
-        });
+        setupSearchListeners();
 
         // Restore preferred view (desktop only)
         const preferred = localStorage.getItem('preferred-view');
         if (preferred === 'table' && window.innerWidth >= 768) setView('table');
 
-    } catch (error) {
-        loadingEl.classList.add('hidden');
-        errorEl.classList.remove('hidden');
-        console.error('Initialization error:', error);
+        // Background fetch of full data
+        Promise.all([fetchPositions(), fetchDuplicates()])
+            .then(([positions, dupes]) => {
+                onFullDataLoaded(positions, dupes);
+            })
+            .catch(err => {
+                console.warn('Background fetch failed, using static data:', err);
+                setFiltersLoading(false);
+                isFullDataLoaded = true;
+            });
+    } else {
+        // No static data — original behavior
+        try {
+            const [positions, dupes] = await Promise.all([fetchPositions(), fetchDuplicates()]);
+            allPositions = positions;
+            currentFilteredPositions = positions;
+            duplicateMap = dupes;
+            totalPositionCount = positions.length;
+            isFullDataLoaded = true;
+
+            loadingEl.classList.add('hidden');
+            appContainer.classList.remove('hidden');
+
+            buildCardFilters(positions);
+            renderCardsBatch(true);
+            setupInfiniteScroll();
+            setupSearchListeners();
+
+            const preferred = localStorage.getItem('preferred-view');
+            if (preferred === 'table' && window.innerWidth >= 768) setView('table');
+
+        } catch (error) {
+            loadingEl.classList.add('hidden');
+            errorEl.classList.remove('hidden');
+            console.error('Initialization error:', error);
+        }
     }
 }
 

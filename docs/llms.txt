@@ -1,0 +1,28 @@
+# PhD & Postdoc Position Finder
+
+> Academic job board aggregating PhD, postdoc, and research positions from Bluesky social network.
+
+## What This Site Does
+
+This site collects and displays academic job postings from Bluesky (social network).
+Posts are filtered using AI (Llama) to identify genuine position announcements.
+Data is updated daily via automated pipelines.
+
+## Content
+
+- PhD Student positions
+- Postdoc positions
+- Master Student positions
+- Research Assistant positions
+
+## Disciplines Covered
+
+Computer Science, Biology, Chemistry & Materials Science, Physics, Mathematics,
+Medicine, Psychology, Economics, Linguistics, History, Sociology & Political Science,
+Arts & Humanities, Education, and more.
+
+## URLs
+
+- Main page (interactive): https://eydlinilya.github.io/BlueSky-PhD-jobs/
+- All positions (static): https://eydlinilya.github.io/BlueSky-PhD-jobs/positions.html
+- Source code: https://github.com/EydlinIlya/BlueSky-PhD-jobs
