@@ -3,12 +3,16 @@
 Called from bluesky_search.py with the current batch of positions.
 Filters for positions with BOTH Biology AND Computer Science disciplines
 (bioinformatics), formats them, and posts via Telegram Bot API.
+
+Uses telegramify-markdown to convert plain Markdown to Telegram entities,
+avoiding manual MarkdownV2 escaping issues.
 """
 
 import os
 
 import requests
 from dotenv import load_dotenv
+from telegramify_markdown import convert
 
 load_dotenv()
 
@@ -18,35 +22,22 @@ REPO_URL = "https://github.com/EydlinIlya/BlueSky-PhD-jobs"
 
 FOOTER = (
     "\n\n"
-    f"[Browse all positions]({PAGES_URL}) \\| "
+    f"[Browse all positions]({PAGES_URL}) | "
     f"[GitHub]({REPO_URL})"
 )
 
 SEPARATOR = "\n\n━━━━━━━━━━━━━━━\n\n"
 
 
-def escape_md(text):
-    """Escape MarkdownV2 special characters."""
-    for ch in ["\\", "_", "*", "[", "]", "(", ")", "~", "`", ">", "#", "+", "-", "=", "|", "{", "}", ".", "!"]:
-        text = text.replace(ch, f"\\{ch}")
-    return text
-
-
-def to_hashtag(text):
-    """Convert text to a Telegram hashtag: spaces → underscores, remove &."""
-    tag = text.replace("&", "").replace("  ", " ").replace(" ", "_")
-    return "\\#" + tag.replace("_", "\\_")
-
-
 def format_position(pos):
-    """Format a single position as a MarkdownV2 block."""
+    """Format a single position as plain Markdown."""
     types = pos.get("position_type") or []
-    type_tags = " \\| ".join(to_hashtag(t) for t in types)
+    type_tags = " | ".join(f"#{t.replace('&', '').replace('  ', ' ').replace(' ', '_')}" for t in types)
 
     country = pos.get("country") or ""
     country_tag = ""
     if country and country != "Unknown":
-        country_tag = f" \\| {to_hashtag(country)}"
+        country_tag = f" | #{country.replace(' ', '_')}"
 
     header = f"{type_tags}{country_tag}" if type_tags else ""
 
@@ -55,17 +46,15 @@ def format_position(pos):
     message = pos.get("message") or ""
     if len(message) > 400:
         message = message[:397] + "..."
-    message = escape_md(message)
 
     url = pos.get("url") or ""
-    safe_url = url.replace("\\", "\\\\").replace(")", "\\)")
-    link = f"[View Post]({safe_url})" if url else ""
+    link = f"[View Post]({url})" if url else ""
 
     lines = []
     if header:
         lines.append(header)
     if handle:
-        lines.append(f"by {escape_md('@' + handle)}")
+        lines.append(f"by @{handle}")
     lines.append("")
     lines.append(message)
     if link:
@@ -104,14 +93,15 @@ def build_messages(positions):
     return messages
 
 
-def send_telegram_message(token, channel_id, text):
-    """Send a message to a Telegram channel. Returns True on success."""
+def send_telegram_message(token, channel_id, markdown_text):
+    """Send a message to a Telegram channel using entities. Returns True on success."""
+    text, entities = convert(markdown_text)
     resp = requests.post(
         f"https://api.telegram.org/bot{token}/sendMessage",
         json={
             "chat_id": channel_id,
             "text": text,
-            "parse_mode": "MarkdownV2",
+            "entities": [e.to_dict() for e in entities],
             "disable_web_page_preview": True,
         },
         timeout=30,
@@ -127,12 +117,15 @@ def post_batch_to_telegram(all_results):
 
     Args:
         all_results: List of position dicts from the current search batch.
+
+    Returns:
+        True if posting succeeded (or was skipped), False on failure.
     """
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     channel_id = os.environ.get("TELEGRAM_CHANNEL_ID", "")
 
     if not token or not channel_id:
-        return
+        return True
 
     # Filter for bioinformatics: positions with BOTH Biology AND Computer Science
     positions = []
@@ -143,7 +136,7 @@ def post_batch_to_telegram(all_results):
 
     if not positions:
         print("No Biology + CS positions in this batch")
-        return
+        return True
 
     print(f"Posting {len(positions)} Biology + CS positions to Telegram...")
 
@@ -154,6 +147,7 @@ def post_batch_to_telegram(all_results):
             sent += 1
         else:
             print("Failed to send Telegram message, stopping")
-            return
+            return False
 
     print(f"Posted {len(positions)} positions in {sent} Telegram message(s)")
+    return True

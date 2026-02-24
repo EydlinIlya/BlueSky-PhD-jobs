@@ -250,7 +250,9 @@ def main():
 
         # Post Biology + CS positions to Telegram
         from scripts.post_to_telegram import post_batch_to_telegram
-        post_batch_to_telegram(all_results)
+        if not post_batch_to_telegram(all_results):
+            logger.error("Telegram posting failed")
+            sys.exit(1)
 
         # Update sync state for CSV backend
         if args.storage == "csv":
