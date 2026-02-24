@@ -4,15 +4,15 @@ Called from bluesky_search.py with the current batch of positions.
 Filters for positions with BOTH Biology AND Computer Science disciplines
 (bioinformatics), formats them, and posts via Telegram Bot API.
 
-Uses telegramify-markdown to convert plain Markdown to Telegram entities,
-avoiding manual MarkdownV2 escaping issues.
+Uses telegramify-markdown to convert plain Markdown to MarkdownV2,
+avoiding manual escaping issues.
 """
 
 import os
 
 import requests
 from dotenv import load_dotenv
-from telegramify_markdown import convert
+from telegramify_markdown import markdownify
 
 load_dotenv()
 
@@ -94,14 +94,14 @@ def build_messages(positions):
 
 
 def send_telegram_message(token, channel_id, markdown_text):
-    """Send a message to a Telegram channel using entities. Returns True on success."""
-    text, entities = convert(markdown_text)
+    """Send a message to a Telegram channel. Returns True on success."""
+    text = markdownify(markdown_text)
     resp = requests.post(
         f"https://api.telegram.org/bot{token}/sendMessage",
         json={
             "chat_id": channel_id,
             "text": text,
-            "entities": [e.to_dict() for e in entities],
+            "parse_mode": "MarkdownV2",
             "disable_web_page_preview": True,
         },
         timeout=30,
