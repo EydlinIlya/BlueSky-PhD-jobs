@@ -32,6 +32,7 @@ Features include:
 - Deduplication of reposted positions (TF-IDF + LLM verification)
 - GitHub Actions for automated daily updates
 - GitHub Pages frontend for browsing positions
+- Telegram channel for Biology + CS positions (bioinformatics)
 
 ## Development Setup
 
@@ -54,6 +55,8 @@ Optional:
 NVIDIA_API_KEY=your-nvidia-api-key    # For LLM filtering (Bluesky)
 SUPABASE_URL=https://xxx.supabase.co  # For Supabase storage
 SUPABASE_KEY=your-anon-key            # For Supabase storage
+TELEGRAM_BOT_TOKEN=your-bot-token     # For Telegram channel
+TELEGRAM_CHANNEL_ID=@your_channel     # Telegram channel ID
 ```
 
 ## Running
@@ -110,6 +113,13 @@ python bluesky_search.py --no-llm
 - `base.py` - Abstract `StorageBackend` class
 - `csv_storage.py` - Local CSV file storage
 - `supabase.py` - Supabase PostgreSQL storage (includes `get_posts_for_dedup()`, `mark_duplicate()`)
+
+**`scripts/post_to_telegram.py`** - Telegram channel posting
+- Queries Supabase for positions indexed in last 25 hours
+- Filters for positions with BOTH Biology AND Computer Science disciplines
+- Formats messages with hashtags (position type, country)
+- Batches multiple positions per message (under 4096 char TG limit)
+- Posts via Telegram Bot API (MarkdownV2 format)
 
 **`src/dedup.py`** - Production deduplication
 - `preprocess_text()` - Cleans post text (strips bio, URLs, linked pages)
@@ -196,6 +206,7 @@ Required secrets:
 - `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`
 - `NVIDIA_API_KEY`
 - `SUPABASE_URL`, `SUPABASE_KEY`
+- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID` (optional — skipped if not set)
 
 ## Frontend (`docs/`)
 

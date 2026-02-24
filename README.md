@@ -16,6 +16,7 @@ Aggregate PhD and academic position announcements from multiple sources into a u
 - **Position type extraction** - PhD Student, Postdoc, Master Student, Research Assistant
 - **Deduplication** - TF-IDF + LLM-based detection of reposted positions
 - **Incremental sync** - Only fetch new positions since last run
+- **Telegram channel** - Auto-posts Biology + CS positions (bioinformatics)
 - **GitHub Actions** - Automated daily updates
 
 ## Setup
@@ -42,6 +43,10 @@ NVIDIA_API_KEY=your-nvidia-api-key
 # Optional - Supabase storage
 SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_KEY=your-anon-key
+
+# Optional - Telegram channel
+TELEGRAM_BOT_TOKEN=your-bot-token
+TELEGRAM_CHANNEL_ID=@your_channel
 ```
 
 Get a Bluesky app password at Settings → App Passwords.
@@ -134,7 +139,20 @@ The included workflow runs daily at 8:30 AM UTC with both sources. To enable:
 1. Push to GitHub
 2. Go to Settings → Secrets and variables → Actions
 3. Add secrets: `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`, `NVIDIA_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`
+4. (Optional) Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHANNEL_ID` for Telegram posting
 4. The workflow will run automatically or trigger manually from Actions tab
+
+## Telegram Channel
+
+Positions tagged with both **Biology** and **Computer Science** (bioinformatics, computational biology) are automatically posted to a Telegram channel after each daily run.
+
+### Setup
+
+1. Create a bot via [@BotFather](https://t.me/BotFather) → save the token
+2. Create a channel (e.g., `@bioinfo_phd_jobs`) and add the bot as admin
+3. Add to `.env` or GitHub secrets: `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHANNEL_ID`
+
+If the secrets are not set, the Telegram step is silently skipped.
 
 ## GitHub Pages Frontend
 
