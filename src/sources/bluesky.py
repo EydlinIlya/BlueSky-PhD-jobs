@@ -41,6 +41,8 @@ DEFAULT_QUERIES = [
     "funded postdoctoral",
     "funded postdoc",
     "hiring postdoc",
+    "PhD program",
+    "University is hiring"
 ]
 
 
