@@ -91,13 +91,51 @@ def deduplicate_new_posts(
     existing = storage.get_canonical_posts()
     logger.info(f"Dedup: {len(existing)} existing canonical posts in DB")
 
+    # --- Phase 0: Deterministic quote-URI dedup ---
+    # Posts that quote an existing post are duplicates by definition
+    existing_uri_set = {p["uri"] for p in existing}
+    quote_duplicates = {}  # index in new_posts -> canonical URI
+
+    # Map quoted_uri -> list of (index, post) for new posts with quoted_uri
+    quotes_by_uri: dict[str, list[tuple[int, dict]]] = {}
+    for i, post in enumerate(new_posts):
+        quri = post.get("quoted_uri")
+        if quri:
+            quotes_by_uri.setdefault(quri, []).append((i, post))
+
+    for quri, posts_quoting in quotes_by_uri.items():
+        # Check if quoted URI exists in DB
+        if quri in existing_uri_set:
+            for idx, post in posts_quoting:
+                quote_duplicates[idx] = quri
+                post["duplicate_of"] = quri
+                logger.info(
+                    f"Quote-dedup: {post['uri'][:50]} quotes existing {quri[:50]}"
+                )
+        # If multiple new posts quote the same URI, keep the newest
+        if len(posts_quoting) > 1:
+            sorted_quotes = sorted(
+                posts_quoting, key=lambda x: x[1].get("created", ""), reverse=True
+            )
+            canonical_idx, canonical_post = sorted_quotes[0]
+            for idx, post in sorted_quotes[1:]:
+                if idx not in quote_duplicates:
+                    quote_duplicates[idx] = canonical_post["uri"]
+                    post["duplicate_of"] = canonical_post["uri"]
+                    logger.info(
+                        f"Quote-dedup (same target): {post['uri'][:50]} → {canonical_post['uri'][:50]}"
+                    )
+
+    if quote_duplicates:
+        logger.info(f"Dedup: {len(quote_duplicates)} quote-based duplicates found")
+
     # Preprocess all texts
     new_texts = [preprocess_text(p.get("message", "")) for p in new_posts]
     existing_texts = [preprocess_text(p.get("message", "")) for p in existing]
 
     # --- Phase 1: Dedup within the new batch ---
     # For pairs of new posts that are duplicates, keep the newest one
-    duplicate_of_new = {}  # index -> index of canonical post in new_posts
+    duplicate_of_new = {i: None for i in quote_duplicates}  # pre-seed with quote dupes
     if len(new_posts) > 1:
         valid_new_batch = [(i, t) for i, t in enumerate(new_texts) if t]
         if len(valid_new_batch) > 1:
@@ -143,8 +181,9 @@ def deduplicate_new_posts(
                                 f"{post_i['uri'][:50]} → {post_j['uri'][:50]}"
                             )
 
-        if duplicate_of_new:
-            logger.info(f"Dedup: {len(duplicate_of_new)} duplicates within new batch")
+        batch_dupes = len(duplicate_of_new) - len(quote_duplicates)
+        if batch_dupes > 0:
+            logger.info(f"Dedup: {batch_dupes} duplicates within new batch")
 
     # --- Phase 2: Dedup new posts against existing DB posts ---
     # For each new canonical post that matches an existing post,

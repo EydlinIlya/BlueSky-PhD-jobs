@@ -32,6 +32,15 @@ DEFAULT_QUERIES = [
     "join my lab",
     "call for master students",
     "research assistant position",
+    "postdoctoral fellow",
+    "PhD project",
+    "hiring PhD",
+    "recruiting PhD",
+    "apply to phd",
+    "funded phd",
+    "funded postdoctoral",
+    "funded postdoc",
+    "hiring postdoc",
 ]
 
 
@@ -126,6 +135,54 @@ def extract_embed_context(post) -> str:
     return ""
 
 
+def extract_quote_post(post) -> dict | None:
+    """Extract quoted post content from a quote post.
+
+    Handles both record#view and recordWithMedia#view embed types.
+
+    Returns:
+        Dict with {"uri", "text", "author_handle"} or None if not a quote post.
+    """
+    embed = getattr(post, "embed", None)
+    if embed is None:
+        return None
+
+    py_type = getattr(embed, "py_type", "") or ""
+    record_view = None
+
+    if "recordWithMedia" in py_type:
+        # recordWithMedia#view: record is nested one level deeper
+        inner = getattr(embed, "record", None)
+        if inner:
+            record_view = getattr(inner, "record", None)
+    elif "record" in py_type:
+        # record#view: record is directly on embed
+        record_view = getattr(embed, "record", None)
+
+    if record_view is None:
+        return None
+
+    # Check for deleted/blocked posts
+    rv_type = getattr(record_view, "py_type", "") or ""
+    if "ViewNotFound" in rv_type or "ViewBlocked" in rv_type:
+        return None
+
+    # Extract the value (the actual record content)
+    value = getattr(record_view, "value", None)
+    if value is None:
+        return None
+
+    text = getattr(value, "text", "") or ""
+    if not text.strip():
+        return None
+
+    uri = getattr(record_view, "uri", None)
+    author = getattr(record_view, "author", None)
+    author_handle = getattr(author, "handle", "") if author else ""
+
+    return {"uri": uri, "text": text, "author_handle": author_handle}
+
+
 class BlueskySource(DataSource):
     """Data source for Bluesky posts."""
 
@@ -195,11 +252,32 @@ class BlueskySource(DataSource):
                     skipped_old += 1
                     continue
 
-                # Expand truncated links with full URLs from facets
-                raw_text = expand_shortened_links(
-                    post.record.text,
-                    getattr(post.record, "facets", None),
-                )
+                # Check if this is a quote post
+                quoted = extract_quote_post(post)
+                quoted_uri = None
+
+                if quoted and quoted["uri"]:
+                    quoted_uri = quoted["uri"]
+                    # If the quoted post is already being processed, skip
+                    if quoted_uri in seen_uris:
+                        quoted = None
+                    else:
+                        seen_uris.add(quoted_uri)
+
+                if quoted:
+                    # Use quoted post's text for classification
+                    raw_text = quoted["text"]
+                    wrapper_text = expand_shortened_links(
+                        post.record.text,
+                        getattr(post.record, "facets", None),
+                    )
+                else:
+                    # Regular post: expand truncated links
+                    raw_text = expand_shortened_links(
+                        post.record.text,
+                        getattr(post.record, "facets", None),
+                    )
+                    wrapper_text = None
 
                 # Prepend author bio for discipline context
                 bio = getattr(post.author, "description", "") or ""
@@ -212,12 +290,20 @@ class BlueskySource(DataSource):
                     user_handle=post.author.handle,
                     created_at=post.record.created_at,
                     source="bluesky",
+                    quoted_uri=quoted_uri if quoted else None,
                 )
 
                 # Apply LLM classification if available
                 if self.classifier:
                     embed_ctx = extract_embed_context(post)
-                    metadata_text = f"{message}\n\n{embed_ctx}" if embed_ctx else message
+                    # For quote posts, append wrapper text as extra context
+                    if wrapper_text:
+                        extra = f"\n\n[Quote wrapper: {wrapper_text}]"
+                        metadata_text = f"{message}{extra}"
+                        if embed_ctx:
+                            metadata_text = f"{metadata_text}\n\n{embed_ctx}"
+                    else:
+                        metadata_text = f"{message}\n\n{embed_ctx}" if embed_ctx else message
                     classification = self.classifier.classify_post(
                         raw_text, metadata_text=metadata_text
                     )

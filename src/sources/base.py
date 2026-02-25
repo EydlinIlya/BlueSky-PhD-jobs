@@ -19,10 +19,11 @@ class Post:
     disciplines: list[str] = field(default_factory=list)
     position_type: list[str] = field(default_factory=list)
     is_verified_job: bool | None = None
+    quoted_uri: str | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for storage."""
-        return {
+        d = {
             "uri": self.uri,
             "message": self.message,
             "url": self.url,
@@ -33,6 +34,9 @@ class Post:
             "position_type": self.position_type,
             "is_verified_job": self.is_verified_job,
         }
+        if self.quoted_uri is not None:
+            d["quoted_uri"] = self.quoted_uri
+        return d
 
 
 class DataSource(ABC):
