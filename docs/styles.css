@@ -163,7 +163,7 @@ body {
     transition: opacity 0.3s;
 }
 
-.loading-overlay.hidden {
+.loading-overlay.dismissed {
     opacity: 0;
     pointer-events: none;
 }

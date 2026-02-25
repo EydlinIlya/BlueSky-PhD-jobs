@@ -654,7 +654,7 @@ async function init() {
         currentFilteredPositions = staticData.positions;
         totalPositionCount = staticData.total;
 
-        loadingEl.classList.add('hidden');
+        loadingEl.classList.add('dismissed');
         appContainer.classList.remove('hidden');
 
         buildCardFilters(staticData.positions);
@@ -687,7 +687,7 @@ async function init() {
             totalPositionCount = positions.length;
             isFullDataLoaded = true;
 
-            loadingEl.classList.add('hidden');
+            loadingEl.classList.add('dismissed');
             appContainer.classList.remove('hidden');
 
             buildCardFilters(positions);
@@ -699,7 +699,7 @@ async function init() {
             if (preferred === 'table' && window.innerWidth >= 768) setView('table');
 
         } catch (error) {
-            loadingEl.classList.add('hidden');
+            loadingEl.classList.add('dismissed');
             errorEl.classList.remove('hidden');
             console.error('Initialization error:', error);
         }
