@@ -701,7 +701,7 @@ main {
     background: var(--color-bg-card);
     border: 1px solid var(--color-border);
     border-radius: 8px;
-    padding: 4px 4px 4px 16px;
+    padding: 8px 8px 8px 16px;
     gap: 8px;
     transition: border-color 0.2s, box-shadow 0.2s;
 }
