@@ -17,3 +17,6 @@ reply_jobs.json
 /*.webp
 test-results/
 playwright-report/
+
+# Generated SEO pages (updated daily by GitHub Actions)
+docs/positions.html
