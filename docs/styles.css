@@ -65,9 +65,15 @@ body {
     left: 0;
     right: 0;
     width: auto;
-    top: 50%;
-    transform: translateY(-50%);
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
     z-index: 20;
+}
+
+.header-search-container.expanded .search-bar {
+    flex: 1;
 }
 
 @media (max-width: 767px) {
@@ -142,7 +148,26 @@ body {
     color: var(--color-accent);
 }
 
-/* Loading spinner */
+/* Loading overlay */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-bg);
+    z-index: 100;
+    transition: opacity 0.3s;
+}
+
+.loading-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
 .loading-text {
     font-family: var(--font-mono);
     color: var(--color-text-muted);

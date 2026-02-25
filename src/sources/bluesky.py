@@ -104,7 +104,7 @@ def expand_shortened_links(text: str, facets) -> str:
     link_facets = []
     for facet in facets:
         for feature in facet.features:
-            if hasattr(feature, "uri"):
+            if hasattr(feature, "uri") and feature.uri is not None:
                 link_facets.append((facet.index.byte_start, facet.index.byte_end, feature.uri))
 
     link_facets.sort(key=lambda x: x[0], reverse=True)
