@@ -148,24 +148,17 @@ body {
     color: var(--color-accent);
 }
 
-/* Loading overlay */
-.loading-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+/* Loading placeholder — reserves space, no layout shift */
+.loading-placeholder {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--color-bg);
-    z-index: 100;
-    transition: opacity 0.3s;
+    padding: 3rem 0;
+    min-height: 80px;
 }
 
-.loading-overlay.dismissed {
-    opacity: 0;
-    pointer-events: none;
+.loading-placeholder.dismissed {
+    display: none;
 }
 
 .loading-text {

@@ -89,11 +89,18 @@
 
     <!-- Main content -->
     <main class="flex-1 max-w-[1800px] w-full mx-auto px-4 py-6 sm:px-6 lg:px-8">
-        <!-- Loading state (overlay) -->
-        <div id="loading" class="loading-overlay">
+        <!-- Loading state — only visible when no static data (full fetch needed) -->
+        <div id="loading" class="loading-placeholder">
             <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
             <span class="loading-text ml-3">Fetching positions...</span>
         </div>
+        <script>
+            // Hide spinner immediately if static data exists (prevents flash)
+            if (document.getElementById('static-positions')) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('app-container').classList.remove('hidden');
+            }
+        </script>
 
         <!-- Error state -->
         <div id="error" class="hidden bg-red-900/30 border border-red-500/50 rounded-lg p-4">
