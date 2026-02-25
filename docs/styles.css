@@ -782,13 +782,7 @@ main {
 }
 
 .loading-indicator {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--color-text-muted);
+    display: none;
 }
 
 .loading-indicator .spinner {
