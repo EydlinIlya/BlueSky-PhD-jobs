@@ -129,13 +129,81 @@ def deduplicate_new_posts(
     if quote_duplicates:
         logger.info(f"Dedup: {len(quote_duplicates)} quote-based duplicates found")
 
+    # --- Phase 0b: Reply-based forced LLM dedup ---
+    # If a post is a reply to a post in the DB or same batch, force LLM check
+    reply_duplicates = {}
+    new_uri_to_idx = {p["uri"]: i for i, p in enumerate(new_posts)}
+
+    for i, post in enumerate(new_posts):
+        if i in quote_duplicates:
+            continue  # already handled
+        parent_uri = post.get("reply_parent_uri")
+        if not parent_uri:
+            continue
+
+        reply_text = preprocess_text(post.get("message", ""))
+        if not reply_text:
+            continue
+
+        # Check if parent is in the existing DB
+        parent_in_db = None
+        if parent_uri in existing_uri_set:
+            for ep in existing:
+                if ep["uri"] == parent_uri:
+                    parent_in_db = ep
+                    break
+
+        # Check if parent is in the same batch
+        parent_in_batch = None
+        if parent_uri in new_uri_to_idx:
+            parent_in_batch = new_uri_to_idx[parent_uri]
+
+        if parent_in_db is not None:
+            parent_text = preprocess_text(parent_in_db.get("message", ""))
+            if parent_text and llm:
+                is_dup = _verify_pair(llm, parent_text, reply_text)
+                time.sleep(2)
+                if is_dup:
+                    # Reply is duplicate of existing DB post
+                    reply_duplicates[i] = parent_uri
+                    post["duplicate_of"] = parent_uri
+                    logger.info(
+                        f"Reply-dedup: {post['uri'][:50]} replies to existing {parent_uri[:50]}"
+                    )
+        elif parent_in_batch is not None and parent_in_batch not in reply_duplicates:
+            parent_post = new_posts[parent_in_batch]
+            parent_text = preprocess_text(parent_post.get("message", ""))
+            if parent_text and llm:
+                is_dup = _verify_pair(llm, parent_text, reply_text)
+                time.sleep(2)
+                if is_dup:
+                    # Keep the newer post as canonical
+                    ts_reply = post.get("created", "")
+                    ts_parent = parent_post.get("created", "")
+                    if ts_reply >= ts_parent:
+                        reply_duplicates[parent_in_batch] = post["uri"]
+                        parent_post["duplicate_of"] = post["uri"]
+                        logger.info(
+                            f"Reply-dedup (batch): {parent_post['uri'][:50]} → {post['uri'][:50]}"
+                        )
+                    else:
+                        reply_duplicates[i] = parent_post["uri"]
+                        post["duplicate_of"] = parent_post["uri"]
+                        logger.info(
+                            f"Reply-dedup (batch): {post['uri'][:50]} → {parent_post['uri'][:50]}"
+                        )
+
+    if reply_duplicates:
+        logger.info(f"Dedup: {len(reply_duplicates)} reply-based duplicates found")
+
     # Preprocess all texts
     new_texts = [preprocess_text(p.get("message", "")) for p in new_posts]
     existing_texts = [preprocess_text(p.get("message", "")) for p in existing]
 
     # --- Phase 1: Dedup within the new batch ---
     # For pairs of new posts that are duplicates, keep the newest one
-    duplicate_of_new = {i: None for i in quote_duplicates}  # pre-seed with quote dupes
+    all_phase0_dupes = {**quote_duplicates, **reply_duplicates}
+    duplicate_of_new = {i: None for i in all_phase0_dupes}  # pre-seed with phase 0 dupes
     if len(new_posts) > 1:
         valid_new_batch = [(i, t) for i, t in enumerate(new_texts) if t]
         if len(valid_new_batch) > 1:
@@ -181,7 +249,7 @@ def deduplicate_new_posts(
                                 f"{post_i['uri'][:50]} → {post_j['uri'][:50]}"
                             )
 
-        batch_dupes = len(duplicate_of_new) - len(quote_duplicates)
+        batch_dupes = len(duplicate_of_new) - len(all_phase0_dupes)
         if batch_dupes > 0:
             logger.info(f"Dedup: {batch_dupes} duplicates within new batch")
 

@@ -254,6 +254,14 @@ class BlueskySource(DataSource):
                     skipped_old += 1
                     continue
 
+                # Check if this is a reply
+                reply_ref = getattr(post.record, "reply", None)
+                reply_parent_uri = None
+                if reply_ref:
+                    parent = getattr(reply_ref, "parent", None)
+                    if parent:
+                        reply_parent_uri = getattr(parent, "uri", None)
+
                 # Check if this is a quote post
                 quoted = extract_quote_post(post)
                 quoted_uri = None
@@ -293,6 +301,7 @@ class BlueskySource(DataSource):
                     created_at=post.record.created_at,
                     source="bluesky",
                     quoted_uri=quoted_uri if quoted else None,
+                    reply_parent_uri=reply_parent_uri,
                 )
 
                 # Apply LLM classification if available

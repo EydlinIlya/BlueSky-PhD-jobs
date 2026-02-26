@@ -20,6 +20,7 @@ class Post:
     position_type: list[str] = field(default_factory=list)
     is_verified_job: bool | None = None
     quoted_uri: str | None = None
+    reply_parent_uri: str | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for storage."""
@@ -36,6 +37,8 @@ class Post:
         }
         if self.quoted_uri is not None:
             d["quoted_uri"] = self.quoted_uri
+        if self.reply_parent_uri is not None:
+            d["reply_parent_uri"] = self.reply_parent_uri
         return d
 
 
