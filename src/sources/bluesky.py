@@ -4,7 +4,7 @@ import os
 import time
 
 from atproto import Client
-from atproto_client.exceptions import RequestException
+from atproto_client.exceptions import InvokeTimeoutError, RequestException
 from dotenv import load_dotenv
 
 from src.logger import setup_logger
@@ -67,6 +67,14 @@ def search_with_retry(client: Client, query: str, limit: int = 25) -> list | Non
         try:
             response = client.app.bsky.feed.search_posts({"q": query, "limit": limit})
             return response.posts
+        except InvokeTimeoutError:
+            if attempt < MAX_RETRIES - 1:
+                wait_time = RETRY_BACKOFF ** attempt
+                logger.warning(f"Request timed out. Retrying in {wait_time}s...")
+                time.sleep(wait_time)
+            else:
+                logger.error(f"Timed out after {MAX_RETRIES} attempts")
+                return None
         except RequestException as e:
             error_msg = str(e)
             if "429" in error_msg or "RateLimitExceeded" in error_msg:
