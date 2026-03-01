@@ -39,28 +39,46 @@ async function fetchMockPositions() {
 }
 
 async function fetchSupabasePositions() {
-    const { data, error } = await supabaseClient
-        .from('phd_positions')
-        .select('uri, created_at, disciplines, country, position_type, user_handle, message, url, indexed_at')
-        .eq('is_verified_job', true)
-        .is('duplicate_of', null)
-        .gte('indexed_at', '2026-01-27')
-        .order('created_at', { ascending: false });
-    if (error) throw error;
-    return data;
+    const PAGE_SIZE = 1000;
+    let all = [];
+    let from = 0;
+    while (true) {
+        const { data, error } = await supabaseClient
+            .from('phd_positions')
+            .select('uri, created_at, disciplines, country, position_type, user_handle, message, url, indexed_at')
+            .eq('is_verified_job', true)
+            .is('duplicate_of', null)
+            .gte('indexed_at', '2026-01-27')
+            .order('created_at', { ascending: false })
+            .range(from, from + PAGE_SIZE - 1);
+        if (error) throw error;
+        all = all.concat(data);
+        if (data.length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+    }
+    return all;
 }
 
 async function fetchDuplicates() {
     if (USE_MOCK) return {};
-    const { data, error } = await supabaseClient
-        .from('phd_positions')
-        .select('uri, url, user_handle, created_at, duplicate_of')
-        .not('duplicate_of', 'is', null)
-        .gte('indexed_at', '2026-01-27');
-    if (error) { console.error('Failed to fetch duplicates:', error); return {}; }
+    const PAGE_SIZE = 1000;
+    let all = [];
+    let from = 0;
+    while (true) {
+        const { data, error } = await supabaseClient
+            .from('phd_positions')
+            .select('uri, url, user_handle, created_at, duplicate_of')
+            .not('duplicate_of', 'is', null)
+            .gte('indexed_at', '2026-01-27')
+            .range(from, from + PAGE_SIZE - 1);
+        if (error) { console.error('Failed to fetch duplicates:', error); return {}; }
+        all = all.concat(data || []);
+        if ((data || []).length < PAGE_SIZE) break;
+        from += PAGE_SIZE;
+    }
 
     const map = {};
-    for (const row of data || []) {
+    for (const row of all) {
         const key = row.duplicate_of;
         if (!map[key]) map[key] = [];
         map[key].push(row);
