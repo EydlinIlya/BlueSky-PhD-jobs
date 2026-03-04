@@ -49,6 +49,9 @@ def _verify_pair(llm: LLMProvider, text_a: str, text_b: str) -> bool:
     except (json.JSONDecodeError, ValueError, KeyError) as e:
         logger.warning(f"LLM dedup parse error: {e}")
         return False
+    except Exception as e:
+        logger.warning(f"LLM dedup unavailable, skipping pair: {e}")
+        return False
 
 
 def _is_duplicate(score: float, llm, text_a: str, text_b: str) -> bool:
