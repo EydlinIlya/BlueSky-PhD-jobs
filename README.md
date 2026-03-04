@@ -16,6 +16,7 @@ Aggregate PhD and academic position announcements from multiple sources into a u
 - **Position type extraction** - PhD Student, Postdoc, Master Student, Research Assistant
 - **Deduplication** - TF-IDF + LLM-based detection of reposted positions
 - **Incremental sync** - Only fetch new positions since last run
+- **4-stage persistent pipeline** - Supabase runs use checkpointed stages (fetch → filter → dedup → publish); a crash mid-filter resumes from the last unprocessed post on the next run
 - **Telegram channel** - Auto-posts Biology + CS positions (bioinformatics)
 - **GitHub Actions** - Automated daily updates
 
@@ -124,6 +125,40 @@ CREATE TABLE phd_positions (
     indexed_at TIMESTAMPTZ DEFAULT NOW(),
     duplicate_of TEXT
 );
+
+CREATE TABLE pipeline_runs (
+    id SERIAL PRIMARY KEY,
+    run_date DATE UNIQUE NOT NULL,
+    fetch_completed_at TIMESTAMPTZ,
+    filter_completed_at TIMESTAMPTZ,
+    dedup_completed_at TIMESTAMPTZ,
+    raw_count INT DEFAULT 0,
+    verified_count INT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE phd_positions_staging (
+    id SERIAL PRIMARY KEY,
+    run_date DATE NOT NULL,
+    uri TEXT NOT NULL,
+    message TEXT,
+    raw_text TEXT,
+    metadata_text TEXT,
+    url TEXT,
+    user_handle TEXT,
+    created_at TIMESTAMPTZ,
+    source TEXT,
+    quoted_uri TEXT,
+    reply_parent_uri TEXT,
+    is_verified_job BOOLEAN,
+    disciplines TEXT[],
+    country TEXT,
+    position_type TEXT[],
+    duplicate_of TEXT,
+    filter_completed BOOLEAN DEFAULT FALSE,
+    staged_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(run_date, uri)
+);
 ```
 
 3. Go to Settings → API and copy:
@@ -134,7 +169,7 @@ CREATE TABLE phd_positions (
 
 ## GitHub Actions
 
-The included workflow runs daily at 8:30 AM UTC with both sources. To enable:
+The included workflow runs **3 times a day** (08:00, 14:00, 20:00 UTC) so each run fetches only ~6 hours of new posts. To enable:
 
 1. Push to GitHub
 2. Go to Settings → Secrets and variables → Actions

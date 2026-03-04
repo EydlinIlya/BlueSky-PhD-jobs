@@ -158,6 +158,146 @@ class SupabaseStorage(StorageBackend):
             logger.error(f"Failed to mark duplicate {old_uri}: {e}")
             return False
 
+    # -------------------------------------------------------------------------
+    # Pipeline support methods
+    # -------------------------------------------------------------------------
+
+    def _run_date_str(self, run_date) -> str:
+        return run_date.isoformat() if hasattr(run_date, "isoformat") else str(run_date)
+
+    def get_or_create_run(self, run_date) -> dict:
+        """Upsert a pipeline_runs row and return it."""
+        run_date_str = self._run_date_str(run_date)
+        response = (
+            self.client.table("pipeline_runs")
+            .select("*")
+            .eq("run_date", run_date_str)
+            .execute()
+        )
+        if response.data:
+            return response.data[0]
+        response = (
+            self.client.table("pipeline_runs")
+            .insert({"run_date": run_date_str})
+            .execute()
+        )
+        return response.data[0]
+
+    def update_run(self, run_date, **fields) -> None:
+        """Update fields on a pipeline_runs row."""
+        run_date_str = self._run_date_str(run_date)
+        self.client.table("pipeline_runs").update(fields).eq(
+            "run_date", run_date_str
+        ).execute()
+
+    def insert_staging(self, run_date, posts: list[dict]) -> None:
+        """Bulk-upsert posts into phd_positions_staging."""
+        if not posts:
+            return
+        run_date_str = self._run_date_str(run_date)
+        records = []
+        for post in posts:
+            record = {
+                "run_date": run_date_str,
+                "uri": post["uri"],
+                "message": post.get("message"),
+                "raw_text": post.get("raw_text"),
+                "metadata_text": post.get("metadata_text"),
+                "url": post.get("url"),
+                "user_handle": post.get("user"),
+                "created_at": post.get("created"),
+                "source": post.get("source"),
+                "quoted_uri": post.get("quoted_uri"),
+                "reply_parent_uri": post.get("reply_parent_uri"),
+                "is_verified_job": post.get("is_verified_job"),
+                "disciplines": post.get("disciplines"),
+                "country": post.get("country"),
+                "position_type": post.get("position_type"),
+            }
+            records.append(record)
+        self.client.table("phd_positions_staging").upsert(
+            records, on_conflict="run_date,uri"
+        ).execute()
+
+    def get_staging_unfiltered(
+        self, run_date, source: str | None = None
+    ) -> list[dict]:
+        """Return staging rows where filter_completed=False."""
+        run_date_str = self._run_date_str(run_date)
+        query = (
+            self.client.table("phd_positions_staging")
+            .select("*")
+            .eq("run_date", run_date_str)
+            .eq("filter_completed", False)
+        )
+        if source:
+            query = query.eq("source", source)
+        return query.execute().data
+
+    def update_staging_filter(self, run_date, uri: str, result: dict) -> None:
+        """Set LLM output fields and mark filter_completed=True for one row."""
+        run_date_str = self._run_date_str(run_date)
+        update_data = {
+            "is_verified_job": result.get("is_verified_job"),
+            "disciplines": result.get("disciplines"),
+            "country": result.get("country"),
+            "position_type": result.get("position_type"),
+            "filter_completed": True,
+        }
+        self.client.table("phd_positions_staging").update(update_data).eq(
+            "run_date", run_date_str
+        ).eq("uri", uri).execute()
+
+    def get_staging_verified(self, run_date) -> list[dict]:
+        """Return staging rows where is_verified_job=True."""
+        run_date_str = self._run_date_str(run_date)
+        return (
+            self.client.table("phd_positions_staging")
+            .select("*")
+            .eq("run_date", run_date_str)
+            .eq("is_verified_job", True)
+            .execute()
+            .data
+        )
+
+    def get_staging_all(self, run_date) -> list[dict]:
+        """Return all staging rows for this run_date."""
+        run_date_str = self._run_date_str(run_date)
+        return (
+            self.client.table("phd_positions_staging")
+            .select("*")
+            .eq("run_date", run_date_str)
+            .execute()
+            .data
+        )
+
+    def update_staging_dedup(
+        self, run_date, uri: str, duplicate_of: str
+    ) -> None:
+        """Set duplicate_of on a staging row."""
+        run_date_str = self._run_date_str(run_date)
+        self.client.table("phd_positions_staging").update(
+            {"duplicate_of": duplicate_of}
+        ).eq("run_date", run_date_str).eq("uri", uri).execute()
+
+    def delete_staging(self, run_date) -> None:
+        """Delete all staging rows for this run_date (post-publish cleanup)."""
+        run_date_str = self._run_date_str(run_date)
+        self.client.table("phd_positions_staging").delete().eq(
+            "run_date", run_date_str
+        ).execute()
+
+    def delete_run(self, run_date) -> None:
+        """Delete the pipeline_runs row for this run_date.
+
+        Called after a successful publish so the next run of the same day
+        creates a fresh row and runs all stages again (for multiple daily runs).
+        """
+        run_date_str = self._run_date_str(run_date)
+        self.client.table("pipeline_runs").delete().eq(
+            "run_date", run_date_str
+        ).execute()
+
     def mark_duplicates_batch(self, updates: list[tuple[str, str]]) -> int:
         """Mark multiple posts as duplicates.
 

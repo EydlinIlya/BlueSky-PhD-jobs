@@ -87,17 +87,17 @@ python bluesky_search.py --no-llm
 - `get_classifier()` - Creates LLM classifier if API key available
 - `get_storage()` - Creates storage backend (CSV or Supabase)
 - `parse_sources()` - Validates source selection
-- `main()` - Orchestrates multi-source fetching and aggregation
+- `main()` - Routes to 4-stage pipeline (Supabase) or simplified single-pass flow (CSV)
 
 ### Modules
 
 **`src/sources/`** - Data source implementations
-- `base.py` - `DataSource` ABC with `fetch_posts()` method, `Post` dataclass
-- `bluesky.py` - Bluesky source using AT Protocol SDK
+- `base.py` - `DataSource` ABC with `fetch_posts()` method, `Post` dataclass (includes `raw_text`, `metadata_text` fields)
+- `bluesky.py` - Bluesky source; stores `raw_text`/`metadata_text` on Post; returns posts unclassified (`is_verified_job=None`)
 - `scholarshipdb.py` - ScholarshipDB web scraper
 
 **`src/sync_state.py`** - Multi-source sync state management
-- `SyncStateManager` class for per-source state tracking
+- `SyncStateManager` class for per-source state tracking (CSV backend only)
 
 **`src/logger.py`** - Logging configuration
 
@@ -110,42 +110,56 @@ python bluesky_search.py --no-llm
 **`src/storage/`** - Storage backends
 - `base.py` - Abstract `StorageBackend` class
 - `csv_storage.py` - Local CSV file storage
-- `supabase.py` - Supabase PostgreSQL storage (includes `get_posts_for_dedup()`, `mark_duplicate()`)
+- `supabase.py` - Supabase PostgreSQL storage; also contains pipeline support methods (`get_or_create_run`, `update_run`, `insert_staging`, `get_staging_*`, `update_staging_*`, `delete_staging`)
+
+**`src/pipeline/`** - 4-stage persistent pipeline (Supabase only)
+- `runner.py` - Orchestrates stages; skips already-completed ones using `pipeline_runs` checkpoints
+- `checkpoint.py` - Documents `pipeline_runs` table schema
+- `stages/fetch.py` - Stage 1: fetch raw posts into `phd_positions_staging`
+- `stages/filter.py` - Stage 2: LLM classification per row; tracks per-row completion via `filter_completed`
+- `stages/dedup.py` - Stage 3: TF-IDF + LLM dedup against existing canonical posts
+- `stages/publish.py` - Stage 4: upsert staging → `phd_positions`; Telegram post; delete staging
 
 **`scripts/post_to_telegram.py`** - Telegram channel posting
-- Queries Supabase for positions indexed in last 25 hours
 - Filters for positions with BOTH Biology AND Computer Science disciplines
 - Formats messages with hashtags (position type, country)
 - Batches multiple positions per message (under 4096 char TG limit)
 - Posts via Telegram Bot API (MarkdownV2 format)
 
-**`src/dedup.py`** - Production deduplication
+**`src/dedup.py`** - Production deduplication helpers (used by `stages/dedup.py`)
 - `preprocess_text()` - Cleans post text (strips bio, URLs, linked pages)
-- `mark_old_duplicates()` - Compares new posts against existing canonical posts using TF-IDF similarity; auto-accepts pairs >= 0.95, LLM-verifies 0.25–0.95 zone, marks older posts with `duplicate_of` pointing to newer canonical post
+- `deduplicate_new_posts()` - TF-IDF similarity; auto-accepts >= 0.95, LLM-verifies 0.25–0.95 zone
 
-### Data Flow
+### Data Flow (Supabase — 4-Stage Pipeline)
 
-**Bluesky Source:**
+Each stage writes persistent state before proceeding. A restart on the same
+`run_date` detects completed stages and skips them.
+
+| Stage | Input | Output |
+|-------|-------|--------|
+| 1 Fetch | sync state (last_timestamp, existing_uris from `phd_positions`) | rows in `phd_positions_staging` |
+| 2 Filter | unfiltered staging rows | `is_verified_job`, `disciplines`, `country`, `position_type` set per row |
+| 3 Dedup | verified staging rows + existing canonical posts in `phd_positions` | `duplicate_of` set on staging rows |
+| 4 Publish | all staging rows | upserted into `phd_positions`; staging + `pipeline_runs` row deleted |
+
+The GitHub Actions workflow runs the pipeline **3 times a day** (08:00, 14:00, 20:00 UTC). After each successful publish the `pipeline_runs` row is deleted, so subsequent runs within the same day fetch only posts newer than the last publish (incremental via `phd_positions.created_at`).
+
+**Bluesky Source (fetch stage):**
 1. Fetch posts from Bluesky API (sorted by relevance)
-2. Deduplicate by URI
-3. Filter by timestamp (incremental sync)
-4. Prepend author bio for context
-5. LLM classification: job detection + metadata extraction
-6. Return Post objects
+2. Deduplicate by URI; filter by timestamp
+3. Prepend author bio; build `raw_text` + `metadata_text`
+4. Return all posts with `is_verified_job=None` (classification happens in Stage 2)
 
-**ScholarshipDB Source:**
-1. Query each discipline field separately (Computer Science, Biology, etc.)
+**ScholarshipDB Source (fetch stage):**
+1. Query each discipline field separately
 2. Parse HTML listings for title, country, date, link
-3. Map site disciplines to our discipline list
-4. All positions are `is_verified_job=True` (pre-verified from job site)
-5. Return Post objects
+3. All positions are `is_verified_job=True` (Stage 2 passes them through immediately)
 
-**Aggregation:**
-1. Collect posts from all enabled sources
-2. Convert Post objects to dicts
-3. Save to storage backend
-4. Deduplication (Supabase only): compare new posts against existing canonical posts, mark older duplicates with `duplicate_of` → newest URI
-5. Update per-source sync state
+### Data Flow (CSV — Single-Pass)
+
+1. Fetch from all sources (BlueskySource returns unclassified posts)
+2. Inline LLM classification per Bluesky post (if classifier available)
+3. Save directly to CSV; update sync state
 
 ## Testing
 
@@ -174,7 +188,7 @@ Test files:
 ## Supabase Setup
 
 1. Create project at https://supabase.com
-2. Run this SQL to create the table:
+2. Run this SQL to create all required tables:
 ```sql
 CREATE TABLE phd_positions (
     id SERIAL PRIMARY KEY,
@@ -190,11 +204,49 @@ CREATE TABLE phd_positions (
     indexed_at TIMESTAMPTZ DEFAULT NOW(),
     duplicate_of TEXT
 );
+
+CREATE TABLE pipeline_runs (
+    id SERIAL PRIMARY KEY,
+    run_date DATE UNIQUE NOT NULL,
+    fetch_completed_at TIMESTAMPTZ,
+    filter_completed_at TIMESTAMPTZ,
+    dedup_completed_at TIMESTAMPTZ,
+    raw_count INT DEFAULT 0,
+    verified_count INT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE phd_positions_staging (
+    id SERIAL PRIMARY KEY,
+    run_date DATE NOT NULL,
+    uri TEXT NOT NULL,
+    message TEXT,
+    raw_text TEXT,
+    metadata_text TEXT,
+    url TEXT,
+    user_handle TEXT,
+    created_at TIMESTAMPTZ,
+    source TEXT,
+    quoted_uri TEXT,
+    reply_parent_uri TEXT,
+    is_verified_job BOOLEAN,
+    disciplines TEXT[],
+    country TEXT,
+    position_type TEXT[],
+    duplicate_of TEXT,
+    filter_completed BOOLEAN DEFAULT FALSE,
+    staged_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(run_date, uri)
+);
 ```
 3. Get URL and anon key from Settings → API
 4. Add to `.env`: `SUPABASE_URL` and `SUPABASE_KEY`
 
 **`duplicate_of` column:** `NULL` = canonical post (shown in UI). Contains URI of the newest (canonical) post in a duplicate group. When duplicates are detected, the older post gets `duplicate_of` set to the newer post's URI.
+
+**`pipeline_runs` table:** One row per active run. Stores completion timestamps for stages 1–3. The row is **deleted** after Stage 4 (Publish) succeeds so the next invocation on the same calendar day starts a fresh run (enabling 3×/day fetching). On crash mid-run the row survives, allowing the next invocation to resume from the last incomplete stage.
+
+**`phd_positions_staging` table:** Transient table holding posts for the current run. Deleted (along with the pipeline_runs row) after a successful publish.
 
 ## GitHub Actions
 

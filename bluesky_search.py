@@ -1,10 +1,9 @@
 """Search for PhD positions from multiple sources."""
 
 import argparse
-import csv
 import os
 import sys
-from datetime import datetime
+from datetime import date
 
 from src.logger import setup_logger
 from src.llm import NvidiaProvider, JobClassifier, LLMUnavailableError
@@ -133,66 +132,59 @@ def main():
         logger.error(f"Storage setup failed: {e}")
         return
 
-    # Set up classifier if LLM is enabled (for Bluesky)
+    # Set up classifier if LLM is enabled
     classifier = None
-    if not args.no_llm and "bluesky" in sources:
+    if not args.no_llm:
         classifier = get_classifier()
         if classifier:
             logger.info("LLM filtering enabled (Llama)")
         else:
             logger.info("LLM filtering disabled (no NVIDIA_API_KEY)")
 
-    # Initialize sync state manager
-    sync_manager = SyncStateManager()
+    # --- Supabase: use 4-stage persistent pipeline ---
+    if args.storage == "supabase":
+        from src.pipeline.runner import run_pipeline
+        run_pipeline(
+            run_date=date.today(),
+            sources=sources,
+            storage=storage,
+            classifier=classifier,
+            args=args,
+        )
+        return
 
-    # Aggregate results from all sources
+    # --- CSV: simplified single-pass flow ---
+    sync_manager = SyncStateManager()
     all_results = []
     all_sources_updated = {}
 
     for source_name in sources:
         logger.info(f"\n{'='*40}")
         logger.info(f"Fetching from {source_name}")
-        logger.info("="*40)
+        logger.info("=" * 40)
 
-        # Get sync state for this source
         since_timestamp = None
-        existing_uris = set()
+        existing_uris: set = set()
 
         if not args.full_sync:
-            if args.storage == "supabase":
-                # For Supabase, get state from the database
-                # Filter by source if possible
-                since_timestamp = storage.get_last_timestamp()
-                existing_uris = storage.get_existing_uris()
-                if since_timestamp:
-                    logger.info(f"Incremental sync from {since_timestamp}")
+            source_state = sync_manager.get_source_state(source_name)
+            since_timestamp = source_state.get("last_timestamp")
+            existing_uris = source_state.get("seen_uris", set())
+            if since_timestamp:
+                logger.info(
+                    f"Incremental sync from {since_timestamp} "
+                    f"({len(existing_uris)} existing posts)"
+                )
             else:
-                # For CSV, use per-source sync state
-                source_state = sync_manager.get_source_state(source_name)
-                since_timestamp = source_state.get("last_timestamp")
-                existing_uris = source_state.get("seen_uris", set())
-                if since_timestamp:
-                    logger.info(
-                        f"Incremental sync from {since_timestamp} "
-                        f"({len(existing_uris)} existing posts)"
-                    )
-                else:
-                    logger.info("Full sync (no previous state)")
+                logger.info("Full sync (no previous state)")
         else:
             logger.info("Full sync (--full-sync specified)")
 
-        # Create and run the source
         try:
             if source_name == "bluesky":
-                source = BlueskySource(
-                    queries=args.query,
-                    limit=args.limit,
-                    classifier=classifier,
-                )
+                source = BlueskySource(queries=args.query, limit=args.limit)
             elif source_name == "scholarshipdb":
-                source = ScholarshipDBSource(
-                    max_pages=args.scholarshipdb_pages,
-                )
+                source = ScholarshipDBSource(max_pages=args.scholarshipdb_pages)
             else:
                 logger.warning(f"Unknown source: {source_name}")
                 continue
@@ -204,11 +196,22 @@ def main():
 
             logger.info(f"Found {len(posts)} new positions from {source_name}")
 
-            # Convert Post objects to dicts for storage
             for post in posts:
-                all_results.append(post.to_dict())
+                d = post.to_dict()
+                # Inline LLM classification for Bluesky (CSV path only)
+                if source_name == "bluesky" and classifier and d.get("is_verified_job") is None:
+                    try:
+                        result = classifier.classify_post(
+                            d.get("raw_text") or d.get("message", ""),
+                            metadata_text=d.get("metadata_text"),
+                        )
+                        d.update(result)
+                    except LLMUnavailableError as e:
+                        logger.error(f"LLM API unavailable: {e}")
+                        logger.error("Stopping run — will retry tomorrow.")
+                        sys.exit(0)
+                all_results.append(d)
 
-            # Track state for later update
             if posts:
                 newest_timestamp = max(p.created_at for p in posts)
                 all_sources_updated[source_name] = {
@@ -216,52 +219,31 @@ def main():
                     "uris": seen_uris,
                 }
 
-        except LLMUnavailableError as e:
-            logger.error(f"LLM API unavailable: {e}")
-            logger.error("Stopping run — no posts classified today. Will retry tomorrow.")
-            sys.exit(0)
-
         except Exception as e:
             logger.error(f"Error fetching from {source_name}: {e}")
             import traceback
             traceback.print_exc()
             continue
 
-    # Save results
     logger.info(f"\n{'='*40}")
     logger.info(f"Total: {len(all_results)} new positions")
-    logger.info("="*40)
+    logger.info("=" * 40)
 
     if all_results:
-        # Deduplicate before saving (Supabase only)
-        if args.storage == "supabase":
-            from src.dedup import deduplicate_new_posts
-            all_results, db_updates = deduplicate_new_posts(
-                all_results,
-                storage,
-                classifier.llm if classifier else None,
-            )
-            # Apply duplicate marks to existing DB posts
-            if db_updates:
-                storage.mark_duplicates_batch(db_updates)
-
         saved_count = storage.save_posts(all_results)
         logger.info(f"Saved {saved_count} positions to {args.storage}")
 
-        # Post Biology + CS positions to Telegram
         from scripts.post_to_telegram import post_batch_to_telegram
         if not post_batch_to_telegram(all_results):
             logger.error("Telegram posting failed")
             sys.exit(1)
 
-        # Update sync state for CSV backend
-        if args.storage == "csv":
-            for source_name, state in all_sources_updated.items():
-                sync_manager.update_source_state(
-                    source_name,
-                    state["timestamp"],
-                    state["uris"],
-                )
+        for source_name, state in all_sources_updated.items():
+            sync_manager.update_source_state(
+                source_name,
+                state["timestamp"],
+                state["uris"],
+            )
     else:
         logger.info("No new positions to save")
 

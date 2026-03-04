@@ -8,7 +8,6 @@ from atproto_client.exceptions import InvokeTimeoutError, RequestException
 from dotenv import load_dotenv
 
 from src.logger import setup_logger
-from src.llm import JobClassifier
 from .base import DataSource, Post
 
 load_dotenv()
@@ -200,18 +199,15 @@ class BlueskySource(DataSource):
         self,
         queries: list[str] | None = None,
         limit: int = 50,
-        classifier: JobClassifier | None = None,
     ):
         """Initialize Bluesky source.
 
         Args:
             queries: Search queries to use. Defaults to DEFAULT_QUERIES.
             limit: Maximum results per query.
-            classifier: Optional JobClassifier for LLM filtering.
         """
         self.queries = queries or DEFAULT_QUERIES
         self.limit = limit
-        self.classifier = classifier
         self._client: Client | None = None
 
     @property
@@ -241,7 +237,6 @@ class BlueskySource(DataSource):
         client = self._get_client()
         results = []
         seen_uris = existing_uris.copy() if existing_uris else set()
-        filtered_count = 0
         skipped_old = 0
 
         for query in self.queries:
@@ -301,6 +296,16 @@ class BlueskySource(DataSource):
                 bio = getattr(post.author, "description", "") or ""
                 message = f"[Bio: {bio.strip()}]\n\n{raw_text}" if bio else raw_text
 
+                # Build metadata_text with embed context and quote wrapper
+                embed_ctx = extract_embed_context(post)
+                if wrapper_text:
+                    extra = f"\n\n[Quote wrapper: {wrapper_text}]"
+                    metadata_text = f"{message}{extra}"
+                    if embed_ctx:
+                        metadata_text = f"{metadata_text}\n\n{embed_ctx}"
+                else:
+                    metadata_text = f"{message}\n\n{embed_ctx}" if embed_ctx else message
+
                 post_data = Post(
                     uri=post.uri,
                     message=message,
@@ -310,30 +315,9 @@ class BlueskySource(DataSource):
                     source="bluesky",
                     quoted_uri=quoted_uri if quoted else None,
                     reply_parent_uri=reply_parent_uri,
+                    raw_text=raw_text,
+                    metadata_text=metadata_text,
                 )
-
-                # Apply LLM classification if available
-                if self.classifier:
-                    embed_ctx = extract_embed_context(post)
-                    # For quote posts, append wrapper text as extra context
-                    if wrapper_text:
-                        extra = f"\n\n[Quote wrapper: {wrapper_text}]"
-                        metadata_text = f"{message}{extra}"
-                        if embed_ctx:
-                            metadata_text = f"{metadata_text}\n\n{embed_ctx}"
-                    else:
-                        metadata_text = f"{message}\n\n{embed_ctx}" if embed_ctx else message
-                    classification = self.classifier.classify_post(
-                        raw_text, metadata_text=metadata_text
-                    )
-                    post_data.is_verified_job = classification.get("is_verified_job")
-                    post_data.disciplines = classification.get("disciplines", [])
-                    post_data.country = classification.get("country")
-                    post_data.position_type = classification.get("position_type", [])
-
-                    if not post_data.is_verified_job:
-                        filtered_count += 1
-                        logger.debug(f"Non-job post: {raw_text[:50]}...")
 
                 results.append(post_data)
 
@@ -341,9 +325,5 @@ class BlueskySource(DataSource):
 
         if skipped_old > 0:
             logger.info(f"Skipped {skipped_old} posts older than last sync")
-        if self.classifier and filtered_count > 0:
-            logger.info(
-                f"Classified {filtered_count} posts as non-jobs (still saved for analysis)"
-            )
 
         return results, seen_uris

@@ -21,6 +21,8 @@ class Post:
     is_verified_job: bool | None = None
     quoted_uri: str | None = None
     reply_parent_uri: str | None = None
+    raw_text: str | None = None       # populated by BlueskySource only
+    metadata_text: str | None = None  # populated by BlueskySource only
 
     def to_dict(self) -> dict:
         """Convert to dictionary for storage."""
@@ -39,6 +41,10 @@ class Post:
             d["quoted_uri"] = self.quoted_uri
         if self.reply_parent_uri is not None:
             d["reply_parent_uri"] = self.reply_parent_uri
+        if self.raw_text is not None:
+            d["raw_text"] = self.raw_text
+        if self.metadata_text is not None:
+            d["metadata_text"] = self.metadata_text
         return d
 
 
