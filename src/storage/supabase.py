@@ -86,13 +86,28 @@ class SupabaseStorage(StorageBackend):
             return 0
 
     def get_existing_uris(self) -> set[str]:
-        """Get all URIs from Supabase.
+        """Get all URIs from Supabase (paginated).
 
         Returns:
             Set of URIs in the database
         """
-        response = self.client.table(self.table).select("uri").execute()
-        return {row["uri"] for row in response.data}
+        uris = set()
+        page_size = 1000
+        offset = 0
+        while True:
+            response = (
+                self.client.table(self.table)
+                .select("uri")
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            if not response.data:
+                break
+            uris.update(row["uri"] for row in response.data)
+            if len(response.data) < page_size:
+                break
+            offset += page_size
+        return uris
 
     def get_last_timestamp(self) -> str | None:
         """Get most recent post timestamp from Supabase.
@@ -165,6 +180,26 @@ class SupabaseStorage(StorageBackend):
     def _run_date_str(self, run_date) -> str:
         return run_date.isoformat() if hasattr(run_date, "isoformat") else str(run_date)
 
+    def _fetch_all_pages(self, build_query, page_size: int = 1000) -> list[dict]:
+        """Paginate through all rows returned by a query.
+
+        Args:
+            build_query: Callable that returns a fresh query builder (without
+                         .range()/.execute()) each time it is called.
+            page_size: Rows per page.
+        """
+        all_rows = []
+        offset = 0
+        while True:
+            response = build_query().range(offset, offset + page_size - 1).execute()
+            if not response.data:
+                break
+            all_rows.extend(response.data)
+            if len(response.data) < page_size:
+                break
+            offset += page_size
+        return all_rows
+
     def get_or_create_run(self, run_date) -> dict:
         """Upsert a pipeline_runs row and return it."""
         run_date_str = self._run_date_str(run_date)
@@ -222,17 +257,21 @@ class SupabaseStorage(StorageBackend):
     def get_staging_unfiltered(
         self, run_date, source: str | None = None
     ) -> list[dict]:
-        """Return staging rows where filter_completed=False."""
+        """Return staging rows where filter_completed=False (paginated)."""
         run_date_str = self._run_date_str(run_date)
-        query = (
-            self.client.table("phd_positions_staging")
-            .select("*")
-            .eq("run_date", run_date_str)
-            .eq("filter_completed", False)
-        )
-        if source:
-            query = query.eq("source", source)
-        return query.execute().data
+
+        def build_query():
+            q = (
+                self.client.table("phd_positions_staging")
+                .select("*")
+                .eq("run_date", run_date_str)
+                .eq("filter_completed", False)
+            )
+            if source:
+                q = q.eq("source", source)
+            return q
+
+        return self._fetch_all_pages(build_query)
 
     def update_staging_filter(self, run_date, uri: str, result: dict) -> None:
         """Set LLM output fields and mark filter_completed=True for one row."""
@@ -249,26 +288,26 @@ class SupabaseStorage(StorageBackend):
         ).eq("uri", uri).execute()
 
     def get_staging_verified(self, run_date) -> list[dict]:
-        """Return staging rows where is_verified_job=True."""
+        """Return staging rows where is_verified_job=True (paginated)."""
         run_date_str = self._run_date_str(run_date)
-        return (
-            self.client.table("phd_positions_staging")
-            .select("*")
-            .eq("run_date", run_date_str)
-            .eq("is_verified_job", True)
-            .execute()
-            .data
+        return self._fetch_all_pages(
+            lambda: (
+                self.client.table("phd_positions_staging")
+                .select("*")
+                .eq("run_date", run_date_str)
+                .eq("is_verified_job", True)
+            )
         )
 
     def get_staging_all(self, run_date) -> list[dict]:
-        """Return all staging rows for this run_date."""
+        """Return all staging rows for this run_date (paginated)."""
         run_date_str = self._run_date_str(run_date)
-        return (
-            self.client.table("phd_positions_staging")
-            .select("*")
-            .eq("run_date", run_date_str)
-            .execute()
-            .data
+        return self._fetch_all_pages(
+            lambda: (
+                self.client.table("phd_positions_staging")
+                .select("*")
+                .eq("run_date", run_date_str)
+            )
         )
 
     def update_staging_dedup(
