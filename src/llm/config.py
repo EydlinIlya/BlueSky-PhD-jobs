@@ -42,7 +42,8 @@ IS_REAL_JOB_PROMPT = (
     "- 'We will be hiring 14 PhD researchers next month' → YES\n"
     "- 'The second position is at Exeter, includes salary and PhD fees' → YES\n"
     "- 'There's also a PhD position: www.jobbnorge.no/...' → YES\n"
-    "- 'Postdoc Position in Psychology at University of Cologne, deadline Feb 15' → YES\n\n"
+    "- 'Postdoc Position in Psychology at University of Cologne, deadline Feb 15' → YES\n"
+    "- 'Assistant Professor (tenure-track) in Computational Biology at MIT' → YES\n\n"
     "NO — the post does NOT advertise a currently open position:\n"
     "- 'PhD position noted, deadline 23 Feb' → NO (commenting on someone else's post)\n"
     "- 'Yes, my understanding is that a PhD is required' → NO (answering a question)\n"
@@ -56,10 +57,15 @@ IS_REAL_JOB_PROMPT = (
     "- 'I'm scouting students for potential opportunities' → NO (expression of interest)\n"
     "- 'Call for study participation for undergrad/master students' → NO (study, not a job)\n"
     "- 'Enrolled students, apply for our library fellowship' → NO (student award, not a position)\n"
-    "- 'We have a job opening for a program officer' → NO (admin role, not academic research)\n\n"
-    "Answer YES only if the post shares or advertises an academic research position "
-    "(PhD, postdoc, research assistant, faculty) that is currently open. "
-    "Answer NO otherwise. Answer only YES or NO."
+    "- 'We have a job opening for a program officer' → NO (admin role, not academic research)\n"
+    "- 'Full Professor of Biology at University of Oxford' → NO (senior faculty, not early-career)\n"
+    "- 'Associate Professor / Full Professor position in Chemistry' → NO (senior faculty)\n"
+    "- 'Visiting Professor in Economics for 2026-27' → NO (senior faculty)\n"
+    "- 'Director of Institute for Global Food Security' → NO (senior leadership, not research position)\n\n"
+    "Answer YES only if the post shares or advertises an early-career academic research position "
+    "(PhD, postdoc, research assistant, assistant professor) that is currently open. "
+    "Senior faculty positions (Associate Professor, Full Professor, Professor, Director, Chair) are NO. "
+    "Answer only YES or NO."
 )
 
 DISCIPLINE_PROMPT_TEMPLATE = (
@@ -93,10 +99,13 @@ METADATA_PROMPT_TEMPLATE = (
     "- If not determinable, use 'Unknown'.\n\n"
     "POSITION TYPE rules:\n"
     "- PhD Student: any doctoral/PhD position (including 'PhD Position', 'Doctoral Researcher', 'predoctoral')\n"
-    "- Postdoc: postdoctoral position, research fellow, or any role that REQUIRES a PhD/doctorate\n"
+    "- Postdoc: postdoctoral position, research fellow, or any role that REQUIRES a PhD/doctorate, "
+    "OR an Assistant Professor / tenure-track faculty position\n"
     "- Master Student: master's thesis or MSc position\n"
     "- Research Assistant: lab assistant, research aide, RA position (non-doctoral)\n"
-    "- If the post advertises multiple types, list all that apply (e.g., [\"PhD Student\", \"Postdoc\"])\n\n"
+    "- If the post advertises multiple types, list all that apply (e.g., [\"PhD Student\", \"Postdoc\"])\n"
+    "- NEVER output 'PhD Student' for a full/associate/visiting professor or director role — "
+    "those should not reach this step\n\n"
     "Examples:\n"
     'Input: "PhD position at University of Oxford in computational biology"\n'
     'Output: {{"disciplines": ["Biology", "Computer Science"], "country": "UK", "position_type": ["PhD Student"]}}\n\n'
@@ -110,5 +119,7 @@ METADATA_PROMPT_TEMPLATE = (
     'Output: {{"disciplines": ["Computer Science"], "country": "Unknown", "position_type": ["Master Student"]}}\n\n'
     'Input: "Hiring one postdoctoral and two predoctoral researchers in neuroscience"\n'
     'Output: {{"disciplines": ["Psychology"], "country": "Unknown", "position_type": ["PhD Student", "Postdoc"]}}\n\n'
+    'Input: "Assistant Professor (tenure-track) in Computational Biology at MIT"\n'
+    'Output: {{"disciplines": ["Biology", "Computer Science"], "country": "USA", "position_type": ["Postdoc"]}}\n\n'
     "Return ONLY the JSON object, no other text."
 )
