@@ -41,8 +41,6 @@ def format_position(pos):
 
     header = f"{type_tags}{country_tag}" if type_tags else ""
 
-    handle = pos.get("user_handle") or ""
-
     message = pos.get("message") or ""
     if len(message) > 400:
         message = message[:397] + "..."
@@ -53,8 +51,6 @@ def format_position(pos):
     lines = []
     if header:
         lines.append(header)
-    if handle:
-        lines.append(f"by @{handle}")
     lines.append("")
     lines.append(message)
     if link:
