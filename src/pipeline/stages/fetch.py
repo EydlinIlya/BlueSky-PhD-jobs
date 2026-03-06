@@ -50,8 +50,9 @@ def process_tenuretracker_posts(
         uri_to_url,
     )
 
-    tt_posts = [p for p in posts if p.get("user_handle") == TENURETRACKER_HANDLE]
-    other_posts = [p for p in posts if p.get("user_handle") != TENURETRACKER_HANDLE]
+    # Post dicts use "user" (from Post.to_dict()), not "user_handle"
+    tt_posts = [p for p in posts if p.get("user") == TENURETRACKER_HANDLE]
+    other_posts = [p for p in posts if p.get("user") != TENURETRACKER_HANDLE]
 
     seen_tt_uris: set[str] = set()
     result_posts: list[dict] = []
