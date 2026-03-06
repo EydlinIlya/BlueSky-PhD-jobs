@@ -79,27 +79,6 @@ def get_total_count(client):
     return result.count
 
 
-def position_to_jsonld(pos):
-    entry = {
-        "@type": "JobPosting",
-        "title": (pos.get("message") or "")[:100] or "Academic Position",
-        "datePosted": pos.get("created_at", "")[:10],
-        "description": pos.get("message") or "",
-        "employmentType": "FULL_TIME",
-    }
-    if pos.get("url"):
-        entry["url"] = pos["url"]
-    country = pos.get("country")
-    if country and country != "Unknown":
-        entry["jobLocation"] = {
-            "@type": "Place",
-            "address": {
-                "@type": "PostalAddress",
-                "addressCountry": COUNTRY_ISO.get(country, country),
-            },
-        }
-    return entry
-
 
 def generate_noscript_html(positions):
     items = []
@@ -204,7 +183,6 @@ def generate_positions_html(positions):
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     articles = []
-    jsonld_items = []
     for pos in positions[:500]:
         date = pos.get("created_at", "")[:10]
         country = pos.get("country") or ""
@@ -230,12 +208,33 @@ def generate_positions_html(positions):
             f"</article>"
         )
 
-        jsonld_items.append(position_to_jsonld(pos))
-
-    jsonld = json.dumps(
-        {"@context": "https://schema.org", "@graph": jsonld_items},
-        indent=2,
-    )
+    n = len(articles)
+    dataset_schema = {
+        "@context": "https://schema.org",
+        "@type": "Dataset",
+        "name": "PhD & Postdoc Positions from Bluesky",
+        "description": f"Complete listing of {n} PhD, postdoc, and research positions aggregated from Bluesky social network. AI-powered filtering updated daily.",
+        "url": f"{BASE_URL}positions.html",
+        "creator": {
+            "@type": "Organization",
+            "name": "BlueSky PhD Jobs",
+            "url": BASE_URL,
+        },
+        "dateModified": today,
+        "keywords": [
+            "PhD positions", "postdoc jobs", "academic jobs",
+            "research positions", "Bluesky", "university jobs",
+            "doctoral research", "STEM careers",
+        ],
+        "isAccessibleForFree": True,
+        "license": "https://creativecommons.org/publicdomain/zero/1.0/",
+        "distribution": [{
+            "@type": "DataDownload",
+            "encodingFormat": "text/html",
+            "contentUrl": f"{BASE_URL}positions.html",
+        }],
+    }
+    jsonld = json.dumps(dataset_schema, indent=2)
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -244,12 +243,23 @@ def generate_positions_html(positions):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>All PhD & Postdoc Positions | Academic Job Board</title>
     <meta name="description" content="Complete listing of PhD, postdoc, and research positions aggregated from Bluesky. Updated daily.">
+    <meta name="keywords" content="PhD positions, postdoc jobs, academic jobs, research positions, Bluesky, university jobs, doctoral research, STEM careers">
+    <meta name="author" content="BlueSky PhD Jobs">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="{BASE_URL}positions.html">
-    <meta property="og:title" content="All PhD & Postdoc Positions">
-    <meta property="og:description" content="Complete listing of academic positions aggregated from Bluesky.">
+    <!-- Open Graph -->
+    <meta property="og:title" content="All PhD & Postdoc Positions | Academic Job Board">
+    <meta property="og:description" content="Complete listing of PhD, postdoc, and research positions aggregated from Bluesky. Updated daily.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="{BASE_URL}positions.html">
+    <meta property="og:site_name" content="BlueSky PhD Jobs">
+    <meta property="og:image" content="{BASE_URL}assets/og-image.png">
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="All PhD & Postdoc Positions | Academic Job Board">
+    <meta name="twitter:description" content="Complete listing of PhD, postdoc, and research positions aggregated from Bluesky. Updated daily.">
+    <meta name="twitter:image" content="{BASE_URL}assets/og-image.png">
+    <!-- Dataset structured data -->
     <script type="application/ld+json">
 {jsonld}
     </script>
