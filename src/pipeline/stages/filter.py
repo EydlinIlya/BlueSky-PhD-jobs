@@ -10,6 +10,7 @@ crash can resume from the exact post where it left off.
 
 from datetime import datetime, timezone
 
+from src.llm.base import LLMUnavailableError
 from src.logger import setup_logger
 
 logger = setup_logger()
@@ -50,7 +51,14 @@ def run(run_date, storage, classifier) -> None:
         for i, row in enumerate(bluesky_rows, 1):
             raw_text = row.get("raw_text") or row.get("message", "")
             metadata_text = row.get("metadata_text") or raw_text
-            result = classifier.classify_post(raw_text, metadata_text=metadata_text)
+            try:
+                result = classifier.classify_post(raw_text, metadata_text=metadata_text)
+            except LLMUnavailableError as e:
+                logger.error(
+                    f"LLM unavailable after {i - 1}/{len(bluesky_rows)} rows classified. "
+                    f"Pipeline will resume from this row on next run. Error: {e}"
+                )
+                raise
             storage.update_staging_filter(run_date, row["uri"], result)
             if i % 10 == 0:
                 logger.info(f"  Classified {i}/{len(bluesky_rows)}")
