@@ -192,6 +192,78 @@ def extract_quote_post(post) -> dict | None:
     return {"uri": uri, "text": text, "author_handle": author_handle}
 
 
+TENURETRACKER_HANDLE = "tenuretracker.bsky.social"
+
+
+def _fetch_tt_reply(client: Client, root_uri: str) -> dict | None:
+    """Fetch the first direct reply from tenuretracker to their own root post.
+
+    Args:
+        client: Authenticated atproto Client
+        root_uri: AT URI of the root post
+
+    Returns:
+        Dict with {uri, text, created_at} or None if not found / on error.
+    """
+    try:
+        response = client.app.bsky.feed.get_post_thread({"uri": root_uri, "depth": 1})
+        thread = response.thread
+        replies = getattr(thread, "replies", None) or []
+        for reply_view in replies:
+            reply_post = getattr(reply_view, "post", None)
+            if reply_post is None:
+                continue
+            author = getattr(reply_post, "author", None)
+            if getattr(author, "handle", "") == TENURETRACKER_HANDLE:
+                record = getattr(reply_post, "record", None)
+                text = getattr(record, "text", "") or ""
+                created_at = getattr(record, "created_at", "") or ""
+                time.sleep(REQUEST_DELAY)
+                return {"uri": reply_post.uri, "text": text, "created_at": created_at}
+        time.sleep(REQUEST_DELAY)
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to fetch TT reply for {root_uri}: {e}")
+        time.sleep(REQUEST_DELAY)
+        return None
+
+
+def _fetch_tt_parent(client: Client, reply_uri: str) -> dict | None:
+    """Fetch the parent post of a tenuretracker reply.
+
+    Args:
+        client: Authenticated atproto Client
+        reply_uri: AT URI of the reply post
+
+    Returns:
+        Dict with {uri, text, handle, created_at} or None if not found / on error.
+    """
+    try:
+        response = client.app.bsky.feed.get_post_thread(
+            {"uri": reply_uri, "depth": 0, "parentHeight": 1}
+        )
+        thread = response.thread
+        parent_view = getattr(thread, "parent", None)
+        if parent_view is None:
+            time.sleep(REQUEST_DELAY)
+            return None
+        parent_post = getattr(parent_view, "post", None)
+        if parent_post is None:
+            time.sleep(REQUEST_DELAY)
+            return None
+        author = getattr(parent_post, "author", None)
+        record = getattr(parent_post, "record", None)
+        handle = getattr(author, "handle", "") or ""
+        text = getattr(record, "text", "") or ""
+        created_at = getattr(record, "created_at", "") or ""
+        time.sleep(REQUEST_DELAY)
+        return {"uri": parent_post.uri, "text": text, "handle": handle, "created_at": created_at}
+    except Exception as e:
+        logger.warning(f"Failed to fetch TT parent for {reply_uri}: {e}")
+        time.sleep(REQUEST_DELAY)
+        return None
+
+
 class BlueskySource(DataSource):
     """Data source for Bluesky posts."""
 

@@ -298,6 +298,47 @@ class SupabaseStorage(StorageBackend):
             "run_date", run_date_str
         ).execute()
 
+    def update_post_classification(
+        self,
+        uri: str,
+        disciplines: list,
+        country: str,
+        position_type: list,
+    ) -> None:
+        """Update disciplines, country, and position_type on an existing phd_positions row."""
+        try:
+            self.client.table(self.table).update(
+                {
+                    "disciplines": disciplines,
+                    "country": country,
+                    "position_type": position_type,
+                }
+            ).eq("uri", uri).execute()
+        except Exception as e:
+            logger.error(f"Failed to update classification for {uri}: {e}")
+
+    def update_post_message(
+        self,
+        uri: str,
+        message: str,
+        raw_text: str | None = None,
+        metadata_text: str | None = None,
+    ) -> None:
+        """Update the message of an existing phd_positions entry.
+
+        Args:
+            uri: URI of the post to update
+            message: New message text
+            raw_text: Unused (phd_positions has no raw_text column; accepted for API symmetry)
+            metadata_text: Unused (phd_positions has no metadata_text column)
+        """
+        try:
+            self.client.table(self.table).update({"message": message}).eq(
+                "uri", uri
+            ).execute()
+        except Exception as e:
+            logger.error(f"Failed to update message for {uri}: {e}")
+
     def mark_duplicates_batch(self, updates: list[tuple[str, str]]) -> int:
         """Mark multiple posts as duplicates.
 
