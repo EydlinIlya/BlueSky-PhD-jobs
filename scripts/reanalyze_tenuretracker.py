@@ -77,6 +77,27 @@ def load_posts_from_db() -> list[dict]:
     return all_posts
 
 
+def get_all_uris(storage) -> set[str]:
+    """Paginate through all phd_positions URIs."""
+    uris = set()
+    page_size = 1000
+    offset = 0
+    while True:
+        response = (
+            storage.client.table(storage.table)
+            .select("uri")
+            .range(offset, offset + page_size - 1)
+            .execute()
+        )
+        if not response.data:
+            break
+        uris.update(r["uri"] for r in response.data)
+        if len(response.data) < page_size:
+            break
+        offset += page_size
+    return uris
+
+
 # ---------------------------------------------------------------------------
 # Analysis
 # ---------------------------------------------------------------------------
@@ -327,7 +348,8 @@ def main() -> None:
     else:
         posts = load_posts_from_db()
         logger.info(f"Loaded {len(posts)} posts from DB")
-        existing_uris = {p["uri"] for p in posts}
+        from src.storage.supabase import SupabaseStorage
+        existing_uris = get_all_uris(SupabaseStorage())
 
     # Connect to Bluesky
     logger.info("Authenticating with Bluesky...")
