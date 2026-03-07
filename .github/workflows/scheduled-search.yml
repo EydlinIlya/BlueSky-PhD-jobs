@@ -3,9 +3,9 @@ name: Daily Job Board Update
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 8 * * *"   # 08:00 UTC
-    - cron: "0 14 * * *"  # 14:00 UTC
-    - cron: "0 20 * * *"  # 20:00 UTC
+    - cron: "0 6 * * *"   # 08:00 UTC
+    - cron: "0 12 * * *"  # 14:00 UTC
+    - cron: "0 18 * * *"  # 20:00 UTC
 
 permissions:
   contents: write
