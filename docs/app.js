@@ -58,6 +58,7 @@ const DISCIPLINE_COLORS = {
 // Country name normalization — maps variants to canonical form
 const COUNTRY_NORMALIZE = {
     'Czechia': 'Czech Republic',
+    'Europe':  'Unknown',
 };
 
 function normalizeCountry(country) {
@@ -679,6 +680,21 @@ function onFullDataLoaded(positions, dupes) {
     }
 }
 
+function setupFilterClickOutside() {
+    document.addEventListener('click', e => {
+        if (openSections.size === 0) return;
+        const panel = document.getElementById('filter-panel');
+        if (!panel || panel.contains(e.target)) return;
+        for (const sectionId of [...openSections]) {
+            const body = document.getElementById(`body-${sectionId}`);
+            const chevron = document.getElementById(`chevron-${sectionId}`);
+            openSections.delete(sectionId);
+            if (body) body.classList.remove('open');
+            if (chevron) chevron.innerHTML = SVG_CHEVRON_RIGHT;
+        }
+    });
+}
+
 function setupSearchListeners() {
     const searchInput = document.getElementById('global-search');
     const searchContainer = document.getElementById('header-search-container');
@@ -720,6 +736,7 @@ async function init() {
         renderCardsBatch(true);
         setupInfiniteScroll();
         setupSearchListeners();
+        setupFilterClickOutside();
 
         // Restore preferred view (desktop only)
         const preferred = localStorage.getItem('preferred-view');
@@ -752,6 +769,7 @@ async function init() {
             renderCardsBatch(true);
             setupInfiniteScroll();
             setupSearchListeners();
+        setupFilterClickOutside();
 
             const preferred = localStorage.getItem('preferred-view');
             if (preferred === 'table' && window.innerWidth >= 768) setView('table');
