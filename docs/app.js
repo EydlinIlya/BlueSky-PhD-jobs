@@ -30,6 +30,35 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// SVG icon strings (inline, aria-hidden, no emoji)
+const SVG_CALENDAR = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="display:inline;vertical-align:-1px" aria-hidden="true"><path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zm10 4H2v9a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V4z"/></svg>`;
+const SVG_LOCATION = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="display:inline;vertical-align:-1px" aria-hidden="true"><path d="M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/></svg>`;
+const SVG_CHEVRON_RIGHT = `<svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/></svg>`;
+const SVG_CHEVRON_DOWN = `<svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/></svg>`;
+
+// Per-discipline badge colors (flat, no gradients)
+const DISCIPLINE_COLORS = {
+    'Biology':                      '#16a34a',
+    'Computer Science':             '#6d28d9',
+    'Physics':                      '#0284c7',
+    'Chemistry & Materials Science':'#0891b2',
+    'Medicine':                     '#dc2626',
+    'Mathematics':                  '#7c3aed',
+    'Economics':                    '#b45309',
+    'Sociology & Political Science':'#0369a1',
+    'Engineering':                  '#c2410c',
+    'Environmental Sciences':       '#15803d',
+    'Psychology':                   '#be185d',
+    'Neuroscience':                 '#7c3aed',
+    'History':                      '#92400e',
+    'Arts & Humanities':            '#a21caf',
+    'General call':                 '#475569',
+};
+
+function getDisciplineColor(discipline) {
+    return DISCIPLINE_COLORS[discipline] || '#3b82f6';
+}
+
 // ─── Data fetching ────────────────────────────────────────────────────────────
 
 async function fetchMockPositions() {
@@ -102,7 +131,7 @@ function createCard(position, index) {
     const dateStr = date ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
 
     const disciplineBadges = (position.disciplines || [])
-        .map(d => `<span class="discipline-badge">${escapeHtml(d)}</span>`).join('');
+        .map(d => `<span class="discipline-badge" style="background:${getDisciplineColor(d)}">${escapeHtml(d)}</span>`).join('');
     const typeBadges = (position.position_type || [])
         .map(t => `<span class="position-type-badge">${escapeHtml(t)}</span>`).join('');
 
@@ -143,7 +172,7 @@ function createCard(position, index) {
         earlierPostsHtml = `
             <div class="earlier-posts-section">
                 <button class="earlier-posts-toggle" onclick="toggleEarlierPosts(${index})">
-                    <span class="earlier-posts-icon">${isEarlierExpanded ? '▼' : '▶'}</span>
+                    <span class="earlier-posts-icon">${isEarlierExpanded ? SVG_CHEVRON_DOWN : SVG_CHEVRON_RIGHT}</span>
                     ${dupes.length} earlier post${dupes.length > 1 ? 's' : ''}
                 </button>
                 <div class="earlier-posts-list ${isEarlierExpanded ? 'open' : ''}" id="earlier-posts-${index}">
@@ -156,10 +185,10 @@ function createCard(position, index) {
         <article class="position-card" data-index="${index}">
             <div class="card-header">
                 <div class="card-badges">${disciplineBadges}${typeBadges}</div>
-                ${dateStr ? `<span class="card-date">📅 ${dateStr}</span>` : ''}
+                ${dateStr ? `<span class="card-date">${SVG_CALENDAR} ${dateStr}</span>` : ''}
             </div>
             <div class="card-meta">
-                ${country ? `<span class="card-meta-item">🌍 ${escapeHtml(country)}</span>` : ''}
+                ${country ? `<span class="card-meta-item">${SVG_LOCATION} ${escapeHtml(country)}</span>` : ''}
             </div>
             <div class="card-author">
                 <a href="${escapeHtml(profileUrl)}" target="_blank" rel="noopener noreferrer">@${escapeHtml(position.user_handle || '')}</a>
@@ -253,7 +282,7 @@ window.toggleEarlierPosts = function(index) {
     const toggle = card.querySelector('.earlier-posts-toggle .earlier-posts-icon');
     const expanded = expandedEarlierPosts.has(index);
     listEl.classList.toggle('open', expanded);
-    toggle.textContent = expanded ? '▼' : '▶';
+    toggle.innerHTML = expanded ? SVG_CHEVRON_DOWN : SVG_CHEVRON_RIGHT;
 };
 
 // ─── Global search ────────────────────────────────────────────────────────────
@@ -500,11 +529,11 @@ window.toggleFilterSection = function(sectionId) {
     if (openSections.has(sectionId)) {
         openSections.delete(sectionId);
         body.classList.remove('open');
-        chevron.textContent = '▶';
+        chevron.innerHTML = SVG_CHEVRON_RIGHT;
     } else {
         openSections.add(sectionId);
         body.classList.add('open');
-        chevron.textContent = '▼';
+        chevron.innerHTML = SVG_CHEVRON_DOWN;
     }
 };
 
