@@ -55,6 +55,16 @@ const DISCIPLINE_COLORS = {
     'General call':                 '#475569',
 };
 
+// Country name normalization — maps variants to canonical form
+const COUNTRY_NORMALIZE = {
+    'Czechia': 'Czech Republic',
+};
+
+function normalizeCountry(country) {
+    if (!country) return country;
+    return COUNTRY_NORMALIZE[country] || country;
+}
+
 function getDisciplineColor(discipline) {
     return DISCIPLINE_COLORS[discipline] || '#3b82f6';
 }
@@ -81,7 +91,7 @@ async function fetchSupabasePositions() {
             .order('created_at', { ascending: false })
             .range(from, from + PAGE_SIZE - 1);
         if (error) throw error;
-        all = all.concat(data);
+        all = all.concat(data.map(p => ({ ...p, country: normalizeCountry(p.country) })));
         if (data.length < PAGE_SIZE) break;
         from += PAGE_SIZE;
     }
@@ -623,7 +633,8 @@ function loadStaticData() {
     try {
         const data = JSON.parse(el.textContent);
         if (data && Array.isArray(data.positions) && data.positions.length > 0) {
-            return { positions: data.positions, total: data.total || data.positions.length };
+            const positions = data.positions.map(p => ({ ...p, country: normalizeCountry(p.country) }));
+            return { positions, total: data.total || positions.length };
         }
     } catch (e) {
         console.warn('Failed to parse static positions:', e);
