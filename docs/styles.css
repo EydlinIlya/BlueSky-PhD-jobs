@@ -556,6 +556,8 @@ main {
     line-height: 1.6;
     color: var(--color-text);
     margin-bottom: 1rem;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 .card-message.truncated {
