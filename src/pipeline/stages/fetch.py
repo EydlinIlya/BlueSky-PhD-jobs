@@ -80,7 +80,7 @@ def process_tenuretracker_posts(
 
                 if root_uri in existing_uris:
                     # Root already in DB — enrich it with the reply text
-                    logger.info(
+                    logger.debug(
                         f"[TT merge] Updating existing root {root_uri} with reply text"
                     )
                     storage.update_post_message(root_uri, combined_raw)
@@ -92,7 +92,7 @@ def process_tenuretracker_posts(
                     # Don't emit reply as a new staging row
                 else:
                     # Root not yet in DB — emit a merged post under the root URI
-                    logger.info(
+                    logger.debug(
                         f"[TT merge] Emitting merged root {root_uri} (reply was {uri})"
                     )
                     new_post = dict(post)
@@ -122,7 +122,7 @@ def process_tenuretracker_posts(
                 seen_tt_uris.add(uri)
                 seen_tt_uris.add(reply_uri)
 
-                logger.info(
+                logger.debug(
                     f"[TT merge] Root {uri} combined with reply {reply_uri}"
                 )
 

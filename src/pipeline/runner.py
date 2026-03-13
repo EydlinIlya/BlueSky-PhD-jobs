@@ -13,6 +13,9 @@ from src.pipeline.stages import fetch, filter as filter_stage, dedup, publish
 logger = setup_logger()
 
 
+STAGE_ORDER = ["fetch", "filter", "dedup", "publish"]
+
+
 def run_pipeline(run_date, sources: list[str], storage, classifier, args) -> None:
     """Run the 4-stage pipeline for run_date, skipping completed stages.
 
@@ -21,10 +24,13 @@ def run_pipeline(run_date, sources: list[str], storage, classifier, args) -> Non
         sources: List of enabled source names (e.g. ['bluesky', 'scholarshipdb'])
         storage: SupabaseStorage instance
         classifier: JobClassifier instance, or None if --no-llm
-        args: Parsed CLI args (query, limit, scholarshipdb_pages, full_sync, …)
+        args: Parsed CLI args (query, limit, scholarshipdb_pages, full_sync, stage, …)
     """
+    stop_after = getattr(args, "stage", "all")
     run = storage.get_or_create_run(run_date)
     logger.info(f"Pipeline run {run_date} — current state: {run}")
+    if stop_after != "all":
+        logger.info(f"Running up to stage: {stop_after}")
 
     if not run.get("fetch_completed_at"):
         logger.info("\n" + "=" * 40)
@@ -35,6 +41,10 @@ def run_pipeline(run_date, sources: list[str], storage, classifier, args) -> Non
     else:
         logger.info("Stage 1 (Fetch): already completed — skipping")
 
+    if stop_after == "fetch":
+        logger.info("Stopping after fetch stage.")
+        return
+
     if not run.get("filter_completed_at"):
         logger.info("\n" + "=" * 40)
         logger.info("Stage 2: Filter")
@@ -43,6 +53,10 @@ def run_pipeline(run_date, sources: list[str], storage, classifier, args) -> Non
         run = storage.get_or_create_run(run_date)
     else:
         logger.info("Stage 2 (Filter): already completed — skipping")
+
+    if stop_after == "filter":
+        logger.info("Stopping after filter stage.")
+        return
 
     if not run.get("dedup_completed_at"):
         logger.info("\n" + "=" * 40)
@@ -53,6 +67,10 @@ def run_pipeline(run_date, sources: list[str], storage, classifier, args) -> Non
         run = storage.get_or_create_run(run_date)
     else:
         logger.info("Stage 3 (Dedup): already completed — skipping")
+
+    if stop_after == "dedup":
+        logger.info("Stopping after dedup stage.")
+        return
 
     # Stage 4 always runs when stages 1-3 are done.
     # After a successful publish the pipeline_runs row is deleted, so the

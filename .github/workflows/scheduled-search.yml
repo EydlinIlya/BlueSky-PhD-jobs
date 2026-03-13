@@ -26,12 +26,32 @@ jobs:
       - name: Install dependencies
         run: pip install -e .
 
-      - name: Run PhD position search
-        run: python bluesky_search.py --storage supabase --sources bluesky
+      - name: Stage 1 - Fetch posts
+        run: python bluesky_search.py --storage supabase --sources bluesky --stage fetch
         env:
           BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
           BLUESKY_PASSWORD: ${{ secrets.BLUESKY_PASSWORD }}
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
+      - name: Stage 2 - Filter (LLM classification)
+        run: python bluesky_search.py --storage supabase --sources bluesky --stage filter
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
+      - name: Stage 3 - Deduplicate
+        run: python bluesky_search.py --storage supabase --sources bluesky --stage dedup
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+
+      - name: Stage 4 - Publish
+        run: python bluesky_search.py --storage supabase --sources bluesky --stage publish
+        env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

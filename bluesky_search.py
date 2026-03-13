@@ -114,6 +114,12 @@ def main():
         default=2,
         help="Max pages to fetch per field from ScholarshipDB (default: 2)",
     )
+    parser.add_argument(
+        "--stage",
+        choices=["fetch", "filter", "dedup", "publish", "all"],
+        default="all",
+        help="Run only up to this pipeline stage (Supabase only, default: all)",
+    )
     args = parser.parse_args()
 
     # Parse sources

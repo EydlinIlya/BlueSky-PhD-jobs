@@ -1,7 +1,6 @@
 """Pre-save deduplication: filter duplicates before writing to storage."""
 
 import json
-import logging
 import re
 import time
 
@@ -9,8 +8,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from src.llm.base import LLMProvider
+from src.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger()
 
 # Thresholds from experiment tuning
 AUTO_ACCEPT_THRESHOLD = 0.95

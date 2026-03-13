@@ -61,9 +61,8 @@ class NvidiaProvider(LLMProvider):
                 return data["choices"][0]["message"]["content"]
 
             except requests.exceptions.Timeout as e:
-                # Timeouts suggest the API is unreachable — use a shorter retry budget
                 if attempt < MAX_TIMEOUT_RETRIES - 1:
-                    delay = BASE_DELAY
+                    delay = min(BASE_DELAY * (2 ** attempt), MAX_DELAY)
                     logger.warning(
                         f"NVIDIA timeout (attempt {attempt + 1}/{MAX_TIMEOUT_RETRIES}). "
                         f"Retrying in {delay}s..."
