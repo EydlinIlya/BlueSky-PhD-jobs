@@ -4,15 +4,14 @@ Called from bluesky_search.py with the current batch of positions.
 Filters for positions with BOTH Biology AND Computer Science disciplines
 (bioinformatics), formats them, and posts via Telegram Bot API.
 
-Uses telegramify-markdown to convert plain Markdown to MarkdownV2,
-avoiding manual escaping issues.
+Uses HTML parse_mode for robust formatting.
 """
 
+import html
 import os
 
 import requests
 from dotenv import load_dotenv
-from telegramify_markdown import markdownify
 
 load_dotenv()
 
@@ -22,15 +21,15 @@ REPO_URL = "https://github.com/EydlinIlya/BlueSky-PhD-jobs"
 
 FOOTER = (
     "\n\n"
-    f"[Browse all positions]({PAGES_URL}) | "
-    f"[GitHub]({REPO_URL})"
+    f'<a href="{PAGES_URL}">Browse all positions</a> | '
+    f'<a href="{REPO_URL}">GitHub</a>'
 )
 
 SEPARATOR = "\n\n━━━━━━━━━━━━━━━\n\n"
 
 
 def format_position(pos):
-    """Format a single position as plain Markdown."""
+    """Format a single position as HTML for Telegram."""
     types = pos.get("position_type") or []
     type_tags = " | ".join(f"#{t.replace('&', '').replace('  ', ' ').replace(' ', '_')}" for t in types)
 
@@ -44,13 +43,14 @@ def format_position(pos):
     message = pos.get("message") or ""
     if len(message) > 400:
         message = message[:397] + "..."
+    message = html.escape(message)
 
     url = pos.get("url") or ""
-    link = f"[View Post]({url})" if url else ""
+    link = f'<a href="{html.escape(url)}">View Post</a>' if url else ""
 
     lines = []
     if header:
-        lines.append(header)
+        lines.append(html.escape(header))
     lines.append("")
     lines.append(message)
     if link:
@@ -89,15 +89,14 @@ def build_messages(positions):
     return messages
 
 
-def send_telegram_message(token, channel_id, markdown_text):
+def send_telegram_message(token, channel_id, html_text):
     """Send a message to a Telegram channel. Returns True on success."""
-    text = markdownify(markdown_text)
     resp = requests.post(
         f"https://api.telegram.org/bot{token}/sendMessage",
         json={
             "chat_id": channel_id,
-            "text": text,
-            "parse_mode": "MarkdownV2",
+            "text": html_text,
+            "parse_mode": "HTML",
             "disable_web_page_preview": True,
         },
         timeout=30,
@@ -118,7 +117,7 @@ def post_batch_to_telegram(all_results):
         True if posting succeeded (or was skipped), False on failure.
     """
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-    channel_id = os.environ.get("TELEGRAM_CHANNEL_ID", "")
+    channel_id = "@Eydlin"  # TODO: revert to os.environ.get("TELEGRAM_CHANNEL_ID", "")
 
     if not token or not channel_id:
         return True
