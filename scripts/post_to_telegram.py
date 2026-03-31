@@ -117,7 +117,7 @@ def post_batch_to_telegram(all_results):
         True if posting succeeded (or was skipped), False on failure.
     """
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-    channel_id = "@Eydlin"  # TODO: revert to os.environ.get("TELEGRAM_CHANNEL_ID", "")
+    channel_id = os.environ.get("TELEGRAM_CHANNEL_ID", "")
 
     if not token or not channel_id:
         return True
