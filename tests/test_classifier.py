@@ -164,6 +164,36 @@ class TestGetMetadata:
         result = classifier.get_metadata("PhD in something weird")
         assert result["disciplines"] == ["Other"]
 
+    def test_ecology_remote_sensing_forests(self):
+        """Remote sensing of forests should be Ecology primary."""
+        response = json.dumps({
+            "disciplines": ["Ecology"],
+            "country": "Brazil",
+            "position_type": ["PhD Student"]
+        })
+        llm = MockLLM([response])
+        classifier = JobClassifier(llm)
+        result = classifier.get_metadata(
+            "PhD position: satellite remote sensing of Amazon deforestation at INPE"
+        )
+        assert "Ecology" in result["disciplines"]
+        assert result["disciplines"][0] == "Ecology"
+
+    def test_ecology_with_cs_secondary(self):
+        """Remote-sensing + ML post may include Computer Science as secondary."""
+        response = json.dumps({
+            "disciplines": ["Ecology", "Computer Science"],
+            "country": "Germany",
+            "position_type": ["PhD Student"]
+        })
+        llm = MockLLM([response])
+        classifier = JobClassifier(llm)
+        result = classifier.get_metadata(
+            "PhD: ML-based crop yield prediction from Sentinel-2 imagery, TU Munich"
+        )
+        assert result["disciplines"] == ["Ecology", "Computer Science"]
+        assert result["country"] == "Germany"
+
     def test_general_call(self):
         response = json.dumps({
             "disciplines": ["General call"],

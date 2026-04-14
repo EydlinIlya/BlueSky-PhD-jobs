@@ -15,6 +15,7 @@ REQUEST_TIMEOUT = 30  # seconds to wait for a single API response
 DISCIPLINES = [
     "Computer Science",
     "Biology",
+    "Ecology",
     "Chemistry & Materials Science",
     "Physics",
     "Mathematics",
@@ -92,6 +93,10 @@ METADATA_PROMPT_TEMPLATE = (
     '  "position_type": array of position types from: PhD Student, Postdoc, Master Student, Research Assistant\n\n'
     "DISCIPLINE rules:\n"
     "- Pick 1-3 that best match. For cross-disciplinary work, list all (e.g., bioinformatics = Biology + Computer Science).\n"
+    "- Remote sensing of forests, vegetation, crop fields, or ecosystems = Ecology (primary). "
+    "Biology and/or Computer Science may be listed as SECONDARY tags only if the post also "
+    "explicitly involves biological methods or ML/algorithm research. Do not mark such posts "
+    "as Biology-primary or Computer Science-primary.\n"
     "- If it's a university-wide program, use 'General call'.\n\n"
     "COUNTRY rules:\n"
     "- Use standard country names: USA, UK, Germany, France, Switzerland, etc.\n"
@@ -121,5 +126,7 @@ METADATA_PROMPT_TEMPLATE = (
     'Output: {{"disciplines": ["Psychology"], "country": "Unknown", "position_type": ["PhD Student", "Postdoc"]}}\n\n'
     'Input: "Assistant Professor (tenure-track) in Computational Biology at MIT"\n'
     'Output: {{"disciplines": ["Biology", "Computer Science"], "country": "USA", "position_type": ["Postdoc"]}}\n\n'
+    'Input: "PhD position in satellite remote sensing of boreal forest carbon dynamics, University of Helsinki"\n'
+    'Output: {{"disciplines": ["Ecology", "Computer Science"], "country": "Finland", "position_type": ["PhD Student"]}}\n\n'
     "Return ONLY the JSON object, no other text."
 )

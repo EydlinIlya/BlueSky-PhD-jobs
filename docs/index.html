@@ -173,7 +173,7 @@
                     </div>
                 </div>
                 <!-- Area -->
-                <div class="filter-section filter-section-last">
+                <div class="filter-section">
                     <button class="filter-section-header" onclick="toggleFilterSection('areas')">
                         <span class="filter-section-title">Area</span>
                         <div class="filter-section-right">
@@ -182,6 +182,13 @@
                         </div>
                     </button>
                     <div class="filter-section-body" id="body-areas"></div>
+                </div>
+                <!-- Aggregator toggle -->
+                <div class="filter-section filter-section-last">
+                    <label class="filter-option" style="padding: 10px 16px; display: flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" id="hide-aggregators-toggle" class="filter-checkbox" onchange="toggleHideAggregators(this.checked)">
+                        <span>Hide aggregator reposts</span>
+                    </label>
                 </div>
             </div>
 

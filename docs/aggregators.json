@@ -1,0 +1,4 @@
+{
+  "handles": [],
+  "note": "Bluesky handles that re-post many positions (aggregator bots/channels). Maintained by hand after reviewing candidates from scripts/find_aggregator_candidates.py. Users can toggle 'Hide aggregator reposts' in the UI to exclude these handles from the listing."
+}

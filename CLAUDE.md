@@ -102,7 +102,7 @@ python bluesky_search.py --no-llm
 **`src/logger.py`** - Logging configuration
 
 **`src/llm/`** - LLM integration (for Bluesky)
-- `config.py` - Model settings, prompts, discipline list, and position types
+- `config.py` - Model settings, prompts, discipline list (includes `Ecology`), and position types. The `METADATA_PROMPT_TEMPLATE` contains an explicit rule that remote-sensing-of-forests/crop-fields posts must be classified as Ecology primary (Biology / CS only as secondary tags).
 - `base.py` - Abstract `LLMProvider` class
 - `nvidia.py` - NVIDIA API (Llama 4 Maverick) implementation
 - `classifier.py` - `JobClassifier` for filtering and metadata extraction
@@ -119,6 +119,8 @@ python bluesky_search.py --no-llm
 - `stages/filter.py` - Stage 2: LLM classification per row; tracks per-row completion via `filter_completed`
 - `stages/dedup.py` - Stage 3: TF-IDF + LLM dedup against existing canonical posts
 - `stages/publish.py` - Stage 4: upsert staging → `phd_positions`; Telegram post; delete staging
+
+**`scripts/find_aggregator_candidates.py`** - One-shot helper that lists Bluesky handles with ≥ `--min-posts` (default 5) canonical posts plus the bio from each handle's most recent post. Pure read; does not touch the pipeline or dedup. A human reviews the output and hand-edits `docs/aggregators.json` to add/remove aggregator handles. The frontend's **"Hide aggregator reposts"** toggle reads that JSON and filters the grid + card views accordingly. Dedup is unaffected because `preprocess_text()` already strips `[Bio: ...]` prefixes before TF-IDF comparison.
 
 **`scripts/post_to_telegram.py`** - Telegram channel posting
 - Filters for positions with BOTH Biology AND Computer Science disciplines
@@ -273,7 +275,12 @@ Static GitHub Pages site for browsing PhD positions:
 - Initializes Supabase client (anon key)
 - Fetches from `phd_positions` table
 - Filters by discipline, country, and position type
+- Loads `docs/aggregators.json` and supports the "Hide aggregator reposts" toggle (grid uses `isExternalFilterPresent` / `doesExternalFilterPass`; card view filters in `applyCardFilters`)
 - Configures AG Grid columns with filters/sorting
+
+**`docs/aggregators.json`** - Hand-maintained list `{ "handles": [...] }` of Bluesky handles flagged as aggregator reposters. Source of truth for the UI filter. Updated via `scripts/find_aggregator_candidates.py`.
+
+**`vercel.json`** - Static deploy config for Vercel (serves `docs/`). Lets the same repo be previewed/deployed on Vercel without a build step. Set `SITE_BASE_URL` env/secret to override the canonical URL in `scripts/generate_seo_pages.py` during the cutover; unset → falls back to the current GitHub Pages URL.
 
 ### RLS Policy Required
 

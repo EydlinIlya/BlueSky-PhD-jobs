@@ -305,6 +305,22 @@ body {
     color: white;
 }
 
+/* Aggregator badge - small grey chip next to handle */
+.aggregator-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    margin-left: 4px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    background: #475569;
+    color: white;
+    vertical-align: middle;
+}
+
 /* Position type badge - flat amber */
 .position-type-badge {
     display: inline-block;
