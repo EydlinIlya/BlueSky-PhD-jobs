@@ -62,6 +62,10 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          # Optional — set a repo secret SITE_BASE_URL to override the canonical
+          # URL once the Vercel cutover happens. Leave unset to keep the current
+          # GitHub Pages URL.
+          SITE_BASE_URL: ${{ secrets.SITE_BASE_URL }}
 
       - name: Commit and push SEO updates
         run: |

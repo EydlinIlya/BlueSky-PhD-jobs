@@ -101,7 +101,9 @@ CSV columns: `uri`, `message`, `url`, `user`, `created`, `disciplines`, `is_veri
 - **Bluesky posts**: `message` includes author bio as `[Bio: ...]` prefix
 - **ScholarshipDB**: `is_verified_job` is always `True` (pre-verified from job site)
 
-Disciplines: Computer Science, Biology, Chemistry & Materials Science, Physics, Mathematics, Medicine, Psychology, Economics, Linguistics, History, Sociology & Political Science, Arts & Humanities, Education, Other, General call
+Disciplines: Computer Science, Biology, Ecology, Chemistry & Materials Science, Physics, Mathematics, Medicine, Psychology, Economics, Linguistics, History, Sociology & Political Science, Arts & Humanities, Education, Other, General call
+
+Remote-sensing-of-forests/crop-fields posts are classified as **Ecology** primary (Biology / Computer Science may appear as secondary tags).
 
 Position types: PhD Student, Postdoc, Master Student, Research Assistant
 
@@ -207,6 +209,45 @@ A web interface to browse PhD positions is available at the `/docs` folder.
    - Go to repo Settings → Pages
    - Source: Deploy from branch
    - Branch: main, folder: /docs
+
+## Maintenance
+
+### Aggregator list (hide-reposts filter)
+
+Some Bluesky accounts act as re-posting channels. The frontend ships with a
+**"Hide aggregator reposts"** toggle that filters out positions from handles
+listed in `docs/aggregators.json`. The list is hand-maintained:
+
+```bash
+python scripts/find_aggregator_candidates.py --min-posts 5
+```
+
+The script prints every handle that has posted ≥ 5 canonical positions along
+with the bio from their most recent post. No writes, no LLM calls — review the
+output and add real aggregator handles to `docs/aggregators.json`:
+
+```json
+{ "handles": ["handle1.bsky.social", "handle2.bsky.social"], "note": "..." }
+```
+
+The filter is purely a frontend concern; it does **not** affect ingestion or
+deduplication (dedup strips the `[Bio: ...]` prefix before TF-IDF comparison).
+
+## Hosting / Vercel migration
+
+The site currently deploys via GitHub Pages from `/docs` on `main`. A
+`vercel.json` is committed so the same folder can be served from Vercel
+without changes:
+
+1. Import the repo into Vercel. Vercel auto-detects `vercel.json` and serves
+   `docs/` as a static site (no build step).
+2. When ready to cut over, add a repo secret `SITE_BASE_URL` (e.g.
+   `https://phd-jobs.example.com/`). `scripts/generate_seo_pages.py` reads it
+   and regenerates the sitemap + JSON-LD with the new canonical URL. Without
+   the secret, generation falls back to the current GitHub Pages URL.
+3. Optionally add a `<meta http-equiv="refresh">` redirect to
+   `docs/index.html` on the GitHub Pages branch pointing at the Vercel domain
+   so old inbound links follow along.
 
 ## Dependencies
 

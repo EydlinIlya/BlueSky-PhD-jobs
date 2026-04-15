@@ -22,6 +22,10 @@ const BATCH_SIZE = 30;
 let renderedCount = 0;
 let scrollObserver = null;
 
+// Aggregator filter state
+let aggregatorHandles = new Set();  // handles flagged as aggregator reposts
+let hideAggregators = false;        // toggled by #hide-aggregators-toggle
+
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 function escapeHtml(text) {
@@ -39,6 +43,7 @@ const SVG_CHEVRON_DOWN = `<svg width="8" height="8" viewBox="0 0 16 16" fill="cu
 // Per-discipline badge colors (flat, no gradients)
 const DISCIPLINE_COLORS = {
     'Biology':                      '#16a34a',
+    'Ecology':                      '#15803d',
     'Computer Science':             '#6d28d9',
     'Physics':                      '#0284c7',
     'Chemistry & Materials Science':'#0891b2',
@@ -68,6 +73,22 @@ function normalizeCountry(country) {
 
 function getDisciplineColor(discipline) {
     return DISCIPLINE_COLORS[discipline] || '#3b82f6';
+}
+
+function isAggregator(handle) {
+    return !!handle && aggregatorHandles.has(handle);
+}
+
+async function fetchAggregators() {
+    try {
+        const resp = await fetch('aggregators.json', { cache: 'no-cache' });
+        if (!resp.ok) return new Set();
+        const data = await resp.json();
+        return new Set(Array.isArray(data.handles) ? data.handles : []);
+    } catch (e) {
+        console.warn('Failed to load aggregators.json:', e);
+        return new Set();
+    }
 }
 
 // ─── Data fetching ────────────────────────────────────────────────────────────
@@ -203,6 +224,7 @@ function createCard(position, index) {
             </div>
             <div class="card-author">
                 <a href="${escapeHtml(profileUrl)}" target="_blank" rel="noopener noreferrer">@${escapeHtml(position.user_handle || '')}</a>
+                ${isAggregator(position.user_handle) ? '<span class="aggregator-badge" title="Aggregator repost">agg</span>' : ''}
             </div>
             <div class="${messageClass}" id="card-msg-${index}">${escapeHtml(message)}</div>
             ${isTruncated ? `<button class="card-expand-btn" onclick="toggleCardMessage(${index})">${isExpanded ? '[ show less ]' : '[ read more ]'}</button>` : ''}
@@ -448,7 +470,11 @@ function getColumnDefs() {
         { field: 'disciplines', headerName: 'Discipline', width: 220, filter: DisciplineFilter, autoHeight: true, cellRenderer: p => renderCollapsibleBadges(p, 'discipline-badge', 'disciplines') },
         { field: 'country', headerName: 'Country', width: 110, filter: CountryFilter, cellRenderer: p => (!p.value || p.value === 'Unknown') ? '<span class="text-gray-400">\u2014</span>' : `<span class="country-badge">${escapeHtml(p.value)}</span>` },
         { field: 'position_type', headerName: 'Type', width: 140, filter: PositionTypeFilter, autoHeight: true, cellRenderer: p => renderCollapsibleBadges(p, 'position-type-badge', 'position_type') },
-        { field: 'user_handle', headerName: 'Author', width: 150, filter: 'agTextColumnFilter', cellRenderer: p => p.value ? `<a href="https://bsky.app/profile/${p.value}" target="_blank" rel="noopener noreferrer">@${p.value}</a>` : '' },
+        { field: 'user_handle', headerName: 'Author', width: 170, filter: 'agTextColumnFilter', cellRenderer: p => {
+            if (!p.value) return '';
+            const link = `<a href="https://bsky.app/profile/${p.value}" target="_blank" rel="noopener noreferrer">@${p.value}</a>`;
+            return isAggregator(p.value) ? `${link} <span class="aggregator-badge" title="Aggregator repost">agg</span>` : link;
+        } },
         { field: 'message', headerName: 'Position', flex: 2, minWidth: 200, filter: 'agTextColumnFilter', cellClass: 'message-cell', autoHeight: true, wrapText: true,
             cellRenderer: p => {
                 if (!p.value) return '';
@@ -489,6 +515,8 @@ function initGrid() {
         paginationPageSize: 50,
         paginationPageSizeSelector: [25, 50, 100],
         domLayout: 'normal',
+        isExternalFilterPresent: () => hideAggregators,
+        doesExternalFilterPass: node => !isAggregator(node.data && node.data.user_handle),
         onFilterChanged: updateTableCount,
         onGridReady: () => setTimeout(updateTableCount, 100),
     });
@@ -612,9 +640,18 @@ function applyCardFilters() {
     if (cardFilters.types.size > 0) filtered = filtered.filter(p => (p.position_type || []).some(t => cardFilters.types.has(t)));
     if (cardFilters.countries.size > 0) filtered = filtered.filter(p => cardFilters.countries.has(p.country || 'Unknown'));
     if (cardFilters.areas.size > 0) filtered = filtered.filter(p => (p.disciplines || []).some(d => cardFilters.areas.has(d)));
+    if (hideAggregators) filtered = filtered.filter(p => !isAggregator(p.user_handle));
     currentFilteredPositions = filtered;
     renderCardsBatch(true);
 }
+
+window.toggleHideAggregators = function(checked) {
+    hideAggregators = !!checked;
+    if (gridApi) {
+        gridApi.onFilterChanged();
+    }
+    applyCardFilters();
+};
 
 window.clearCardFilters = function() {
     cardFilters.types.clear(); cardFilters.countries.clear(); cardFilters.areas.clear();
@@ -721,6 +758,9 @@ async function init() {
     const appContainer = document.getElementById('app-container');
 
     const staticData = loadStaticData();
+
+    // Load aggregator list (handles) — non-blocking, falls back to empty set.
+    aggregatorHandles = await fetchAggregators();
 
     if (staticData) {
         // Render static data immediately

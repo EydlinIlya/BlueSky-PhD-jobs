@@ -1,0 +1,30 @@
+{
+  "handles": [
+    "tenuretracker.bsky.social",
+    "epsteinweb.bsky.social",
+    "jobboardsearch.com",
+    "agristok.bsky.social",
+    "scholarshipunion.bsky.social",
+    "higherjobz.bsky.social",
+    "evoldir.bsky.social",
+    "jobrxiv.org",
+    "cosmossn.bsky.social",
+    "vacancyedu.bsky.social",
+    "sciencehr.bsky.social",
+    "finland.activitypub.awakari.com.ap.brid.gy",
+    "functionalprogramming.activitypub.awakari.com.ap.brid.gy",
+    "2rzikkbou3ntafnir2qmmse0gwz.activitypub.awakari.com.ap.brid.gy",
+    "darkmatter.activitypub.awakari.com.ap.brid.gy",
+    "academiceurope.bsky.social",
+    "iddjobs.org",
+    "epijobs.bsky.social",
+    "rss.dfaria.eu",
+    "inomics.bsky.social",
+    "greenjobs.de",
+    "bioinfojobs.bsky.social",
+    "atmchemaerojobs.bsky.social",
+    "gulfcareerhunt.bsky.social",
+    "diversifytech.com"
+  ],
+  "note": "Bluesky handles that re-post many positions (aggregator bots/channels). Maintained by hand after reviewing candidates from scripts/find_aggregator_candidates.py. Users can toggle 'Hide aggregator reposts' in the UI to exclude these handles from the listing."
+}

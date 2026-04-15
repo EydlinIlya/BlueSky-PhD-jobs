@@ -85,10 +85,22 @@ body {
         gap: 12px;
     }
 
+    .header-search-container {
+        width: 100%;
+    }
+
     .header-search-container.expanded {
         position: relative;
         top: auto;
+        left: auto;
+        right: auto;
+        bottom: auto;
+        width: 100%;
         transform: none;
+    }
+
+    .search-input {
+        font-size: 16px; /* Prevent iOS auto-zoom on focus */
     }
 }
 
@@ -303,6 +315,22 @@ body {
     letter-spacing: 0.03em;
     background: #059669;
     color: white;
+}
+
+/* Aggregator badge - small grey chip next to handle */
+.aggregator-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    margin-left: 4px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    background: #475569;
+    color: white;
+    vertical-align: middle;
 }
 
 /* Position type badge - flat amber */
