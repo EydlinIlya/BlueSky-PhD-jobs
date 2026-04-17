@@ -22,8 +22,34 @@ const BATCH_SIZE = 30;
 let renderedCount = 0;
 let scrollObserver = null;
 
-// Aggregator filter state
-let aggregatorHandles = new Set();  // handles flagged as aggregator reposts
+// Aggregator filter state — inlined so it works on file:// and GitHub Pages alike
+const aggregatorHandles = new Set([
+    "tenuretracker.bsky.social",
+    "epsteinweb.bsky.social",
+    "jobboardsearch.com",
+    "agristok.bsky.social",
+    "scholarshipunion.bsky.social",
+    "higherjobz.bsky.social",
+    "evoldir.bsky.social",
+    "jobrxiv.org",
+    "cosmossn.bsky.social",
+    "vacancyedu.bsky.social",
+    "sciencehr.bsky.social",
+    "finland.activitypub.awakari.com.ap.brid.gy",
+    "functionalprogramming.activitypub.awakari.com.ap.brid.gy",
+    "2rzikkbou3ntafnir2qmmse0gwz.activitypub.awakari.com.ap.brid.gy",
+    "darkmatter.activitypub.awakari.com.ap.brid.gy",
+    "academiceurope.bsky.social",
+    "iddjobs.org",
+    "epijobs.bsky.social",
+    "rss.dfaria.eu",
+    "inomics.bsky.social",
+    "greenjobs.de",
+    "bioinfojobs.bsky.social",
+    "atmchemaerojobs.bsky.social",
+    "gulfcareerhunt.bsky.social",
+    "diversifytech.com",
+]);
 let hideAggregators = false;        // toggled by #hide-aggregators-toggle
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -79,17 +105,6 @@ function isAggregator(handle) {
     return !!handle && aggregatorHandles.has(handle);
 }
 
-async function fetchAggregators() {
-    try {
-        const resp = await fetch('aggregators.json', { cache: 'no-cache' });
-        if (!resp.ok) return new Set();
-        const data = await resp.json();
-        return new Set(Array.isArray(data.handles) ? data.handles : []);
-    } catch (e) {
-        console.warn('Failed to load aggregators.json:', e);
-        return new Set();
-    }
-}
 
 // ─── Data fetching ────────────────────────────────────────────────────────────
 
@@ -647,10 +662,14 @@ function applyCardFilters() {
 
 window.toggleHideAggregators = function(checked) {
     hideAggregators = !!checked;
-    if (gridApi) {
-        gridApi.onFilterChanged();
-    }
+    const btn = document.getElementById('hide-aggregators-toggle');
+    if (btn) btn.setAttribute('aria-checked', hideAggregators ? 'true' : 'false');
+    if (gridApi) gridApi.onFilterChanged();
     applyCardFilters();
+};
+
+window.toggleHideAggregatorsBtn = function() {
+    toggleHideAggregators(!hideAggregators);
 };
 
 window.clearCardFilters = function() {
@@ -659,6 +678,9 @@ window.clearCardFilters = function() {
     ['types', 'countries', 'areas'].forEach(cat => updateFilterBadge(cat));
     const cs = document.getElementById('country-filter-search');
     if (cs) cs.value = '';
+    hideAggregators = false;
+    const aggBtn = document.getElementById('hide-aggregators-toggle');
+    if (aggBtn) aggBtn.setAttribute('aria-checked', 'false');
     currentFilteredPositions = allPositions;
     renderCardsBatch(true);
 };
@@ -758,9 +780,6 @@ async function init() {
     const appContainer = document.getElementById('app-container');
 
     const staticData = loadStaticData();
-
-    // Load aggregator list (handles) — non-blocking, falls back to empty set.
-    aggregatorHandles = await fetchAggregators();
 
     if (staticData) {
         // Render static data immediately

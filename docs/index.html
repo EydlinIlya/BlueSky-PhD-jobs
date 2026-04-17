@@ -185,10 +185,14 @@
                 </div>
                 <!-- Aggregator toggle -->
                 <div class="filter-section filter-section-last">
-                    <label class="filter-option" style="padding: 10px 16px; display: flex; align-items: center; cursor: pointer;">
-                        <input type="checkbox" id="hide-aggregators-toggle" class="filter-checkbox" onchange="toggleHideAggregators(this.checked)">
-                        <span>Hide aggregator reposts</span>
-                    </label>
+                    <div class="agg-switch-row" onclick="toggleHideAggregatorsBtn()" role="presentation">
+                        <span class="agg-switch-label">Hide aggregator reposts</span>
+                        <button role="switch" id="hide-aggregators-toggle" aria-checked="false"
+                                class="agg-switch" tabindex="0"
+                                onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleHideAggregatorsBtn();}">
+                            <span class="agg-switch-thumb"></span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
