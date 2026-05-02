@@ -18,5 +18,3 @@ reply_jobs.json
 test-results/
 playwright-report/
 
-# Generated SEO pages (updated daily by GitHub Actions)
-docs/positions.html

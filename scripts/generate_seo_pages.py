@@ -26,9 +26,7 @@ SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 # SITE_BASE_URL in the environment to override during/after the Vercel
 # migration. Falls back to the current GitHub Pages URL so existing
 # scheduled runs keep working unchanged.
-BASE_URL = os.environ.get(
-    "SITE_BASE_URL", "https://eydlinilya.github.io/BlueSky-PhD-jobs/"
-)
+BASE_URL = os.environ.get("SITE_BASE_URL") or "https://eydlinilya.github.io/BlueSky-PhD-jobs/"
 if not BASE_URL.endswith("/"):
     BASE_URL += "/"
 DOCS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs")
