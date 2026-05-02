@@ -1,0 +1,42 @@
+name: Telegram Digest
+
+# Posts un-posted Biology + Computer Science positions to the Telegram channel.
+# Decoupled from the main ingest pipeline so the website can refresh more often
+# while channel cadence stays at 3 posts per day.
+#
+# Reads from phd_positions where posted_to_telegram_at IS NULL, posts in batches,
+# then marks rows. Idempotent — safe to re-run after a Telegram failure.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"   # 08:00 UTC
+    - cron: "0 12 * * *"  # 14:00 UTC
+    - cron: "0 18 * * *"  # 20:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Run Telegram digest
+        run: python scripts/post_to_telegram.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}

@@ -1,11 +1,18 @@
 name: Daily Job Board Update
 
+# Ingests new Bluesky posts into Supabase and regenerates the static
+# frontend snapshot (positions.json + SEO pages). Runs 4x/day for fresher
+# website data — Telegram posting was extracted to its own workflow
+# (telegram-digest.yml) which still runs 3x/day so channel cadence is
+# unchanged.
+
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 6 * * *"   # 08:00 UTC
-    - cron: "0 12 * * *"  # 14:00 UTC
-    - cron: "0 18 * * *"  # 20:00 UTC
+    - cron: "0 5 * * *"   # 07:00 UTC
+    - cron: "0 11 * * *"  # 13:00 UTC
+    - cron: "0 17 * * *"  # 19:00 UTC
+    - cron: "0 23 * * *"  # 01:00 UTC
 
 permissions:
   contents: write
@@ -54,8 +61,6 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
 
       - name: Generate SEO pages
         run: python scripts/generate_seo_pages.py

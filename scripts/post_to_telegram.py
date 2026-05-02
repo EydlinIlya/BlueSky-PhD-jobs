@@ -1,14 +1,25 @@
-"""Post Biology + Computer Science positions to Telegram channel.
+"""Post Biology + Computer Science positions to the Telegram channel.
 
-Called from bluesky_search.py with the current batch of positions.
-Filters for positions with BOTH Biology AND Computer Science disciplines
-(bioinformatics), formats them, and posts via Telegram Bot API.
+Two ways to invoke:
 
-Uses HTML parse_mode for robust formatting.
+1. As a standalone digest job (preferred): `python scripts/post_to_telegram.py`
+   Queries Supabase for Bio + CS positions where `posted_to_telegram_at IS NULL`,
+   posts them, then marks the rows so they aren't re-posted. This decouples
+   Telegram cadence from pipeline ingest cadence — runs separately on cron.
+
+2. As a library, by importing `post_batch_to_telegram(positions)`. Kept for
+   backward compatibility but no longer called from the pipeline. New code
+   should use the standalone digest path.
+
+Required env (digest mode): SUPABASE_URL, SUPABASE_KEY, TELEGRAM_BOT_TOKEN,
+TELEGRAM_CHANNEL_ID. Schema requirement: `phd_positions.posted_to_telegram_at`
+column (TIMESTAMPTZ, NULL = un-posted). See README for the migration SQL.
 """
 
 import html
 import os
+import sys
+from datetime import datetime, timezone
 
 import requests
 from dotenv import load_dotenv
@@ -26,6 +37,10 @@ FOOTER = (
 )
 
 SEPARATOR = "\n\n━━━━━━━━━━━━━━━\n\n"
+
+# Cap a single digest at this many positions so a backlog (e.g. after migration)
+# doesn't dump hundreds of messages into the channel at once.
+DIGEST_LIMIT = 50
 
 
 def format_position(pos):
@@ -108,13 +123,11 @@ def send_telegram_message(token, channel_id, html_text):
 
 
 def post_batch_to_telegram(all_results):
-    """Post Biology + CS positions from the current batch to Telegram.
+    """Post Biology + CS positions from a provided batch to Telegram.
 
-    Args:
-        all_results: List of position dicts from the current search batch.
-
-    Returns:
-        True if posting succeeded (or was skipped), False on failure.
+    Kept for backward compatibility — the in-pipeline call site has been
+    removed in favor of the standalone digest. New code paths should call
+    run_digest() instead.
     """
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     channel_id = os.environ.get("TELEGRAM_CHANNEL_ID", "")
@@ -122,12 +135,11 @@ def post_batch_to_telegram(all_results):
     if not token or not channel_id:
         return True
 
-    # Filter for bioinformatics: positions with BOTH Biology AND Computer Science
-    positions = []
-    for pos in all_results:
-        disciplines = pos.get("disciplines") or []
-        if "Biology" in disciplines and "Computer Science" in disciplines:
-            positions.append(pos)
+    positions = [
+        pos for pos in all_results
+        if "Biology" in (pos.get("disciplines") or [])
+        and "Computer Science" in (pos.get("disciplines") or [])
+    ]
 
     if not positions:
         print("No Biology + CS positions in this batch")
@@ -146,3 +158,78 @@ def post_batch_to_telegram(all_results):
 
     print(f"Posted {len(positions)} positions in {sent} Telegram message(s)")
     return True
+
+
+def fetch_unposted_bio_cs_positions(client, limit=DIGEST_LIMIT):
+    """Pull Bio+CS positions from Supabase that haven't been posted yet.
+
+    Filters: verified canonical posts only, both 'Biology' and 'Computer Science'
+    in disciplines, posted_to_telegram_at IS NULL. Newest first, capped at limit.
+    """
+    result = (
+        client.table("phd_positions")
+        .select("uri, message, url, user_handle, created_at, disciplines, country, position_type")
+        .eq("is_verified_job", True)
+        .is_("duplicate_of", "null")
+        .is_("posted_to_telegram_at", "null")
+        .contains("disciplines", ["Biology"])
+        .contains("disciplines", ["Computer Science"])
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return result.data or []
+
+
+def mark_positions_as_posted(client, uris, timestamp):
+    """Set posted_to_telegram_at on the given URIs so the digest doesn't re-post them."""
+    if not uris:
+        return
+    client.table("phd_positions").update(
+        {"posted_to_telegram_at": timestamp}
+    ).in_("uri", uris).execute()
+
+
+def run_digest():
+    """Standalone entry point: read un-posted Bio+CS rows, post them, mark them.
+
+    Returns 0 on success (including 'nothing to post'), 1 on Telegram failure.
+    The mark step is intentionally idempotent — failures during posting leave
+    rows un-marked, so the next digest tries again.
+    """
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    channel_id = os.environ.get("TELEGRAM_CHANNEL_ID", "")
+    if not token or not channel_id:
+        print("TELEGRAM_BOT_TOKEN/TELEGRAM_CHANNEL_ID unset — skipping digest")
+        return 0
+
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_KEY")
+    if not supabase_url or not supabase_key:
+        print("SUPABASE_URL/SUPABASE_KEY unset — cannot run digest")
+        return 1
+
+    from supabase import create_client
+    client = create_client(supabase_url, supabase_key)
+
+    positions = fetch_unposted_bio_cs_positions(client)
+    if not positions:
+        print("No un-posted Biology + CS positions — nothing to do")
+        return 0
+
+    print(f"Posting {len(positions)} positions to Telegram...")
+    messages = build_messages(positions)
+    for msg in messages:
+        if not send_telegram_message(token, channel_id, msg):
+            print("Telegram send failed — leaving rows un-marked for retry on next digest")
+            return 1
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+    uris = [p["uri"] for p in positions]
+    mark_positions_as_posted(client, uris, timestamp)
+    print(f"Posted {len(positions)} positions in {len(messages)} message(s); marked as posted at {timestamp}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(run_digest())
