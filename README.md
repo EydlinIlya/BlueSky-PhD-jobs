@@ -161,6 +161,18 @@ CREATE TABLE phd_positions_staging (
     staged_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(run_date, uri)
 );
+
+-- Telegram digest tracking: NULL means un-posted; the digest job marks rows
+-- after posting. Partial index keeps the digest query fast.
+ALTER TABLE phd_positions ADD COLUMN IF NOT EXISTS posted_to_telegram_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS phd_positions_unposted_idx
+  ON phd_positions (created_at DESC)
+  WHERE posted_to_telegram_at IS NULL;
+
+-- Backfill once, the first time you run this migration: mark all existing
+-- rows as already-posted so the digest doesn't dump the historical Bio+CS
+-- backlog into the channel. Safe to skip if you want to re-post the backlog.
+UPDATE phd_positions SET posted_to_telegram_at = NOW() WHERE posted_to_telegram_at IS NULL;
 ```
 
 3. Go to Settings → API and copy:
@@ -171,17 +183,27 @@ CREATE TABLE phd_positions_staging (
 
 ## GitHub Actions
 
-The included workflow runs **3 times a day** (08:00, 14:00, 20:00 UTC) so each run fetches only ~6 hours of new posts. To enable:
+Two workflows run on cron:
+
+- **`scheduled-search.yml`** — ingests new Bluesky posts and regenerates the
+  static frontend snapshot. Runs **4×/day** (07:00, 13:00, 19:00, 01:00 UTC)
+  for fresh website data.
+- **`telegram-digest.yml`** — pulls Bio + CS positions where
+  `posted_to_telegram_at IS NULL` and posts them to the channel, then marks
+  them as posted. Runs **3×/day** (08:00, 14:00, 20:00 UTC). Decoupled from
+  ingest so the website can refresh more often without spamming the channel.
+
+To enable:
 
 1. Push to GitHub
 2. Go to Settings → Secrets and variables → Actions
 3. Add secrets: `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`, `NVIDIA_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`
 4. (Optional) Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHANNEL_ID` for Telegram posting
-4. The workflow will run automatically or trigger manually from Actions tab
+5. The workflows run automatically or can be triggered manually from the Actions tab
 
 ## Telegram Channel
 
-Positions tagged with both **Biology** and **Computer Science** (bioinformatics, computational biology) are automatically posted to a Telegram channel after each daily run.
+Positions tagged with both **Biology** and **Computer Science** (bioinformatics, computational biology) are posted to a Telegram channel by the `telegram-digest.yml` workflow, which runs separately from the ingest pipeline.
 
 ### Setup
 

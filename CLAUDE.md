@@ -118,15 +118,21 @@ python bluesky_search.py --no-llm
 - `stages/fetch.py` - Stage 1: fetch raw posts into `phd_positions_staging`
 - `stages/filter.py` - Stage 2: LLM classification per row; tracks per-row completion via `filter_completed`
 - `stages/dedup.py` - Stage 3: TF-IDF + LLM dedup against existing canonical posts
-- `stages/publish.py` - Stage 4: upsert staging → `phd_positions`; Telegram post; delete staging
+- `stages/publish.py` - Stage 4: upsert staging → `phd_positions`; delete staging. Telegram posting is handled out-of-band by `scripts/post_to_telegram.py`
 
 **`scripts/find_aggregator_candidates.py`** - One-shot helper that lists Bluesky handles with ≥ `--min-posts` (default 5) canonical posts plus the bio from each handle's most recent post. Pure read; does not touch the pipeline or dedup. A human reviews the output and hand-edits `docs/aggregators.json` to add/remove aggregator handles. The frontend's **"Hide aggregator reposts"** toggle reads that JSON and filters the grid + card views accordingly. Dedup is unaffected because `preprocess_text()` already strips `[Bio: ...]` prefixes before TF-IDF comparison.
 
-**`scripts/post_to_telegram.py`** - Telegram channel posting
-- Filters for positions with BOTH Biology AND Computer Science disciplines
-- Formats messages with hashtags (position type, country)
-- Batches multiple positions per message (under 4096 char TG limit)
-- Posts via Telegram Bot API (MarkdownV2 format)
+**`scripts/post_to_telegram.py`** - Telegram channel posting (standalone digest)
+- Runs as its own cron job (`.github/workflows/telegram-digest.yml`), 3×/day
+- Queries `phd_positions` for rows where `posted_to_telegram_at IS NULL` AND
+  disciplines contain both Biology and Computer Science (bioinformatics)
+- Formats with hashtags (position type, country); batches under 4096-char TG limit
+- After successful POST, sets `posted_to_telegram_at` so rows aren't re-posted
+- On Telegram failure, leaves rows un-marked → next digest retries (idempotent)
+- Decoupled from the ingest pipeline so the website can refresh more often
+  than the channel cadence. The legacy `post_batch_to_telegram(positions)`
+  function is still exported for backward compatibility but is no longer
+  called from `stages/publish.py`.
 
 **`src/dedup.py`** - Production deduplication helpers (used by `stages/dedup.py`)
 - `preprocess_text()` - Cleans post text (strips bio, URLs, linked pages)
@@ -144,7 +150,9 @@ Each stage writes persistent state before proceeding. A restart on the same
 | 3 Dedup | verified staging rows + existing canonical posts in `phd_positions` | `duplicate_of` set on staging rows |
 | 4 Publish | all staging rows | upserted into `phd_positions`; staging + `pipeline_runs` row deleted |
 
-The GitHub Actions workflow runs the pipeline **3 times a day** (08:00, 14:00, 20:00 UTC). After each successful publish the `pipeline_runs` row is deleted, so subsequent runs within the same day fetch only posts newer than the last publish (incremental via `phd_positions.created_at`).
+The ingest workflow (`.github/workflows/scheduled-search.yml`) runs **4×/day** (07:00, 13:00, 19:00, 01:00 UTC). After each successful publish the `pipeline_runs` row is deleted, so subsequent runs within the same day fetch only posts newer than the last publish (incremental via `phd_positions.created_at`).
+
+The Telegram digest runs separately on its own 3×/day schedule — see the post_to_telegram entry above.
 
 **Bluesky Source (fetch stage):**
 1. Fetch posts from Bluesky API (sorted by relevance)
@@ -204,8 +212,14 @@ CREATE TABLE phd_positions (
     country TEXT,
     position_type TEXT[],
     indexed_at TIMESTAMPTZ DEFAULT NOW(),
-    duplicate_of TEXT
+    duplicate_of TEXT,
+    posted_to_telegram_at TIMESTAMPTZ  -- NULL = un-posted; set by digest job
 );
+
+-- Partial index keeps the digest's "find un-posted Bio+CS" query fast.
+CREATE INDEX IF NOT EXISTS phd_positions_unposted_idx
+  ON phd_positions (created_at DESC)
+  WHERE posted_to_telegram_at IS NULL;
 
 CREATE TABLE pipeline_runs (
     id SERIAL PRIMARY KEY,

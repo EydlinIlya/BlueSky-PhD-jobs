@@ -1,11 +1,14 @@
 """Stage 4: Publish staging rows to phd_positions and clean up.
 
 Reads all staging rows (verified + non-verified, canonical + duplicates),
-upserts them into phd_positions, posts to Telegram, deletes staging rows,
-and marks publish_completed_at on the pipeline_runs row.
-"""
+upserts them into phd_positions, deletes staging rows, and marks
+publish_completed_at on the pipeline_runs row.
 
-import sys
+Telegram posting is no longer wired in here — see scripts/post_to_telegram.py
+which runs as a separate cron job querying un-posted rows by
+posted_to_telegram_at IS NULL. This decouples ingest cadence from channel
+cadence.
+"""
 
 from src.logger import setup_logger
 
@@ -49,12 +52,6 @@ def run(run_date, storage, args) -> None:
 
     saved_count = storage.save_posts(posts_to_save)
     logger.info(f"Saved {saved_count} posts to phd_positions")
-
-    # Post Biology + CS positions to Telegram
-    from scripts.post_to_telegram import post_batch_to_telegram
-    if not post_batch_to_telegram(posts_to_save):
-        logger.error("Telegram posting failed")
-        sys.exit(1)
 
     # Clean up: remove staging rows and the pipeline_runs checkpoint row.
     # Deleting the checkpoint allows subsequent runs on the same calendar day

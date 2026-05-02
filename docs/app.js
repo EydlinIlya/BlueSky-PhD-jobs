@@ -114,6 +114,36 @@ async function fetchMockPositions() {
     return response.json();
 }
 
+// Try the cron-generated static snapshot first. Returns null if missing/stale,
+// triggering Supabase fallback. Schema mirrors fetchSupabasePositions +
+// fetchDuplicates so the rest of the app doesn't need to know which path won.
+async function fetchStaticSnapshot() {
+    try {
+        const response = await fetch('positions.json', { cache: 'default' });
+        if (!response.ok) return null;
+        const data = await response.json();
+        if (!data || !Array.isArray(data.positions)) return null;
+
+        const positions = data.positions.map(p => ({ ...p, country: normalizeCountry(p.country) }));
+
+        const dupMap = {};
+        for (const row of data.duplicates || []) {
+            const key = row.duplicate_of;
+            if (!key) continue;
+            if (!dupMap[key]) dupMap[key] = [];
+            dupMap[key].push(row);
+        }
+        for (const key of Object.keys(dupMap)) {
+            dupMap[key].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        }
+
+        return { positions, duplicates: dupMap };
+    } catch (e) {
+        console.warn('Static snapshot fetch failed:', e);
+        return null;
+    }
+}
+
 async function fetchSupabasePositions() {
     const PAGE_SIZE = 1000;
     let all = [];
@@ -169,6 +199,22 @@ async function fetchDuplicates() {
 async function fetchPositions() {
     if (USE_MOCK) return fetchMockPositions();
     return fetchSupabasePositions();
+}
+
+// Three-tier data loader for the full position set used by filters/grid:
+//   1. positions.json static snapshot (CDN-cached, ~700KB gzipped, fastest)
+//   2. Supabase live query (fallback when snapshot is missing or fails)
+// Always returns { positions, duplicates } in the same shape as the live path.
+async function loadFullData() {
+    if (USE_MOCK) {
+        const positions = await fetchMockPositions();
+        return { positions, duplicates: {} };
+    }
+    const snapshot = await fetchStaticSnapshot();
+    if (snapshot) return snapshot;
+    console.warn('Falling back to live Supabase query — positions.json unavailable');
+    const [positions, duplicates] = await Promise.all([fetchSupabasePositions(), fetchDuplicates()]);
+    return { positions, duplicates };
 }
 
 // ─── Card rendering ───────────────────────────────────────────────────────────
@@ -802,22 +848,22 @@ async function init() {
         if (preferred === 'table' && window.innerWidth >= 768) setView('table');
 
         // Background fetch of full data
-        Promise.all([fetchPositions(), fetchDuplicates()])
-            .then(([positions, dupes]) => {
-                onFullDataLoaded(positions, dupes);
+        loadFullData()
+            .then(({ positions, duplicates }) => {
+                onFullDataLoaded(positions, duplicates);
             })
             .catch(err => {
-                console.warn('Background fetch failed, using static data:', err);
+                console.warn('Background fetch failed, using embedded static data:', err);
                 setFiltersLoading(false);
                 isFullDataLoaded = true;
             });
     } else {
-        // No static data — original behavior
+        // No embedded static data — fetch full data directly
         try {
-            const [positions, dupes] = await Promise.all([fetchPositions(), fetchDuplicates()]);
+            const { positions, duplicates } = await loadFullData();
             allPositions = positions;
             currentFilteredPositions = positions;
-            duplicateMap = dupes;
+            duplicateMap = duplicates;
             totalPositionCount = positions.length;
             isFullDataLoaded = true;
 

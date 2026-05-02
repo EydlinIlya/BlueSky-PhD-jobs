@@ -18,3 +18,9 @@ reply_jobs.json
 test-results/
 playwright-report/
 
+# Local backups and analysis dumps (don't commit DB exports)
+backup_*.json
+*_analysis.json
+
+# Windows shell artifact (created by accidental redirects to `nul`)
+nul
