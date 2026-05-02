@@ -1158,4 +1158,63 @@ main {
     * {
         transition-duration: 0.01ms !important;
     }
+
+    .position-card,
+    .position-card::before {
+        transition: none !important;
+    }
+}
+
+/* ─── v2 polish (PhD Sky design system) ──────────────────────────────────── */
+/* Aligns the live UI with design/ui_kits/website/index.html.
+   Tokens (--primary, --accent, --bg-deep, --border-strong) come from
+   design-tokens.css which is loaded before this file. Fallbacks below
+   keep the rules sane if that file ever fails to load. */
+
+/* Cards: cobalt rule above on hover — the system's only "lift" gesture */
+.position-card {
+    position: relative;
+    transition: border-color var(--t-base, 0.2s ease);
+}
+.position-card::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 12px;
+    right: 12px;
+    height: 2px;
+    background: transparent;
+    border-radius: 2px;
+    pointer-events: none;
+    transition: background var(--t-base, 0.2s ease);
+}
+.position-card:hover {
+    border-color: var(--border-strong, #475569);
+}
+.position-card:hover::before {
+    background: var(--primary, #3b82f6);
+}
+
+/* Stats line: small amber diamond tick — the only flourish on the stats row */
+.stats-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.stats-bar::before {
+    content: '◆';
+    color: var(--accent, #f59e0b);
+    font-size: 9px;
+    line-height: 1;
+}
+
+/* Date pill: deeper inset background for stronger surface contrast */
+.card-date {
+    background: var(--bg-deep, #020617);
+}
+
+/* Table header: 2px cobalt bottom rule, mirroring the v2 table treatment */
+.ag-theme-alpine .ag-header,
+.ag-theme-alpine .ag-header-row {
+    border-bottom: 2px solid var(--primary, #3b82f6);
 }
