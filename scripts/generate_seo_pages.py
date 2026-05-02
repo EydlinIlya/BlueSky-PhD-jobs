@@ -73,6 +73,54 @@ def fetch_positions(client, limit=500):
     return result.data
 
 
+def fetch_all_canonical_positions(client, page_size=1000):
+    """Paginated fetch of every verified canonical position the frontend would show.
+
+    Mirrors the filter set used by docs/app.js fetchSupabasePositions() so the
+    static snapshot matches what users would see if they hit Supabase live.
+    """
+    all_rows = []
+    start = 0
+    while True:
+        result = (
+            client.table("phd_positions")
+            .select("uri, created_at, disciplines, country, position_type, user_handle, message, url")
+            .eq("is_verified_job", True)
+            .is_("duplicate_of", "null")
+            .gte("indexed_at", "2026-01-27")
+            .order("created_at", desc=True)
+            .range(start, start + page_size - 1)
+            .execute()
+        )
+        batch = result.data or []
+        all_rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        start += page_size
+    return all_rows
+
+
+def fetch_all_duplicates(client, page_size=1000):
+    """Paginated fetch of all rows that are marked as duplicates of a canonical post."""
+    all_rows = []
+    start = 0
+    while True:
+        result = (
+            client.table("phd_positions")
+            .select("uri, url, user_handle, created_at, duplicate_of")
+            .not_.is_("duplicate_of", "null")
+            .gte("indexed_at", "2026-01-27")
+            .range(start, start + page_size - 1)
+            .execute()
+        )
+        batch = result.data or []
+        all_rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        start += page_size
+    return all_rows
+
+
 def get_total_count(client):
     result = (
         client.table("phd_positions")
@@ -344,13 +392,58 @@ def generate_sitemap():
     print("Generated sitemap.xml")
 
 
+def generate_positions_json(positions, duplicates):
+    """Write docs/positions.json — the static snapshot served from the CDN.
+
+    Replaces the live Supabase query in docs/app.js. Schema matches what
+    fetchSupabasePositions + fetchDuplicates produced, minus indexed_at
+    (filtering already happened at generation time).
+    """
+    pos_payload = [
+        {
+            "uri": pos.get("uri", ""),
+            "created_at": pos.get("created_at", ""),
+            "disciplines": pos.get("disciplines") or [],
+            "country": pos.get("country") or "",
+            "position_type": pos.get("position_type") or [],
+            "user_handle": pos.get("user_handle", ""),
+            "message": pos.get("message", ""),
+            "url": pos.get("url", ""),
+        }
+        for pos in positions
+    ]
+
+    dup_payload = [
+        {
+            "uri": d.get("uri", ""),
+            "url": d.get("url", ""),
+            "user_handle": d.get("user_handle", ""),
+            "created_at": d.get("created_at", ""),
+            "duplicate_of": d.get("duplicate_of", ""),
+        }
+        for d in duplicates
+    ]
+
+    snapshot = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "positions": pos_payload,
+        "duplicates": dup_payload,
+    }
+
+    path = os.path.join(DOCS_DIR, "positions.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(snapshot, f, separators=(",", ":"), ensure_ascii=False)
+    size_kb = os.path.getsize(path) / 1024
+    print(f"Generated positions.json: {len(pos_payload)} positions, {len(dup_payload)} duplicates, {size_kb:.0f}KB")
+
+
 def main():
     client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
     print("Fetching positions from Supabase...")
     positions = fetch_positions(client, limit=500)
     total_count = get_total_count(client)
-    print(f"Fetched {len(positions)} positions (total canonical: {total_count})")
+    print(f"Fetched {len(positions)} positions for SEO (total canonical: {total_count})")
 
     if not positions:
         print("No positions found, skipping SEO generation")
@@ -359,6 +452,13 @@ def main():
     update_index_html(positions, total_count)
     generate_positions_html(positions)
     generate_sitemap()
+
+    print("Fetching full snapshot for static frontend data...")
+    all_positions = fetch_all_canonical_positions(client)
+    all_duplicates = fetch_all_duplicates(client)
+    print(f"Snapshot: {len(all_positions)} canonical, {len(all_duplicates)} duplicates")
+    generate_positions_json(all_positions, all_duplicates)
+
     print("SEO generation complete!")
 
 
