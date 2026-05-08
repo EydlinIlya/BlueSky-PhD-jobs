@@ -1,33 +1,52 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Page Not Found | PhD Positions</title>
-    <meta name="robots" content="noindex">
-    <style>
-        body {
-            font-family: 'Segoe UI', system-ui, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            margin: 0;
-            text-align: center;
-        }
-        h1 { font-size: 4rem; margin: 0; color: #6366f1; }
-        p { color: #94a3b8; margin: 1rem 0; }
-        a { color: #6366f1; text-decoration: none; }
-        a:hover { color: #10b981; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>404 not found | PhD Sky</title>
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/design-tokens.css">
+<style>
+  body {
+    margin: 0; min-height: 100vh; display: flex;
+    align-items: center; justify-content: center;
+    background: var(--bg); color: var(--fg);
+    font-family: var(--font-display);
+  }
+  .box { text-align: center; padding: 24px; max-width: 480px; }
+  .code {
+    font-family: var(--font-mono); font-size: 64px; font-weight: 700;
+    line-height: 1; color: var(--primary); letter-spacing: -0.04em;
+    margin: 0 0 8px;
+  }
+  .label {
+    font-family: var(--font-mono); font-size: 13px;
+    color: var(--fg-subtle); letter-spacing: 0.08em;
+    text-transform: uppercase; margin: 0 0 24px;
+  }
+  p { font-size: 15px; line-height: 1.6; color: var(--fg-muted); margin: 0 0 24px; }
+  .actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 10px 18px;
+    border-radius: var(--r-md); font-size: 14px; font-weight: 600;
+    text-decoration: none; transition: all var(--t-base);
+  }
+  .btn-primary { background: var(--primary); color: white; }
+  .btn-primary:hover { background: var(--primary-hover); color: white; }
+  .btn-ghost { color: var(--primary); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--primary); color: var(--accent); }
+</style>
 </head>
 <body>
-    <div>
-        <h1>404</h1>
-        <p>Page not found</p>
-        <a href="./">Back to PhD Positions</a>
-    </div>
+<div class="box">
+  <p class="code">404</p>
+  <p class="label">&gt; not_found</p>
+  <p>That page doesn't exist on PhD Sky. It might have been removed, the URL might be wrong, or it might never have been here in the first place.</p>
+  <div class="actions">
+    <a class="btn btn-primary" href="/">Browse positions</a>
+    <a class="btn btn-ghost" href="/positions">Static catalog</a>
+  </div>
+</div>
 </body>
 </html>

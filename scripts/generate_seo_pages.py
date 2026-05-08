@@ -652,6 +652,10 @@ def generate_sitemap(slug_to_lastmod=None):
         f"<changefreq>daily</changefreq><priority>1.0</priority></url>",
         f"  <url><loc>{BASE_URL}positions</loc><lastmod>{today}</lastmod>"
         f"<changefreq>daily</changefreq><priority>0.8</priority></url>",
+        f"  <url><loc>{BASE_URL}about</loc><lastmod>{today}</lastmod>"
+        f"<changefreq>monthly</changefreq><priority>0.4</priority></url>",
+        f"  <url><loc>{BASE_URL}privacy</loc><lastmod>{today}</lastmod>"
+        f"<changefreq>yearly</changefreq><priority>0.3</priority></url>",
     ]
     for slug in sorted(slug_to_lastmod or {}):
         lastmod = (slug_to_lastmod or {}).get(slug) or today

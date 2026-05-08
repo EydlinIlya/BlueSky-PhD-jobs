@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy | PhD Sky</title>
+<meta name="description" content="What PhD Sky stores, what it doesn't, what cookies it sets, what third parties see your IP, and how to opt out.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://phdsky.org/privacy">
+<meta property="og:title" content="Privacy — PhD Sky">
+<meta property="og:description" content="What PhD Sky stores, what it doesn't, what cookies it sets, what third parties see your IP, and how to opt out.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://phdsky.org/privacy">
+<meta property="og:image" content="https://phdsky.org/assets/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Privacy — PhD Sky">
+<meta name="twitter:description" content="What PhD Sky stores, what it doesn't, and how to opt out.">
+<meta name="twitter:image" content="https://phdsky.org/assets/og-image.png">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/design-tokens.css">
+<style>
+  body { margin: 0; padding: 0; }
+  .page { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+  .crumb { font-size: 13px; margin-bottom: 24px; font-family: var(--font-mono); }
+  .crumb a { color: var(--primary); text-decoration: none; }
+  .crumb a:hover { color: var(--accent); }
+  h1 {
+    font-family: var(--font-mono); font-size: 28px; font-weight: 700;
+    letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 24px; color: var(--fg);
+  }
+  h2 {
+    font-family: var(--font-display); font-size: 18px; font-weight: 600;
+    margin: 32px 0 12px; color: var(--fg);
+  }
+  p { line-height: 1.65; font-size: 15px; color: var(--fg); margin: 0 0 12px; }
+  ul { line-height: 1.65; padding-left: 22px; }
+  ul li { margin-bottom: 8px; }
+  code {
+    font-family: var(--font-mono); background: var(--bg-elevated);
+    padding: 2px 6px; border-radius: 3px; font-size: 13px;
+  }
+  a { color: var(--primary); }
+  a:hover { color: var(--accent); }
+  .meta { color: var(--fg-subtle); font-size: 13px; font-family: var(--font-mono); margin: -16px 0 32px; }
+  footer {
+    margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border);
+    font-size: 13px; color: var(--fg-subtle); font-family: var(--font-mono);
+  }
+  footer a { color: var(--primary); }
+</style>
+</head>
+<body>
+<a href="#main" class="skip-link" style="position:absolute;top:-40px;left:8px;background:var(--primary);color:white;padding:8px 12px;border-radius:4px;z-index:1000;">Skip to content</a>
+<div class="page" id="main">
+  <nav class="crumb"><a href="/">&larr; All positions</a></nav>
+  <h1><span style="color:var(--primary)">&gt;</span> Privacy</h1>
+  <p class="meta">Last updated 2026-05-08.</p>
+
+  <h2>What we collect from you</h2>
+  <p>
+    Nothing on the site itself. There are no signups, accounts, forms, comments,
+    or submission flows. Browsing is read-only.
+  </p>
+  <p>
+    If you accept analytics in the cookie banner, Google Analytics records a
+    pseudonymous visit (anonymized IP, country, page path, referrer, browser).
+    We don't combine this with anything else to identify you, and we don't sell
+    or share it.
+  </p>
+
+  <h2>Cookies and local storage</h2>
+  <ul>
+    <li>
+      <code>_ga</code>, <code>_ga_*</code> — Google Analytics. <strong>Only set
+      after you click Accept</strong> in the cookie banner. Retained 24 months.
+      Stores a pseudonymous visitor ID.
+    </li>
+    <li>
+      <code>cookieConsent</code> (localStorage) — your accept/decline choice so
+      we don't keep nagging you. Never sent to any third party.
+    </li>
+    <li>
+      <code>aggregatorHide</code> (localStorage) — your "Hide aggregator
+      reposts" toggle state. Stays on this device.
+    </li>
+  </ul>
+  <p>
+    Decline analytics → no cookies are set; the banner remembers your choice in
+    localStorage only.
+  </p>
+
+  <h2>Third parties that may see your IP</h2>
+  <p>
+    The site is static, but loading it touches a few CDNs and APIs. They see
+    your IP and User-Agent as part of normal HTTP traffic:
+  </p>
+  <ul>
+    <li><a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel</a> — hosts the site.</li>
+    <li><a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Analytics</a> — only after you accept analytics.</li>
+    <li><a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Fonts</a> — serves the Fira Code / Fira Sans webfonts.</li>
+    <li><a href="https://www.jsdelivr.com/terms/privacy-policy-jsdelivr-net" target="_blank" rel="noopener">jsDelivr CDN</a> — serves AG Grid and the Supabase JS client.</li>
+    <li><a href="https://supabase.com/privacy" target="_blank" rel="noopener">Supabase</a> — read-only fallback when the static positions snapshot can't load. Anonymous public reads only.</li>
+  </ul>
+
+  <h2>What we do with positions</h2>
+  <p>
+    Each position links back to the original Bluesky post. The post text and
+    author handle are public on Bluesky; we re-display them with a link to the
+    source. The author always controls the original.
+  </p>
+  <p>
+    To remove your own Bluesky post from this aggregator, email
+    <a href="mailto:eli@barcode-nano.com">eli@barcode-nano.com</a>. We'll
+    delete it from our database within a few days.
+  </p>
+
+  <h2>Your rights</h2>
+  <ul>
+    <li>
+      <strong>Opt out of analytics:</strong> click Decline in the cookie banner,
+      or install the
+      <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener">Google Analytics Opt-out add-on</a>.
+      Already accepted? Clear <code>cookieConsent</code> from localStorage and
+      reload — the banner reappears so you can switch.
+    </li>
+    <li>
+      <strong>EU/UK visitors:</strong> our default-deny consent state means no
+      analytics cookies are set unless you opt in. You can request access,
+      correction, or deletion of any data we hold via the contact email below.
+    </li>
+  </ul>
+
+  <h2>Contact</h2>
+  <p>
+    Questions, removal requests, or anything privacy-related:
+    <a href="mailto:eli@barcode-nano.com">eli@barcode-nano.com</a>.
+  </p>
+
+  <footer>
+    <a href="/">Home</a> · <a href="/about">About</a> · <a href="/positions">All positions</a> · <a href="https://github.com/EydlinIlya/BlueSky-PhD-jobs" target="_blank" rel="noopener">GitHub</a>
+  </footer>
+</div>
+</body>
+</html>

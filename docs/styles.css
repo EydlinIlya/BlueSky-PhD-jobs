@@ -1233,3 +1233,156 @@ main {
 .ag-theme-alpine .ag-header-row {
     border-bottom: 2px solid var(--primary, #3b82f6);
 }
+
+/* ============================================================
+   Tailwind utility replacements (was: cdn.tailwindcss.com play CDN)
+   Tailwind explicitly says don't use the play CDN in production:
+   it FOUCs, ships ~50KB of compiler JS, and runs at every load.
+   We only used a small set of utilities — keep them inline.
+   ============================================================ */
+
+/* Layout */
+.min-h-screen { min-height: 100vh; }
+.flex { display: flex; }
+.grid { display: grid; }
+.flex-col { flex-direction: column; }
+.flex-1 { flex: 1 1 0%; }
+.items-center { align-items: center; }
+.hidden { display: none; }
+.mx-auto { margin-left: auto; margin-right: auto; }
+.w-full { width: 100%; }
+
+/* Sizing */
+.max-w-\[1800px\] { max-width: 1800px; }
+.h-3 { height: 0.75rem; }
+.h-8 { height: 2rem; }
+.w-3 { width: 0.75rem; }
+.w-8 { width: 2rem; }
+
+/* Spacing */
+.px-4 { padding-left: 1rem; padding-right: 1rem; }
+.py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+.py-5 { padding-top: 1.25rem; padding-bottom: 1.25rem; }
+.py-6 { padding-top: 1.5rem; padding-bottom: 1.5rem; }
+.p-4 { padding: 1rem; }
+.mb-4 { margin-bottom: 1rem; }
+.ml-3 { margin-left: 0.75rem; }
+.gap-4 { gap: 1rem; }
+
+/* Typography */
+.text-2xl { font-size: 1.5rem; line-height: 2rem; }
+.text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+.text-white { color: #ffffff; }
+.text-blue-400 { color: #60a5fa; }
+.text-gray-400 { color: #9ca3af; }
+.text-red-400 { color: #f87171; }
+.text-red-500 { color: #ef4444; }
+.font-mono { font-family: var(--font-mono, ui-monospace, "Fira Code", Menlo, monospace); }
+
+/* Borders + radii */
+.border { border-width: 1px; border-style: solid; border-color: currentColor; }
+.border-b-2 { border-bottom-width: 2px; border-bottom-style: solid; }
+.border-blue-500 { border-color: #3b82f6; }
+.border-red-500\/50 { border-color: rgba(239, 68, 68, 0.5); }
+.rounded-full { border-radius: 9999px; }
+.rounded-lg { border-radius: 0.5rem; }
+.overflow-hidden { overflow: hidden; }
+
+/* Colors */
+.bg-red-900\/30 { background-color: rgba(127, 29, 29, 0.3); }
+
+/* Animation */
+.animate-spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Responsive */
+@media (min-width: 640px) {
+    .sm\:px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }
+}
+@media (min-width: 1024px) {
+    .lg\:px-8 { padding-left: 2rem; padding-right: 2rem; }
+}
+
+/* ============================================================
+   Skip-to-content link (a11y)
+   ============================================================ */
+.skip-link {
+    position: absolute;
+    top: -40px;
+    left: 8px;
+    background: var(--primary, #3b82f6);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    z-index: 1000;
+    text-decoration: none;
+    font-family: var(--font-mono, monospace);
+    font-size: 13px;
+    transition: top var(--t-base, 0.2s ease);
+}
+.skip-link:focus {
+    top: 8px;
+    outline: 2px solid var(--accent, #f59e0b);
+    outline-offset: 2px;
+}
+
+/* ============================================================
+   Cookie consent banner
+   ============================================================ */
+.cookie-banner {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    z-index: 90;
+    background: var(--bg-deep, #020617);
+    border: 1px solid var(--border, #334155);
+    border-radius: var(--r-lg, 8px);
+    padding: 12px 16px;
+    box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.5));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: var(--fg, #e2e8f0);
+}
+.cookie-banner-text { flex: 1 1 auto; line-height: 1.5; }
+.cookie-banner-prompt {
+    color: var(--primary, #3b82f6);
+    font-family: var(--font-mono, monospace);
+    font-weight: 700;
+    margin-right: 6px;
+}
+.cookie-banner a { color: var(--primary, #3b82f6); }
+.cookie-banner a:hover { color: var(--accent, #f59e0b); }
+.cookie-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.cookie-btn {
+    padding: 6px 14px;
+    border-radius: var(--r-md, 6px);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+    font-family: inherit;
+    transition: all var(--t-base, 0.2s ease);
+}
+.cookie-btn-primary {
+    background: var(--primary, #3b82f6);
+    color: white;
+}
+.cookie-btn-primary:hover { background: var(--primary-hover, #2563eb); }
+.cookie-btn-ghost {
+    background: transparent;
+    color: var(--fg-muted, #a8b8c8);
+    border-color: var(--border, #334155);
+}
+.cookie-btn-ghost:hover {
+    border-color: var(--border-strong, #475569);
+    color: var(--fg, #e2e8f0);
+}
+@media (max-width: 640px) {
+    .cookie-banner { flex-direction: column; align-items: stretch; }
+    .cookie-banner-actions { justify-content: flex-end; }
+}

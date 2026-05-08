@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>About | PhD Sky</title>
+<meta name="description" content="How PhD Sky aggregates academic positions from Bluesky: methodology, data sources, AI filtering, and how to report incorrect listings.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://phdsky.org/about">
+<meta property="og:title" content="About PhD Sky">
+<meta property="og:description" content="How PhD Sky aggregates academic positions from Bluesky: methodology, data sources, AI filtering, and how to report incorrect listings.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://phdsky.org/about">
+<meta property="og:image" content="https://phdsky.org/assets/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="About PhD Sky">
+<meta name="twitter:description" content="How PhD Sky aggregates academic positions from Bluesky.">
+<meta name="twitter:image" content="https://phdsky.org/assets/og-image.png">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/design-tokens.css">
+<style>
+  body { margin: 0; padding: 0; }
+  .page { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+  .crumb { font-size: 13px; margin-bottom: 24px; font-family: var(--font-mono); }
+  .crumb a { color: var(--primary); text-decoration: none; }
+  .crumb a:hover { color: var(--accent); }
+  h1 {
+    font-family: var(--font-mono); font-size: 28px; font-weight: 700;
+    letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 24px; color: var(--fg);
+  }
+  h2 {
+    font-family: var(--font-display); font-size: 18px; font-weight: 600;
+    margin: 32px 0 12px; color: var(--fg);
+  }
+  p { line-height: 1.65; font-size: 15px; color: var(--fg); margin: 0 0 12px; }
+  ol, ul { line-height: 1.65; padding-left: 22px; }
+  ol li, ul li { margin-bottom: 8px; }
+  code, .step-num {
+    font-family: var(--font-mono); background: var(--bg-elevated);
+    padding: 2px 6px; border-radius: 3px; font-size: 13px;
+  }
+  a { color: var(--primary); }
+  a:hover { color: var(--accent); }
+  .meta { color: var(--fg-subtle); font-size: 13px; font-family: var(--font-mono); margin: -16px 0 32px; }
+  footer {
+    margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border);
+    font-size: 13px; color: var(--fg-subtle); font-family: var(--font-mono);
+  }
+  footer a { color: var(--primary); }
+</style>
+</head>
+<body>
+<a href="#main" class="skip-link" style="position:absolute;top:-40px;left:8px;background:var(--primary);color:white;padding:8px 12px;border-radius:4px;z-index:1000;">Skip to content</a>
+<div class="page" id="main">
+  <nav class="crumb"><a href="/">&larr; All positions</a></nav>
+  <h1><span style="color:var(--primary)">&gt;</span> About PhD Sky</h1>
+  <p class="meta">An open-source aggregator for academic positions on Bluesky.</p>
+
+  <h2>What this is</h2>
+  <p>
+    PhD Sky aggregates PhD, postdoc, and research-position announcements posted
+    to <a href="https://bsky.app" target="_blank" rel="noopener">Bluesky</a> by
+    researchers, labs, and academic institutions. The catalog is updated four
+    times a day and currently lists more than 5,000 active positions across
+    biology, computer science, ecology, chemistry, physics, mathematics,
+    psychology, the humanities, and other fields.
+  </p>
+  <p>
+    The site is free, ad-free, requires no signup, and has no signups, forms,
+    or comments — it's a read-only browse experience.
+  </p>
+
+  <h2>How it works</h2>
+  <ol>
+    <li>
+      <strong>Fetch.</strong> Eleven academic search queries run against the
+      Bluesky AT Protocol API: terms like <code>"PhD position"</code>,
+      <code>"postdoc opportunity"</code>, <code>"funded studentship"</code>,
+      <code>"research assistant"</code> across English-language posts.
+    </li>
+    <li>
+      <strong>Filter (LLM).</strong>
+      <a href="https://build.nvidia.com/meta/llama-4-maverick-17b-128e-instruct" target="_blank" rel="noopener">Llama 4 Maverick</a>
+      (via the NVIDIA NIM API) reads each candidate post and decides whether it's
+      a genuine position announcement. Posts that pass are tagged with up to three
+      academic disciplines, a country, and a position type (PhD Student, Postdoc,
+      Master Student, Research Assistant).
+    </li>
+    <li>
+      <strong>Deduplicate.</strong> A two-stage pipeline removes reposts of the
+      same position: TF-IDF similarity flags candidates above 0.25, then the LLM
+      verifies anything in the 0.25–0.95 zone. Anything ≥ 0.95 is auto-merged.
+      The newer post wins; older ones become "earlier posts" linked from the canonical card.
+    </li>
+    <li>
+      <strong>Publish.</strong> Verified, deduplicated positions land in a
+      Postgres database and are baked into a static JSON snapshot
+      (<code>/positions.json</code>) plus per-job pages
+      (<code>/p/&lt;slug&gt;</code>) on every cron run, so the site loads fast
+      and stays cheap.
+    </li>
+  </ol>
+
+  <h2>Data source</h2>
+  <p>
+    Every position links back to the original Bluesky post. We don't paraphrase,
+    rehost the message text, or claim authorship — only the original poster
+    decides what to publish. To request removal of <em>your own</em> post from
+    this aggregator, see the contact link below.
+  </p>
+  <p>
+    Listings are user-generated and not verified by us. Always confirm details
+    (deadlines, funding, eligibility, supervisor) directly with the posting
+    institution before applying.
+  </p>
+
+  <h2>Open source</h2>
+  <p>
+    The full pipeline (search, filter, dedup, publish) is open source on
+    <a href="https://github.com/EydlinIlya/BlueSky-PhD-jobs" target="_blank" rel="noopener">GitHub</a>.
+    Issues and pull requests welcome.
+  </p>
+
+  <h2>Contact</h2>
+  <p>
+    Run by Ilya Eydlin. Spotted a misclassified or incorrect listing? Want your
+    Bluesky post removed from the aggregator? Email
+    <a href="mailto:eli@barcode-nano.com">eli@barcode-nano.com</a>.
+  </p>
+
+  <footer>
+    <a href="/">Home</a> · <a href="/positions">All positions</a> · <a href="/privacy">Privacy</a> · <a href="https://github.com/EydlinIlya/BlueSky-PhD-jobs" target="_blank" rel="noopener">GitHub</a>
+  </footer>
+</div>
+</body>
+</html>

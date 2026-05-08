@@ -832,9 +832,35 @@ function setupSearchListeners() {
     });
 }
 
+// ─── Cookie consent banner ────────────────────────────────────────────────────
+
+function setupCookieBanner() {
+    const banner = document.getElementById('cookie-banner');
+    if (!banner) return;
+    const decided = localStorage.getItem('cookieConsent');
+    if (decided === 'accepted' || decided === 'declined') return;
+
+    banner.classList.remove('hidden');
+
+    document.getElementById('cookie-accept').addEventListener('click', () => {
+        localStorage.setItem('cookieConsent', 'accepted');
+        if (typeof window.gtag === 'function') {
+            window.gtag('consent', 'update', { analytics_storage: 'granted' });
+        }
+        banner.classList.add('hidden');
+    });
+
+    document.getElementById('cookie-decline').addEventListener('click', () => {
+        localStorage.setItem('cookieConsent', 'declined');
+        // Stays in default-deny — no gtag update needed.
+        banner.classList.add('hidden');
+    });
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 async function init() {
+    setupCookieBanner();
     const loadingEl = document.getElementById('loading');
     const errorEl = document.getElementById('error');
     const appContainer = document.getElementById('app-container');
