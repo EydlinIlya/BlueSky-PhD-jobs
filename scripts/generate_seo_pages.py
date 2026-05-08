@@ -70,9 +70,27 @@ def escape_html(text):
     )
 
 
-def build_job_posting(pos):
+def extract_slug(uri):
+    """Return a URL-safe slug from a position URI, or None if not derivable.
+
+    Bluesky URIs look like `at://did:plc:abc/app.bsky.feed.post/3mldoq7ee5k2s`,
+    so the post ID lives in the trailing segment. ScholarshipDB URLs follow
+    the same pattern. Sanitize defensively to keep it filename-safe.
+    """
+    if not uri:
+        return None
+    raw = uri.rsplit("/", 1)[-1]
+    slug = re.sub(r"[^a-zA-Z0-9_-]", "", raw)
+    return slug or None
+
+
+def build_job_posting(pos, canonical_url=None):
     """Return a JSON-LD JobPosting dict for a position, or None if it can't be
     represented validly (missing country mapping, missing required fields).
+
+    `canonical_url` lets callers point JobPosting.url at the per-job landing
+    page (`/p/<slug>`) instead of the original Bluesky post — that's where
+    Google Jobs should send users so they see a structured listing first.
 
     Skipping is preferable to emitting partial markup — Google's rich-results
     validator marks the whole page down on a single broken JobPosting.
@@ -96,11 +114,9 @@ def build_job_posting(pos):
 
     handle = pos.get("user_handle") or ""
     description = pos.get("message") or ""
-    url = pos.get("url") or ""
+    fallback_url = pos.get("url") or ""
+    listing_url = canonical_url or fallback_url
 
-    # validThrough: created_at + 90d. Parse the 'Z' suffix Supabase returns
-    # by stripping it and re-attaching, since fromisoformat only handles 'Z'
-    # natively from Python 3.11+ but our created_at format is reliable.
     try:
         dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
         valid_through = (dt + timedelta(days=JOB_VALID_DAYS)).isoformat()
@@ -116,7 +132,7 @@ def build_job_posting(pos):
         "validThrough": valid_through,
         "employmentType": employment_type,
         "directApply": False,
-        "url": url,
+        "url": listing_url,
         "hiringOrganization": {
             "@type": "Organization",
             "name": handle or "Bluesky poster",
@@ -130,26 +146,13 @@ def build_job_posting(pos):
             },
         },
     }
-    # Drop empty values Google would flag.
     if not employment_type:
         jp.pop("employmentType")
     if not jp["hiringOrganization"]["sameAs"]:
         jp["hiringOrganization"].pop("sameAs")
-    if not url:
+    if not listing_url:
         jp.pop("url")
     return jp
-
-
-def render_job_posting_script(pos):
-    """Return a <script> tag with JobPosting JSON-LD, or '' if not valid."""
-    jp = build_job_posting(pos)
-    if jp is None:
-        return ""
-    return (
-        '<script type="application/ld+json">'
-        + json.dumps(jp, separators=(",", ":"))
-        + "</script>"
-    )
 
 
 def fetch_positions(client, limit=500):
@@ -230,6 +233,7 @@ def get_total_count(client):
 def generate_noscript_html(positions):
     items = []
     for pos in positions[:30]:
+        slug = extract_slug(pos.get("uri"))
         date = pos.get("created_at", "")[:10]
         country = pos.get("country") or ""
         country_html = f" | {escape_html(country)}" if country and country != "Unknown" else ""
@@ -241,16 +245,22 @@ def generate_noscript_html(positions):
         handle = escape_html(pos.get("user_handle") or "")
         url = pos.get("url") or ""
 
-        link_html = ""
+        heading = f"{disc_html} &mdash; {type_html}"
+        if slug:
+            heading = f'<a href="/p/{slug}">{heading}</a>'
+
+        cta_parts = []
+        if slug:
+            cta_parts.append(f'<a href="/p/{slug}">Read more</a>')
         if url:
-            link_html = f'<a href="{escape_html(url)}">View Post</a>'
+            cta_parts.append(f'<a href="{escape_html(url)}">View on Bluesky</a>')
+        cta_html = " | ".join(cta_parts)
 
         items.append(
-            f"<article><h3>{disc_html} &mdash; {type_html}</h3>"
+            f"<article><h3>{heading}</h3>"
             f"<p><small>{date}{country_html} | @{handle}</small></p>"
             f"<p>{message}</p>"
-            f"{link_html}</article>"
-            f"{render_job_posting_script(pos)}"
+            f"{cta_html}</article>"
         )
 
     return (
@@ -258,7 +268,7 @@ def generate_noscript_html(positions):
         '<div style="max-width:800px;margin:2rem auto;padding:0 1rem;color:#e2e8f0;">\n'
         "<h2>Recent PhD &amp; Postdoc Positions</h2>\n"
         + "\n".join(items)
-        + '\n<p><a href="positions.html">View all positions</a></p>\n'
+        + '\n<p><a href="/positions">View all positions</a></p>\n'
         "</div>\n"
         "</noscript>"
     )
@@ -332,6 +342,7 @@ def generate_positions_html(positions):
 
     articles = []
     for pos in positions[:500]:
+        slug = extract_slug(pos.get("uri"))
         date = pos.get("created_at", "")[:10]
         country = pos.get("country") or ""
         country_html = f" | {escape_html(country)}" if country and country != "Unknown" else ""
@@ -339,22 +350,32 @@ def generate_positions_html(positions):
         disc_html = ", ".join(escape_html(d) for d in disciplines)
         types = pos.get("position_type") or []
         type_html = ", ".join(escape_html(t) for t in types)
-        message = escape_html(pos.get("message") or "")
+        full_message = pos.get("message") or ""
+        preview = full_message[:400] + ("..." if len(full_message) > 400 else "")
+        message = escape_html(preview)
         handle = escape_html(pos.get("user_handle") or "")
         url = pos.get("url") or ""
 
-        link_html = ""
+        heading_inner = f"{disc_html} &mdash; {type_html}"
+        heading = (
+            f'<a href="/p/{slug}" style="color:#e2e8f0;text-decoration:none;">{heading_inner}</a>'
+            if slug else heading_inner
+        )
+
+        cta_parts = []
+        if slug:
+            cta_parts.append(f'<a href="/p/{slug}" style="color:#6366f1;">Read more &rarr;</a>')
         if url:
-            link_html = f'<p><a href="{escape_html(url)}" style="color:#6366f1;">View original post &rarr;</a></p>'
+            cta_parts.append(f'<a href="{escape_html(url)}" style="color:#94a3b8;">View on Bluesky</a>')
+        cta_html = " &middot; ".join(cta_parts)
 
         articles.append(
             f'<article style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:1.5rem;margin-bottom:1rem;">\n'
-            f'  <h2 style="font-size:1rem;margin:0 0 0.5rem 0;color:#e2e8f0;">{disc_html} &mdash; {type_html}</h2>\n'
+            f'  <h2 style="font-size:1rem;margin:0 0 0.5rem 0;color:#e2e8f0;">{heading}</h2>\n'
             f'  <p style="font-size:0.85rem;color:#94a3b8;margin:0 0 0.75rem 0;">{date}{country_html} | @{handle}</p>\n'
             f'  <p style="font-size:0.95rem;line-height:1.6;color:#e2e8f0;margin:0 0 0.75rem 0;white-space:pre-wrap;">{message}</p>\n'
-            f"  {link_html}\n"
+            f"  <p>{cta_html}</p>\n"
             f"</article>"
-            f"{render_job_posting_script(pos)}"
         )
 
     n = len(articles)
@@ -463,28 +484,189 @@ def generate_positions_html(positions):
     print(f"Generated positions.html: {len(articles)} positions, {size_kb:.0f}KB")
 
 
-def generate_sitemap():
+def render_position_page(pos, slug):
+    """Render the standalone HTML page for a single position. Used by Google
+    Jobs as the canonical landing URL — must surface the title, message, and
+    a clear CTA back to the original Bluesky post.
+    """
+    canonical = f"{BASE_URL}p/{slug}"
+
+    disciplines = pos.get("disciplines") or []
+    types = pos.get("position_type") or []
+    country = pos.get("country") or ""
+    handle = pos.get("user_handle") or ""
+    full_message = pos.get("message") or ""
+    bsky_url = pos.get("url") or ""
+    date = (pos.get("created_at") or "")[:10]
+
+    disc_primary = disciplines[0] if disciplines else "Academic"
+    type_primary = types[0] if types else "Position"
+    country_part = f" — {country}" if country and country != "Unknown" else ""
+    title = f"{disc_primary} {type_primary}{country_part}"
+
+    desc_source = " ".join(full_message.split())
+    desc = desc_source[:155] + ("..." if len(desc_source) > 155 else "")
+
+    jp = build_job_posting(pos, canonical_url=canonical)
+    jp_script = ""
+    if jp:
+        jp_script = (
+            '<script type="application/ld+json">'
+            + json.dumps(jp, separators=(",", ":"))
+            + "</script>"
+        )
+
+    tag_html = []
+    for d in disciplines:
+        tag_html.append(f'<span class="tag tag-disc">{escape_html(d)}</span>')
+    for t in types:
+        tag_html.append(f'<span class="tag tag-pos">{escape_html(t)}</span>')
+    if country and country != "Unknown":
+        tag_html.append(f'<span class="tag tag-country">{escape_html(country)}</span>')
+
+    handle_link = (
+        f'<a href="https://bsky.app/profile/{escape_html(handle)}">@{escape_html(handle)}</a>'
+        if handle else ""
+    )
+
+    cta = ""
+    if bsky_url:
+        cta = (
+            f'<a class="cta" href="{escape_html(bsky_url)}" '
+            f'target="_blank" rel="noopener">View original post on Bluesky &rarr;</a>'
+        )
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{escape_html(title)} | PhD Sky</title>
+<meta name="description" content="{escape_html(desc)}">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="{canonical}">
+<meta property="og:title" content="{escape_html(title)}">
+<meta property="og:description" content="{escape_html(desc)}">
+<meta property="og:type" content="article">
+<meta property="og:url" content="{canonical}">
+<meta property="og:site_name" content="PhD Sky">
+<meta property="og:image" content="{BASE_URL}assets/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{escape_html(title)}">
+<meta name="twitter:description" content="{escape_html(desc)}">
+<meta name="twitter:image" content="{BASE_URL}assets/og-image.png">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/design-tokens.css">
+{jp_script}
+<style>
+  body {{ margin: 0; padding: 0; }}
+  .page {{ max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }}
+  .crumb {{ font-size: 13px; margin-bottom: 24px; font-family: var(--font-mono); }}
+  .crumb a {{ color: var(--primary); text-decoration: none; }}
+  .crumb a:hover {{ color: var(--accent); }}
+  h1 {{ font-family: var(--font-mono); font-size: 28px; font-weight: 700;
+        letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 12px; color: var(--fg); }}
+  .meta {{ color: var(--fg-subtle); font-family: var(--font-mono);
+           font-size: 13px; margin: 0 0 16px; }}
+  .meta a {{ color: var(--primary); }}
+  .tags {{ display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; }}
+  .tag {{ display: inline-block; padding: 3px 10px; border-radius: 4px;
+          font-size: 12px; font-weight: 500; line-height: 1.5; color: white; }}
+  .tag-pos {{ background: var(--pos-type-bg); }}
+  .tag-country {{ background: var(--country-bg); }}
+  .tag-disc {{ background: var(--bg-elevated); color: var(--fg-muted);
+               border: 1px solid var(--border); }}
+  .message {{ white-space: pre-wrap; line-height: 1.65; font-size: 15px;
+              background: var(--bg-card); border: 1px solid var(--border);
+              border-radius: var(--r-lg); padding: 20px; margin: 0 0 24px;
+              word-wrap: break-word; overflow-wrap: anywhere; }}
+  .cta {{ display: inline-flex; align-items: center; gap: 8px;
+          padding: 12px 20px; background: var(--primary); color: white;
+          text-decoration: none; border-radius: var(--r-md); font-weight: 600;
+          font-size: 14px; transition: background var(--t-base); }}
+  .cta:hover {{ background: var(--primary-hover); color: white; }}
+  footer {{ margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border);
+            font-size: 13px; color: var(--fg-subtle); font-family: var(--font-mono); }}
+  footer a {{ color: var(--primary); }}
+</style>
+</head>
+<body>
+<div class="page">
+  <nav class="crumb"><a href="/">&larr; All positions</a></nav>
+  <h1>{escape_html(title)}</h1>
+  <p class="meta">Posted {date}{f" by {handle_link}" if handle_link else ""}</p>
+  <div class="tags">{"".join(tag_html)}</div>
+  <div class="message">{escape_html(full_message)}</div>
+  {cta}
+  <footer>
+    <a href="/">Browse all PhD &amp; Postdoc positions</a>
+  </footer>
+</div>
+</body>
+</html>
+"""
+
+
+def generate_position_pages(positions):
+    """Write `docs/p/<slug>.html` for every canonical position; remove orphans."""
+    pages_dir = os.path.join(DOCS_DIR, "p")
+    os.makedirs(pages_dir, exist_ok=True)
+
+    # slug -> created_at[:10], used by sitemap to set per-page lastmod so
+    # Google doesn't recrawl 5k unchanged pages every cron run.
+    slug_to_lastmod = {}
+    written = 0
+
+    for pos in positions:
+        slug = extract_slug(pos.get("uri"))
+        if not slug:
+            continue
+        if slug in slug_to_lastmod:
+            continue
+        slug_to_lastmod[slug] = (pos.get("created_at") or "")[:10]
+
+        path = os.path.join(pages_dir, f"{slug}.html")
+        html = render_position_page(pos, slug)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(html)
+        written += 1
+
+    removed = 0
+    for filename in os.listdir(pages_dir):
+        if not filename.endswith(".html"):
+            continue
+        if filename[:-5] not in slug_to_lastmod:
+            os.remove(os.path.join(pages_dir, filename))
+            removed += 1
+
+    print(f"Generated per-job pages: {written} written, {removed} orphans cleaned")
+    return slug_to_lastmod
+
+
+def generate_sitemap(slug_to_lastmod=None):
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>{BASE_URL}</loc>
-    <lastmod>{today}</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>{BASE_URL}positions</loc>
-    <lastmod>{today}</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.8</priority>
-  </url>
-</urlset>"""
+    parts = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        f"  <url><loc>{BASE_URL}</loc><lastmod>{today}</lastmod>"
+        f"<changefreq>daily</changefreq><priority>1.0</priority></url>",
+        f"  <url><loc>{BASE_URL}positions</loc><lastmod>{today}</lastmod>"
+        f"<changefreq>daily</changefreq><priority>0.8</priority></url>",
+    ]
+    for slug in sorted(slug_to_lastmod or {}):
+        lastmod = (slug_to_lastmod or {}).get(slug) or today
+        parts.append(
+            f"  <url><loc>{BASE_URL}p/{slug}</loc><lastmod>{lastmod}</lastmod>"
+            f"<changefreq>weekly</changefreq><priority>0.6</priority></url>"
+        )
+    parts.append("</urlset>")
+    xml = "\n".join(parts)
 
     path = os.path.join(DOCS_DIR, "sitemap.xml")
     with open(path, "w", encoding="utf-8") as f:
         f.write(xml)
-    print("Generated sitemap.xml")
+    extra = len(slug_to_lastmod or {})
+    print(f"Generated sitemap.xml: 2 + {extra} per-job URLs")
 
 
 def generate_positions_json(positions, duplicates):
@@ -544,14 +726,15 @@ def main():
         print("No positions found, skipping SEO generation")
         return
 
-    update_index_html(positions, total_count)
-    generate_positions_html(positions)
-    generate_sitemap()
-
     print("Fetching full snapshot for static frontend data...")
     all_positions = fetch_all_canonical_positions(client)
     all_duplicates = fetch_all_duplicates(client)
     print(f"Snapshot: {len(all_positions)} canonical, {len(all_duplicates)} duplicates")
+
+    update_index_html(positions, total_count)
+    generate_positions_html(positions)
+    slug_to_lastmod = generate_position_pages(all_positions)
+    generate_sitemap(slug_to_lastmod)
     generate_positions_json(all_positions, all_duplicates)
 
     print("SEO generation complete!")
