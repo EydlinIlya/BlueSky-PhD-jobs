@@ -832,28 +832,48 @@ function setupSearchListeners() {
     });
 }
 
-// ─── Cookie consent banner ────────────────────────────────────────────────────
+// ─── Cookie consent (vanilla-cookieconsent integration) ──────────────────────
+// Library handles its own UI/storage. We just wire it to Google Consent Mode v2:
+// when the user accepts the "analytics" category, flip analytics_storage to
+// granted; default-deny is set in the inline script in <head>.
 
 function setupCookieBanner() {
-    const banner = document.getElementById('cookie-banner');
-    if (!banner) return;
-    const decided = localStorage.getItem('cookieConsent');
-    if (decided === 'accepted' || decided === 'declined') return;
+    if (typeof window.CookieConsent === 'undefined') return;
 
-    banner.classList.remove('hidden');
-
-    document.getElementById('cookie-accept').addEventListener('click', () => {
-        localStorage.setItem('cookieConsent', 'accepted');
+    const onAnalyticsConsent = () => {
         if (typeof window.gtag === 'function') {
             window.gtag('consent', 'update', { analytics_storage: 'granted' });
         }
-        banner.classList.add('hidden');
-    });
+    };
 
-    document.getElementById('cookie-decline').addEventListener('click', () => {
-        localStorage.setItem('cookieConsent', 'declined');
-        // Stays in default-deny — no gtag update needed.
-        banner.classList.add('hidden');
+    window.CookieConsent.run({
+        guiOptions: {
+            consentModal: { layout: 'bar', position: 'bottom', equalWeightButtons: false }
+        },
+        categories: {
+            necessary: { enabled: true, readOnly: true },
+            analytics: {}
+        },
+        language: {
+            default: 'en',
+            translations: {
+                en: {
+                    consentModal: {
+                        title: '> Cookies',
+                        description: 'We use Google Analytics for visitor stats. No ads, no profiling. <a href="/privacy">Privacy policy</a>.',
+                        acceptAllBtn: 'Accept',
+                        acceptNecessaryBtn: 'Decline',
+                        showPreferencesBtn: ''
+                    }
+                }
+            }
+        },
+        onConsent: ({ cookie }) => {
+            if (cookie.categories.includes('analytics')) onAnalyticsConsent();
+        },
+        onChange: ({ cookie }) => {
+            if (cookie.categories.includes('analytics')) onAnalyticsConsent();
+        }
     });
 }
 
