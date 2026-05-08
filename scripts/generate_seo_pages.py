@@ -11,7 +11,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -28,6 +28,19 @@ BASE_URL = os.environ.get("SITE_BASE_URL") or "https://phdsky.org/"
 if not BASE_URL.endswith("/"):
     BASE_URL += "/"
 DOCS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs")
+
+# position_type → schema.org employmentType enum.
+# PhD/Master are coded INTERN per Google's example for trainee/graduate roles
+# (none of our position types map cleanly to FULL_TIME for studentships).
+EMPLOYMENT_TYPE_MAP = {
+    "PhD Student": "INTERN",
+    "Master Student": "INTERN",
+    "Postdoc": "FULL_TIME",
+    "Research Assistant": "FULL_TIME",
+}
+
+JOB_VALID_DAYS = 90  # default expiry; academic posts rarely state one
+
 
 COUNTRY_ISO = {
     "Australia": "AU", "Austria": "AT", "Belgium": "BE", "Brazil": "BR",
@@ -54,6 +67,88 @@ def escape_html(text):
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace('"', "&quot;")
+    )
+
+
+def build_job_posting(pos):
+    """Return a JSON-LD JobPosting dict for a position, or None if it can't be
+    represented validly (missing country mapping, missing required fields).
+
+    Skipping is preferable to emitting partial markup — Google's rich-results
+    validator marks the whole page down on a single broken JobPosting.
+    """
+    country = pos.get("country") or ""
+    iso = COUNTRY_ISO.get(country)
+    if not iso:
+        return None
+
+    created = pos.get("created_at") or ""
+    if not created:
+        return None
+
+    disciplines = pos.get("disciplines") or []
+    types = pos.get("position_type") or []
+    if not disciplines or not types:
+        return None
+
+    title = f"{disciplines[0]} {types[0]}"
+    employment_type = EMPLOYMENT_TYPE_MAP.get(types[0])
+
+    handle = pos.get("user_handle") or ""
+    description = pos.get("message") or ""
+    url = pos.get("url") or ""
+
+    # validThrough: created_at + 90d. Parse the 'Z' suffix Supabase returns
+    # by stripping it and re-attaching, since fromisoformat only handles 'Z'
+    # natively from Python 3.11+ but our created_at format is reliable.
+    try:
+        dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+        valid_through = (dt + timedelta(days=JOB_VALID_DAYS)).isoformat()
+    except ValueError:
+        return None
+
+    jp = {
+        "@context": "https://schema.org",
+        "@type": "JobPosting",
+        "title": title,
+        "description": escape_html(description),
+        "datePosted": created,
+        "validThrough": valid_through,
+        "employmentType": employment_type,
+        "directApply": False,
+        "url": url,
+        "hiringOrganization": {
+            "@type": "Organization",
+            "name": handle or "Bluesky poster",
+            "sameAs": f"https://bsky.app/profile/{handle}" if handle else "",
+        },
+        "jobLocation": {
+            "@type": "Place",
+            "address": {
+                "@type": "PostalAddress",
+                "addressCountry": iso,
+            },
+        },
+    }
+    # Drop empty values Google would flag.
+    if not employment_type:
+        jp.pop("employmentType")
+    if not jp["hiringOrganization"]["sameAs"]:
+        jp["hiringOrganization"].pop("sameAs")
+    if not url:
+        jp.pop("url")
+    return jp
+
+
+def render_job_posting_script(pos):
+    """Return a <script> tag with JobPosting JSON-LD, or '' if not valid."""
+    jp = build_job_posting(pos)
+    if jp is None:
+        return ""
+    return (
+        '<script type="application/ld+json">'
+        + json.dumps(jp, separators=(",", ":"))
+        + "</script>"
     )
 
 
@@ -155,6 +250,7 @@ def generate_noscript_html(positions):
             f"<p><small>{date}{country_html} | @{handle}</small></p>"
             f"<p>{message}</p>"
             f"{link_html}</article>"
+            f"{render_job_posting_script(pos)}"
         )
 
     return (
@@ -258,6 +354,7 @@ def generate_positions_html(positions):
             f'  <p style="font-size:0.95rem;line-height:1.6;color:#e2e8f0;margin:0 0 0.75rem 0;white-space:pre-wrap;">{message}</p>\n'
             f"  {link_html}\n"
             f"</article>"
+            f"{render_job_posting_script(pos)}"
         )
 
     n = len(articles)
@@ -266,7 +363,7 @@ def generate_positions_html(positions):
         "@type": "Dataset",
         "name": "PhD & Postdoc Positions from Bluesky",
         "description": f"Complete listing of {n} PhD, postdoc, and research positions aggregated from Bluesky social network. AI-powered filtering updated daily.",
-        "url": f"{BASE_URL}positions.html",
+        "url": f"{BASE_URL}positions",
         "creator": {
             "@type": "Organization",
             "name": "BlueSky PhD Jobs",
@@ -283,7 +380,7 @@ def generate_positions_html(positions):
         "distribution": [{
             "@type": "DataDownload",
             "encodingFormat": "text/html",
-            "contentUrl": f"{BASE_URL}positions.html",
+            "contentUrl": f"{BASE_URL}positions",
         }],
     }
     jsonld = json.dumps(dataset_schema, indent=2)
@@ -298,12 +395,12 @@ def generate_positions_html(positions):
     <meta name="keywords" content="PhD positions, postdoc jobs, academic jobs, research positions, Bluesky, university jobs, doctoral research, STEM careers">
     <meta name="author" content="BlueSky PhD Jobs">
     <meta name="robots" content="index, follow">
-    <link rel="canonical" href="{BASE_URL}positions.html">
+    <link rel="canonical" href="{BASE_URL}positions">
     <!-- Open Graph -->
     <meta property="og:title" content="All PhD & Postdoc Positions | Academic Job Board">
     <meta property="og:description" content="Complete listing of PhD, postdoc, and research positions aggregated from Bluesky. Updated daily.">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="{BASE_URL}positions.html">
+    <meta property="og:url" content="{BASE_URL}positions">
     <meta property="og:site_name" content="BlueSky PhD Jobs">
     <meta property="og:image" content="{BASE_URL}assets/og-image.png">
     <!-- Twitter Card -->
@@ -377,7 +474,7 @@ def generate_sitemap():
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>{BASE_URL}positions.html</loc>
+    <loc>{BASE_URL}positions</loc>
     <lastmod>{today}</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
