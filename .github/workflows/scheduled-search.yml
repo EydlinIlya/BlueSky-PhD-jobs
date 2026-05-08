@@ -74,5 +74,9 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/
           git diff --staged --quiet || git commit -m "Update SEO content (daily)"
-          git pull --rebase
+          # Prefer the locally-regenerated docs/ files when rebasing onto a
+          # newer remote (Supabase regen output is the source of truth).
+          # Without this, conflicts in positions.json/sitemap.xml caused by
+          # parallel manual pushes abort the rebase and the run fails.
+          git pull --rebase --strategy-option=theirs
           git push

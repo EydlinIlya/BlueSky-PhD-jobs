@@ -1327,16 +1327,20 @@ main {
 }
 
 /* ============================================================
-   Cookie consent (vanilla-cookieconsent) — minimal theme overrides
-   to match the dark/cobalt site palette.
+   Cookie consent (vanilla-cookieconsent) — branded overrides on top
+   of the library's `cc--darkmode` baseline. Matches the cobalt /
+   slate palette and uses Fira Code for the terminal-voice title.
    ============================================================ */
-:root {
+.cc--darkmode {
     --cc-bg: var(--bg-deep, #020617);
     --cc-primary-color: var(--fg, #e2e8f0);
     --cc-secondary-color: var(--fg-muted, #a8b8c8);
     --cc-btn-primary-bg: var(--primary, #3b82f6);
     --cc-btn-primary-color: #ffffff;
+    --cc-btn-primary-border-color: var(--primary, #3b82f6);
     --cc-btn-primary-hover-bg: var(--primary-hover, #2563eb);
+    --cc-btn-primary-hover-border-color: var(--primary-hover, #2563eb);
+    --cc-btn-primary-hover-color: #ffffff;
     --cc-btn-secondary-bg: transparent;
     --cc-btn-secondary-color: var(--fg-muted, #a8b8c8);
     --cc-btn-secondary-border-color: var(--border, #334155);
@@ -1347,7 +1351,17 @@ main {
     --cc-link-color: var(--primary, #3b82f6);
     --cc-modal-border-radius: var(--r-lg, 8px);
     --cc-btn-border-radius: var(--r-md, 6px);
-    --cc-font-family: var(--font-display, system-ui, sans-serif);
+    --cc-font-family: var(--font-display, "Fira Sans", system-ui, sans-serif);
 }
-/* Bottom-bar layout: lift it above our z-index 50 sticky footer */
+/* Lift the bar above the z-index 50 sticky footer so it doesn't sit behind it. */
 #cc-main .cm--bar { z-index: 100; }
+/* Terminal-voice title — match the "> PhD_Positions" header treatment. */
+#cc-main .cm__title {
+    font-family: var(--font-mono, "Fira Code", ui-monospace, monospace);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--fg, #e2e8f0);
+}
+/* The "> " prefix should pop in cobalt like the rest of the brand. */
+#cc-main .cm__desc a { color: var(--primary, #3b82f6); }
+#cc-main .cm__desc a:hover { color: var(--accent, #f59e0b); }
