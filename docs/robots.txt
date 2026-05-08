@@ -1,4 +1,4 @@
 User-agent: *
-Allow: /
+Disallow: /
 
-Sitemap: https://eydlinilya.github.io/BlueSky-PhD-jobs/sitemap.xml
+Sitemap: https://phdsky.org/sitemap.xml

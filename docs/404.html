@@ -1,33 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Page Not Found | PhD Positions</title>
-    <meta name="robots" content="noindex">
-    <style>
-        body {
-            font-family: 'Segoe UI', system-ui, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            margin: 0;
-            text-align: center;
-        }
-        h1 { font-size: 4rem; margin: 0; color: #6366f1; }
-        p { color: #94a3b8; margin: 1rem 0; }
-        a { color: #6366f1; text-decoration: none; }
-        a:hover { color: #10b981; }
-    </style>
+<meta charset="UTF-8">
+<title>PhD Sky — moved to phdsky.org</title>
+<link rel="canonical" href="https://phdsky.org/">
+<meta name="robots" content="noindex">
+<meta http-equiv="refresh" content="0; url=https://phdsky.org/">
+<script>
+  (function () {
+    var path = window.location.pathname.replace(/^\/BlueSky-PhD-jobs/, "");
+    var target = "https://phdsky.org" + (path || "/") + window.location.search + window.location.hash;
+    window.location.replace(target);
+  })();
+</script>
+<style>
+  body { font-family: ui-monospace, "Fira Code", Menlo, monospace;
+         background: #0f172a; color: #e2e8f0;
+         display: flex; align-items: center; justify-content: center;
+         min-height: 100vh; margin: 0; padding: 24px; text-align: center; }
+  a { color: #3b82f6; }
+</style>
 </head>
 <body>
-    <div>
-        <h1>404</h1>
-        <p>Page not found</p>
-        <a href="./">Back to PhD Positions</a>
-    </div>
+  <div>
+    <p>This site has moved to <a href="https://phdsky.org/">phdsky.org</a>.</p>
+    <p>Redirecting…</p>
+  </div>
 </body>
 </html>
