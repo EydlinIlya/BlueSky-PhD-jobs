@@ -17,9 +17,11 @@ column (TIMESTAMPTZ, NULL = un-posted). See README for the migration SQL.
 """
 
 import html
+import json
 import os
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
@@ -27,8 +29,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TELEGRAM_MAX_LENGTH = 4096
-PAGES_URL = "https://eydlinilya.github.io/BlueSky-PhD-jobs/"
+PAGES_URL = "https://phdsky.org/"
 REPO_URL = "https://github.com/EydlinIlya/BlueSky-PhD-jobs"
+
+_AGGREGATORS_FILE = Path(__file__).resolve().parent.parent / "docs" / "aggregators.json"
+try:
+    AGGREGATORS = set(json.loads(_AGGREGATORS_FILE.read_text(encoding="utf-8")).get("handles", []))
+except (FileNotFoundError, json.JSONDecodeError):
+    AGGREGATORS = set()
 
 FOOTER = (
     "\n\n"
@@ -48,12 +56,18 @@ def format_position(pos):
     types = pos.get("position_type") or []
     type_tags = " | ".join(f"#{t.replace('&', '').replace('  ', ' ').replace(' ', '_')}" for t in types)
 
-    country = pos.get("country") or ""
-    country_tag = ""
-    if country and country != "Unknown":
-        country_tag = f" | #{country.replace(' ', '_')}"
+    chunks = []
+    if type_tags:
+        chunks.append(type_tags)
 
-    header = f"{type_tags}{country_tag}" if type_tags else ""
+    country = pos.get("country") or ""
+    if country and country != "Unknown":
+        chunks.append(f"#{country.replace(' ', '_')}")
+
+    if (pos.get("user_handle") or "") in AGGREGATORS:
+        chunks.append("#Aggregator")
+
+    header = " | ".join(chunks)
 
     message = pos.get("message") or ""
     if len(message) > 400:

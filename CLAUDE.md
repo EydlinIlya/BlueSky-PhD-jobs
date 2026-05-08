@@ -294,7 +294,7 @@ Static GitHub Pages site for browsing PhD positions:
 
 **`docs/aggregators.json`** - Hand-maintained list `{ "handles": [...] }` of Bluesky handles flagged as aggregator reposters. Source of truth for the UI filter. Updated via `scripts/find_aggregator_candidates.py`.
 
-**`vercel.json`** - Static deploy config for Vercel (serves `docs/`). Lets the same repo be previewed/deployed on Vercel without a build step. Set `SITE_BASE_URL` env/secret to override the canonical URL in `scripts/generate_seo_pages.py` during the cutover; unset → falls back to the current GitHub Pages URL.
+**`vercel.json`** - Static deploy config for Vercel (serves `docs/`). The site is canonical at **<https://phdsky.org/>** (Vercel from `main:/docs`). The legacy GitHub Pages URL redirects here from the `gh-pages` branch (its `docs/` contains only a meta-refresh + JS redirect to `phdsky.org`). `scripts/generate_seo_pages.py` defaults `BASE_URL` to `https://phdsky.org/`; override with `SITE_BASE_URL` env if you need a different host.
 
 ### RLS Policy Required
 

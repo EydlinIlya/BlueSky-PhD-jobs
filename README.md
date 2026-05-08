@@ -213,9 +213,12 @@ Positions tagged with both **Biology** and **Computer Science** (bioinformatics,
 
 If the secrets are not set, the Telegram step is silently skipped.
 
-## GitHub Pages Frontend
+## Frontend
 
-A web interface to browse PhD positions is available at the `/docs` folder.
+The browse-positions site is at **<https://phdsky.org/>** (Vercel, served from
+`/docs` on `main`). The legacy GitHub Pages URL
+(`eydlinilya.github.io/BlueSky-PhD-jobs/`) now serves a 0-second redirect to
+`phdsky.org` from the `gh-pages` branch.
 
 ### Setup
 
@@ -225,12 +228,7 @@ A web interface to browse PhD positions is available at the `/docs` folder.
    CREATE POLICY "Allow public read" ON phd_positions FOR SELECT USING (true);
    ```
 
-2. **Update `docs/app.js`** with your Supabase anon key
-
-3. **Enable GitHub Pages**:
-   - Go to repo Settings → Pages
-   - Source: Deploy from branch
-   - Branch: main, folder: /docs
+2. **Update `docs/app.js`** with your Supabase anon key.
 
 ## Maintenance
 
@@ -255,21 +253,16 @@ output and add real aggregator handles to `docs/aggregators.json`:
 The filter is purely a frontend concern; it does **not** affect ingestion or
 deduplication (dedup strips the `[Bio: ...]` prefix before TF-IDF comparison).
 
-## Hosting / Vercel migration
+## Hosting
 
-The site currently deploys via GitHub Pages from `/docs` on `main`. A
-`vercel.json` is committed so the same folder can be served from Vercel
-without changes:
-
-1. Import the repo into Vercel. Vercel auto-detects `vercel.json` and serves
-   `docs/` as a static site (no build step).
-2. When ready to cut over, add a repo secret `SITE_BASE_URL` (e.g.
-   `https://phd-jobs.example.com/`). `scripts/generate_seo_pages.py` reads it
-   and regenerates the sitemap + JSON-LD with the new canonical URL. Without
-   the secret, generation falls back to the current GitHub Pages URL.
-3. Optionally add a `<meta http-equiv="refresh">` redirect to
-   `docs/index.html` on the GitHub Pages branch pointing at the Vercel domain
-   so old inbound links follow along.
+- **Primary:** `phdsky.org` — Vercel, deploys from `/docs` on `main`.
+  `vercel.json` configures cleanUrls + cache headers; no build step.
+- **Legacy:** `eydlinilya.github.io/BlueSky-PhD-jobs/` — GitHub Pages,
+  sourced from the `gh-pages` branch. That branch only contains a redirect
+  page so old inbound links forward to `phdsky.org`.
+- `scripts/generate_seo_pages.py` defaults `BASE_URL` to `https://phdsky.org/`.
+  Override with the `SITE_BASE_URL` env var if you ever need to regenerate
+  for a different domain.
 
 ## Dependencies
 

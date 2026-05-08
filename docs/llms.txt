@@ -23,6 +23,6 @@ Arts & Humanities, Education, and more.
 
 ## URLs
 
-- Main page (interactive): https://eydlinilya.github.io/BlueSky-PhD-jobs/
-- All positions (static): https://eydlinilya.github.io/BlueSky-PhD-jobs/positions.html
+- Main page (interactive): https://phdsky.org/
+- All positions (static): https://phdsky.org/positions.html
 - Source code: https://github.com/EydlinIlya/BlueSky-PhD-jobs
