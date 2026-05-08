@@ -219,6 +219,14 @@ async function loadFullData() {
 
 // ─── Card rendering ───────────────────────────────────────────────────────────
 
+// Mirrors extract_slug() in scripts/generate_seo_pages.py — keep in sync.
+function extractSlug(uri) {
+    if (!uri) return null;
+    const tail = uri.split('/').pop();
+    const slug = tail.replace(/[^a-zA-Z0-9_-]/g, '');
+    return slug || null;
+}
+
 function createCard(position, index) {
     const date = position.created_at ? new Date(position.created_at) : null;
     const dateStr = date ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
@@ -274,8 +282,14 @@ function createCard(position, index) {
             </div>`;
     }
 
+    const slug = extractSlug(position.uri);
+    const stretchedLink = slug
+        ? `<a class="card-stretched-link" href="/p/${slug}" aria-label="Open full job page"></a>`
+        : '';
+
     return `
         <article class="position-card" data-index="${index}">
+            ${stretchedLink}
             <div class="card-header">
                 <div class="card-badges">${disciplineBadges}${typeBadges}</div>
                 ${dateStr ? `<span class="card-date">${SVG_CALENDAR} ${dateStr}</span>` : ''}

@@ -1195,6 +1195,21 @@ main {
     background: var(--primary, #3b82f6);
 }
 
+/* Stretched-link pattern: whole card navigates to /p/<slug> while in-card
+   buttons and links (read-more, View Post, profile, earlier-posts toggle)
+   keep working because they sit above the overlay via z-index:1. */
+.card-stretched-link {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    /* No visible content; aria-label carries the accessible name. */
+}
+.position-card > *:not(.card-stretched-link) {
+    position: relative;
+    z-index: 1;
+}
+
 /* Stats line: small amber diamond tick — the only flourish on the stats row */
 .stats-bar {
     display: inline-flex;
