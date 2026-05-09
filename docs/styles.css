@@ -1237,19 +1237,23 @@ main {
     background: var(--primary, #3b82f6);
 }
 
-/* Stretched-link pattern: whole card navigates to /p/<slug> while in-card
-   buttons and links (read-more, View Post, profile, earlier-posts toggle)
-   keep working because they sit above the overlay via z-index:1. */
+/* Stretched-link pattern (Bootstrap-style): the empty <a> covers the entire
+   card and captures clicks anywhere. Only interactive children (real links,
+   buttons) layer ABOVE it via z-index 2 so they keep their own click
+   targets — the read-more button, View Post link, author handle, and
+   earlier-posts toggle all keep working. Text selection inside the card
+   is blocked as a trade-off; users can drill into /p/<slug> for the
+   full message. */
 .card-stretched-link {
     position: absolute;
     inset: 0;
-    z-index: 0;
-    border-radius: inherit;
-    /* No visible content; aria-label carries the accessible name. */
-}
-.position-card > *:not(.card-stretched-link) {
-    position: relative;
     z-index: 1;
+    border-radius: inherit;
+}
+.position-card a:not(.card-stretched-link),
+.position-card button {
+    position: relative;
+    z-index: 2;
 }
 
 /* Stats line: small amber diamond tick — the only flourish on the stats row */
