@@ -1,6 +1,37 @@
 /* Custom fonts */
 @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
 
+/* ============================================================
+   Minimal Preflight reset.
+   Tailwind's Preflight used to ship via the CDN script; when we
+   dropped that script we lost: body { margin: 0 }, global
+   border-box, and the button chrome reset. Re-add only the parts
+   the layout depends on so we don't drift back to browser defaults.
+   ============================================================ */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+body {
+    margin: 0;
+}
+button {
+    background-color: transparent;
+    background-image: none;
+    color: inherit;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    font: inherit;
+    line-height: inherit;
+    text-align: inherit;
+}
+button:disabled { cursor: default; }
+input, textarea, select {
+    font: inherit;
+    color: inherit;
+}
+
 :root {
     --font-mono: 'Fira Code', ui-monospace, monospace;
     --font-display: 'Fira Sans', system-ui, sans-serif;
