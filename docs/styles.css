@@ -31,6 +31,14 @@ input, textarea, select {
     font: inherit;
     color: inherit;
 }
+/* Tailwind Preflight zeroes heading + block margins so site-defined
+   layout owns vertical rhythm. Without this, browser defaults add ~21px
+   top/bottom on h1/h2 and split the header off from its AI badge. */
+h1, h2, h3, h4, h5, h6, p, blockquote {
+    margin: 0;
+    font-size: inherit;
+    font-weight: inherit;
+}
 
 :root {
     --font-mono: 'Fira Code', ui-monospace, monospace;
