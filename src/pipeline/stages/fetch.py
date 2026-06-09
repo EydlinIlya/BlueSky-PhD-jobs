@@ -72,6 +72,15 @@ def process_tenuretracker_posts(
             parent = _fetch_tt_parent(client, uri)
             if parent and parent["handle"] == TENURETRACKER_HANDLE:
                 root_uri = parent["uri"]
+
+                # Another reply may have already resolved to this same root
+                # (TT can post one root with multiple replies). Emitting a
+                # second merged post under root_uri would create a duplicate
+                # staging key, so skip it here.
+                if root_uri in seen_tt_uris:
+                    seen_tt_uris.add(uri)
+                    continue
+
                 reply_raw = post.get("raw_text") or post.get("message", "")
                 combined_raw = parent["text"] + "\n\n---\n" + reply_raw
 

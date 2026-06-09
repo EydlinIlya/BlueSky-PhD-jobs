@@ -226,12 +226,25 @@ class SupabaseStorage(StorageBackend):
         ).execute()
 
     def insert_staging(self, run_date, posts: list[dict]) -> None:
-        """Bulk-upsert posts into phd_positions_staging."""
+        """Bulk-upsert posts into phd_positions_staging.
+
+        De-duplicates by uri (keeping the last occurrence) before upserting.
+        Postgres rejects an ON CONFLICT batch that contains the same
+        (run_date, uri) conflict key twice ("cannot affect row a second
+        time"), which can happen e.g. when the tenuretracker merge resolves
+        two replies to the same root URI.
+        """
         if not posts:
             return
         run_date_str = self._run_date_str(run_date)
+        deduped = {post["uri"]: post for post in posts}
+        if len(deduped) < len(posts):
+            logger.info(
+                f"insert_staging: dropped {len(posts) - len(deduped)} "
+                f"duplicate-uri post(s) before upsert"
+            )
         records = []
-        for post in posts:
+        for post in deduped.values():
             record = {
                 "run_date": run_date_str,
                 "uri": post["uri"],
