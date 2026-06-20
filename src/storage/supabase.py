@@ -2,6 +2,7 @@
 
 import logging
 import os
+import time
 from datetime import datetime
 
 from supabase import create_client, Client
@@ -221,9 +222,20 @@ class SupabaseStorage(StorageBackend):
     def update_run(self, run_date, **fields) -> None:
         """Update fields on a pipeline_runs row."""
         run_date_str = self._run_date_str(run_date)
-        self.client.table("pipeline_runs").update(fields).eq(
-            "run_date", run_date_str
-        ).execute()
+        for attempt in range(4):
+            try:
+                self.client.table("pipeline_runs").update(fields).eq(
+                    "run_date", run_date_str
+                ).execute()
+                return
+            except Exception as e:
+                if attempt == 3:
+                    raise
+                wait = 2 ** (attempt + 1)
+                logger.warning(
+                    f"update_run attempt {attempt + 1}/4 failed: {e}. Retrying in {wait}s…"
+                )
+                time.sleep(wait)
 
     def insert_staging(self, run_date, posts: list[dict]) -> None:
         """Bulk-upsert posts into phd_positions_staging.
