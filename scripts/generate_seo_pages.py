@@ -411,6 +411,13 @@ def generate_positions_html(positions):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Vercel Web Analytics -->
+    <script>
+      window.va = window.va || function () {{ (window.vaq = window.vaq || []).push(arguments); }};
+    </script>
+    <script defer src="/_vercel/insights/script.js"></script>
+
     <title>All PhD & Postdoc Positions | Academic Job Board</title>
     <meta name="description" content="Complete listing of PhD, postdoc, and research positions aggregated from Bluesky. Updated daily.">
     <meta name="keywords" content="PhD positions, postdoc jobs, academic jobs, research positions, Bluesky, university jobs, doctoral research, STEM careers">
@@ -541,6 +548,13 @@ def render_position_page(pos, slug):
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- Vercel Web Analytics -->
+<script>
+  window.va = window.va || function () {{ (window.vaq = window.vaq || []).push(arguments); }};
+</script>
+<script defer src="/_vercel/insights/script.js"></script>
+
 <title>{escape_html(title)} | PhD Sky</title>
 <meta name="description" content="{escape_html(desc)}">
 <meta name="robots" content="index, follow">
