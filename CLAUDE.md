@@ -276,21 +276,41 @@ Required secrets:
 
 ## Frontend (`docs/`)
 
-Static GitHub Pages site for browsing PhD positions:
+Static Vercel/GitHub Pages site for browsing PhD positions. The UI is the **v3
+"feed" redesign** — a Twitter/Bluesky-style chronological river (imported from the
+Claude Design project *"PhD Sky Design System"*, `ui_kits/website-v3-feed/`).
+No build step; plain HTML + CSS + vanilla JS.
 
-**`docs/index.html`** - Main page with CDN imports:
-- Tailwind CSS for styling
-- AG Grid for data table
-- Supabase JS SDK for data fetching
+**`docs/index.html`** - Single-page feed shell:
+- Top bar (wordmark + command/search bar + auth slot), left rail (streams +
+  filter chips + subscriptions nudge), center river feed, right activity rail,
+  post-detail flyout, auth modal container, toasts, sticky footer
+- CDN imports: Supabase JS SDK, vanilla-cookieconsent; GA4 (Consent Mode v2) +
+  Vercel Analytics
+- SEO injection sentinels preserved: `<!-- STATIC_DATA_START/END -->`
+  (wraps `<script id="static-positions">`) and `<!-- SEO_NOSCRIPT_START/END -->`,
+  both rewritten by `scripts/generate_seo_pages.py`
 
-**`docs/styles.css`** - AG Grid theme customization
+**`docs/colors_and_type.css`** - Design-system tokens (slate/cobalt/amber, Fira
+Code/Sans). Loads before `styles.css`. (Legacy `design-tokens.css` is retained
+only for the standalone `positions.html` / about / privacy pages.)
+
+**`docs/styles.css`** - v3 feed styles (topbar, rails, river/post, flyout, modal,
+onboarding, subscriptions page, toasts).
 
 **`docs/app.js`** - Application logic:
-- Initializes Supabase client (anon key)
-- Fetches from `phd_positions` table
-- Filters by discipline, country, and position type
-- Loads `docs/aggregators.json` and supports the "Hide aggregator reposts" toggle (grid uses `isExternalFilterPresent` / `doesExternalFilterPass`; card view filters in `applyCardFilters`)
-- Configures AG Grid columns with filters/sorting
+- Initializes Supabase client (anon key); `?mock` loads `mock_data.json`
+- 3-tier data loader: embedded `#static-positions` JSON → `positions.json`
+  snapshot → live Supabase query (`is_verified_job=true`, `duplicate_of is null`)
+- Renders the feed with day separators + infinite scroll (IntersectionObserver,
+  `BATCH_SIZE=30`); post-detail flyout
+- Filter chips: Level / Country (top-N dynamic) / Area, plus the "Hide aggregator
+  reposts" toggle (`isAggregator()` against the inlined aggregator handle set)
+- The repost/earlier-posts thread reuses the existing `duplicate_of` dedup graph
+  (`duplicateMap`)
+- Auth-dependent surfaces (Log in/Sign up, "+ follow", "save current search",
+  Following / Subscriptions streams, "For me" tab) are present but routed to a
+  "coming soon" toast until the auth/subscriptions/follows branches land
 
 **`docs/aggregators.json`** - Hand-maintained list `{ "handles": [...] }` of Bluesky handles flagged as aggregator reposters. Source of truth for the UI filter. Updated via `scripts/find_aggregator_candidates.py`.
 
@@ -306,4 +326,6 @@ CREATE POLICY "Allow public read" ON phd_positions FOR SELECT USING (true);
 
 ### Local Testing
 
-Open `docs/index.html` directly in a browser (no server required).
+Serve `docs/` over HTTP and open it, e.g. `python -m http.server --directory docs`
+then visit `http://localhost:8000/`. Live Supabase reads work from `localhost`
+(public anon key + read RLS). Add `?mock` to load `docs/mock_data.json` offline.

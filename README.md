@@ -220,6 +220,13 @@ The browse-positions site is at **<https://phdsky.org/>** (Vercel, served from
 (`eydlinilya.github.io/BlueSky-PhD-jobs/`) now serves a 0-second redirect to
 `phdsky.org` from the `gh-pages` branch.
 
+The UI is a Twitter/Bluesky-style **feed**: a chronological river of positions
+with day separators and infinite scroll, a left rail of filter chips
+(Level / Country / Area + "Hide aggregator reposts"), a command/search bar, and a
+post-detail flyout. Plain HTML + CSS + vanilla JS, no build step. Data loads from
+an embedded snapshot → `positions.json` → live Supabase. Open it locally with
+`python -m http.server --directory docs` (add `?mock` to use bundled sample data).
+
 ### Setup
 
 1. **Add RLS policy** to Supabase:

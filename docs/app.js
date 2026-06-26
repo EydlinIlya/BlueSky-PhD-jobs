@@ -1,223 +1,77 @@
+/* ============================================================
+   PhD Sky v3 — Feed + Accounts  ·  app logic (real data)
+   Twitter/Bluesky-style feed over the live phd_positions data.
+   Branch A: redesign only. Auth/subscriptions/follows surfaces are
+   present but routed to a "coming soon" nudge until later branches.
+   ============================================================ */
+'use strict';
+
+/* ───────────────────────── CONFIG / DATA LAYER ───────────────────────── */
 // Mock mode: add ?mock to the URL to load from mock_data.json instead of Supabase
 const USE_MOCK = new URLSearchParams(window.location.search).has('mock');
 
-// Supabase configuration
 const SUPABASE_URL = 'https://qenpxgztlptegosdhhhi.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_149HAw6pWDQTRPF_NLISmA_oSCU7q3_';
 const supabaseClient = USE_MOCK ? null : window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// State
-let allPositions = [];
-let currentFilteredPositions = [];
-let gridApi = null;
-const expandedCards = new Set();
-const expandedEarlierPosts = new Set();
-let duplicateMap = {};  // canonical URI -> [{uri, url, user_handle, created_at}]
-let searchQuery = '';
-let totalPositionCount = 0;  // from static data or full fetch
-let isFullDataLoaded = false;
-
-// Infinite scroll
-const BATCH_SIZE = 30;
-let renderedCount = 0;
-let scrollObserver = null;
-
-// Aggregator filter state — inlined so it works on file:// and GitHub Pages alike
+// Aggregator handles — inlined so it works on file:// and GitHub Pages alike.
+// Keep in sync with docs/aggregators.json.
 const aggregatorHandles = new Set([
-    "tenuretracker.bsky.social",
-    "epsteinweb.bsky.social",
-    "jobboardsearch.com",
-    "agristok.bsky.social",
-    "scholarshipunion.bsky.social",
-    "higherjobz.bsky.social",
-    "evoldir.bsky.social",
-    "jobrxiv.org",
-    "cosmossn.bsky.social",
-    "vacancyedu.bsky.social",
-    "sciencehr.bsky.social",
-    "finland.activitypub.awakari.com.ap.brid.gy",
+    "tenuretracker.bsky.social", "epsteinweb.bsky.social", "jobboardsearch.com",
+    "agristok.bsky.social", "scholarshipunion.bsky.social", "higherjobz.bsky.social",
+    "evoldir.bsky.social", "jobrxiv.org", "cosmossn.bsky.social", "vacancyedu.bsky.social",
+    "sciencehr.bsky.social", "finland.activitypub.awakari.com.ap.brid.gy",
     "functionalprogramming.activitypub.awakari.com.ap.brid.gy",
     "2rzikkbou3ntafnir2qmmse0gwz.activitypub.awakari.com.ap.brid.gy",
-    "darkmatter.activitypub.awakari.com.ap.brid.gy",
-    "academiceurope.bsky.social",
-    "iddjobs.org",
-    "epijobs.bsky.social",
-    "rss.dfaria.eu",
-    "inomics.bsky.social",
-    "greenjobs.de",
-    "bioinfojobs.bsky.social",
-    "atmchemaerojobs.bsky.social",
-    "gulfcareerhunt.bsky.social",
-    "diversifytech.com",
+    "darkmatter.activitypub.awakari.com.ap.brid.gy", "academiceurope.bsky.social",
+    "iddjobs.org", "epijobs.bsky.social", "rss.dfaria.eu", "inomics.bsky.social",
+    "greenjobs.de", "bioinfojobs.bsky.social", "atmchemaerojobs.bsky.social",
+    "gulfcareerhunt.bsky.social", "diversifytech.com",
 ]);
-let hideAggregators = false;        // toggled by #hide-aggregators-toggle
-
-// ─── Utilities ────────────────────────────────────────────────────────────────
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// SVG icon strings (inline, aria-hidden, no emoji)
-const SVG_CALENDAR = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="display:inline;vertical-align:-1px" aria-hidden="true"><path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zm10 4H2v9a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V4z"/></svg>`;
-const SVG_LOCATION = `<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="display:inline;vertical-align:-1px" aria-hidden="true"><path d="M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/></svg>`;
-const SVG_CHEVRON_RIGHT = `<svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/></svg>`;
-const SVG_CHEVRON_DOWN = `<svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/></svg>`;
+function isAggregator(handle) { return !!handle && aggregatorHandles.has(handle); }
 
 // Per-discipline badge colors (flat, no gradients)
 const DISCIPLINE_COLORS = {
-    'Biology':                      '#16a34a',
-    'Ecology':                      '#15803d',
-    'Computer Science':             '#6d28d9',
-    'Physics':                      '#0284c7',
-    'Chemistry & Materials Science':'#0891b2',
-    'Medicine':                     '#dc2626',
-    'Mathematics':                  '#7c3aed',
-    'Economics':                    '#b45309',
-    'Sociology & Political Science':'#0369a1',
-    'Engineering':                  '#c2410c',
-    'Environmental Sciences':       '#15803d',
-    'Psychology':                   '#be185d',
-    'Neuroscience':                 '#7c3aed',
-    'History':                      '#92400e',
-    'Arts & Humanities':            '#a21caf',
-    'General call':                 '#475569',
+    'Biology': '#16a34a', 'Ecology': '#15803d', 'Computer Science': '#6d28d9',
+    'Physics': '#0284c7', 'Chemistry & Materials Science': '#0891b2', 'Medicine': '#dc2626',
+    'Mathematics': '#7c3aed', 'Economics': '#b45309', 'Sociology & Political Science': '#0369a1',
+    'Engineering': '#c2410c', 'Environmental Sciences': '#15803d', 'Psychology': '#be185d',
+    'Neuroscience': '#7c3aed', 'History': '#92400e', 'Arts & Humanities': '#a21caf',
+    'General call': '#475569',
 };
+function getDisciplineColor(d) { return DISCIPLINE_COLORS[d] || '#3b82f6'; }
 
-// Country name normalization — maps variants to canonical form
-const COUNTRY_NORMALIZE = {
-    'Czechia': 'Czech Republic',
-    'Europe':  'Unknown',
+// Short display labels for compact badges/chips
+const DISCIPLINE_SHORT = {
+    'Computer Science': 'CS', 'Chemistry & Materials Science': 'Chemistry',
+    'Sociology & Political Science': 'Sociology', 'Arts & Humanities': 'Arts',
+    'Mathematics': 'Math', 'General call': 'General',
 };
+function discShort(d) { return DISCIPLINE_SHORT[d] || d; }
 
-function normalizeCountry(country) {
-    if (!country) return country;
-    return COUNTRY_NORMALIZE[country] || country;
+// Area filter chips (full discipline name + short label)
+const AREA_CHIPS = [
+    'Biology', 'Computer Science', 'Physics', 'Medicine', 'Ecology',
+    'Mathematics', 'Chemistry & Materials Science', 'Psychology',
+    'Economics', 'Sociology & Political Science', 'Arts & Humanities',
+];
+// Level filter chips: [value, label]
+const LEVEL_CHIPS = [
+    ['PhD Student', 'PhD'], ['Postdoc', 'Postdoc'],
+    ['Master Student', 'Master'], ['Research Assistant', 'RA'],
+];
+
+const COUNTRY_NORMALIZE = { 'Czechia': 'Czech Republic', 'Europe': 'Unknown' };
+function normalizeCountry(c) { return c ? (COUNTRY_NORMALIZE[c] || c) : c; }
+
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text == null ? '' : text;
+    return div.innerHTML;
 }
-
-function getDisciplineColor(discipline) {
-    return DISCIPLINE_COLORS[discipline] || '#3b82f6';
-}
-
-function isAggregator(handle) {
-    return !!handle && aggregatorHandles.has(handle);
-}
-
-
-// ─── Data fetching ────────────────────────────────────────────────────────────
-
-async function fetchMockPositions() {
-    const response = await fetch('mock_data.json');
-    if (!response.ok) throw new Error(`Failed to load mock data: ${response.status}`);
-    return response.json();
-}
-
-// Try the cron-generated static snapshot first. Returns null if missing/stale,
-// triggering Supabase fallback. Schema mirrors fetchSupabasePositions +
-// fetchDuplicates so the rest of the app doesn't need to know which path won.
-async function fetchStaticSnapshot() {
-    try {
-        const response = await fetch('positions.json', { cache: 'default' });
-        if (!response.ok) return null;
-        const data = await response.json();
-        if (!data || !Array.isArray(data.positions)) return null;
-
-        const positions = data.positions.map(p => ({ ...p, country: normalizeCountry(p.country) }));
-
-        const dupMap = {};
-        for (const row of data.duplicates || []) {
-            const key = row.duplicate_of;
-            if (!key) continue;
-            if (!dupMap[key]) dupMap[key] = [];
-            dupMap[key].push(row);
-        }
-        for (const key of Object.keys(dupMap)) {
-            dupMap[key].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-        }
-
-        return { positions, duplicates: dupMap };
-    } catch (e) {
-        console.warn('Static snapshot fetch failed:', e);
-        return null;
-    }
-}
-
-async function fetchSupabasePositions() {
-    const PAGE_SIZE = 1000;
-    let all = [];
-    let from = 0;
-    while (true) {
-        const { data, error } = await supabaseClient
-            .from('phd_positions')
-            .select('uri, created_at, disciplines, country, position_type, user_handle, message, url, indexed_at')
-            .eq('is_verified_job', true)
-            .is('duplicate_of', null)
-            .gte('indexed_at', '2026-01-27')
-            .order('created_at', { ascending: false })
-            .range(from, from + PAGE_SIZE - 1);
-        if (error) throw error;
-        all = all.concat(data.map(p => ({ ...p, country: normalizeCountry(p.country) })));
-        if (data.length < PAGE_SIZE) break;
-        from += PAGE_SIZE;
-    }
-    return all;
-}
-
-async function fetchDuplicates() {
-    if (USE_MOCK) return {};
-    const PAGE_SIZE = 1000;
-    let all = [];
-    let from = 0;
-    while (true) {
-        const { data, error } = await supabaseClient
-            .from('phd_positions')
-            .select('uri, url, user_handle, created_at, duplicate_of')
-            .not('duplicate_of', 'is', null)
-            .gte('indexed_at', '2026-01-27')
-            .range(from, from + PAGE_SIZE - 1);
-        if (error) { console.error('Failed to fetch duplicates:', error); return {}; }
-        all = all.concat(data || []);
-        if ((data || []).length < PAGE_SIZE) break;
-        from += PAGE_SIZE;
-    }
-
-    const map = {};
-    for (const row of all) {
-        const key = row.duplicate_of;
-        if (!map[key]) map[key] = [];
-        map[key].push(row);
-    }
-    // Sort each group oldest first
-    for (const key of Object.keys(map)) {
-        map[key].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-    }
-    return map;
-}
-
-async function fetchPositions() {
-    if (USE_MOCK) return fetchMockPositions();
-    return fetchSupabasePositions();
-}
-
-// Three-tier data loader for the full position set used by filters/grid:
-//   1. positions.json static snapshot (CDN-cached, ~700KB gzipped, fastest)
-//   2. Supabase live query (fallback when snapshot is missing or fails)
-// Always returns { positions, duplicates } in the same shape as the live path.
-async function loadFullData() {
-    if (USE_MOCK) {
-        const positions = await fetchMockPositions();
-        return { positions, duplicates: {} };
-    }
-    const snapshot = await fetchStaticSnapshot();
-    if (snapshot) return snapshot;
-    console.warn('Falling back to live Supabase query — positions.json unavailable');
-    const [positions, duplicates] = await Promise.all([fetchSupabasePositions(), fetchDuplicates()]);
-    return { positions, duplicates };
-}
-
-// ─── Card rendering ───────────────────────────────────────────────────────────
 
 // Mirrors extract_slug() in scripts/generate_seo_pages.py — keep in sync.
 function extractSlug(uri) {
@@ -227,525 +81,112 @@ function extractSlug(uri) {
     return slug || null;
 }
 
-function createCard(position, index) {
-    const date = position.created_at ? new Date(position.created_at) : null;
-    const dateStr = date ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+function safeUrl(u) {
+    if (!u) return null;
+    try { const url = new URL(u); return (url.protocol === 'https:' || url.protocol === 'http:') ? u : null; }
+    catch { return null; }
+}
 
-    const disciplineBadges = (position.disciplines || [])
-        .map(d => `<span class="discipline-badge" style="background:${getDisciplineColor(d)}">${escapeHtml(d)}</span>`).join('');
-    const typeBadges = (position.position_type || [])
-        .map(t => `<span class="position-type-badge">${escapeHtml(t)}</span>`).join('');
+/* ───────────────────────── STATE ───────────────────────── */
+const state = {
+    all: [],                 // all positions (canonical, verified)
+    duplicateMap: {},        // canonical uri -> [{uri, url, user_handle, created_at}]
+    total: 0,                // total open positions
+    view: 'feed',            // 'feed' | 'subs'
+    stream: 'all',
+    tab: 'latest',
+    search: '',
+    hideAggr: false,
+    filters: { level: new Set(), country: new Set(), area: new Set() },
+    threadOpen: new Set(),
+};
 
-    const country = position.country && position.country !== 'Unknown' ? position.country : null;
-    const profileUrl = position.user_handle ? `https://bsky.app/profile/${position.user_handle}` : '#';
+// Infinite scroll
+const BATCH_SIZE = 30;
+let feedList = [];           // current filtered list
+let renderedCount = 0;
+let lastDayLabel = null;
+let scrollObserver = null;
 
-    const message = position.message || '';
-    const isTruncated = message.length > 200;
-    const isExpanded = expandedCards.has(index);
-    const messageClass = isTruncated && !isExpanded ? 'card-message truncated' : 'card-message expanded';
+/* ───────────────────────── DATA FETCHING ───────────────────────── */
+async function fetchMockPositions() {
+    const r = await fetch('mock_data.json');
+    if (!r.ok) throw new Error(`mock data ${r.status}`);
+    return r.json();
+}
 
-    let validUrl = null;
-    if (position.url) {
-        try {
-            const url = new URL(position.url);
-            if (url.protocol === 'https:' || url.protocol === 'http:') validUrl = position.url;
-        } catch { /* invalid */ }
+async function fetchStaticSnapshot() {
+    try {
+        const r = await fetch('positions.json', { cache: 'default' });
+        if (!r.ok) return null;
+        const data = await r.json();
+        if (!data || !Array.isArray(data.positions)) return null;
+        const positions = data.positions.map(p => ({ ...p, country: normalizeCountry(p.country) }));
+        const dupMap = buildDuplicateMap(data.duplicates || []);
+        return { positions, duplicates: dupMap, total: data.total || positions.length };
+    } catch (e) { console.warn('snapshot fetch failed', e); return null; }
+}
+
+function buildDuplicateMap(rows) {
+    const map = {};
+    for (const row of rows) {
+        const key = row.duplicate_of;
+        if (!key) continue;
+        (map[key] = map[key] || []).push(row);
     }
+    for (const k of Object.keys(map)) map[k].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    return map;
+}
 
-    // Earlier posts (duplicates pointing to this card)
-    const dupes = position.uri ? (duplicateMap[position.uri] || []) : [];
-    let earlierPostsHtml = '';
-    if (dupes.length > 0) {
-        const isEarlierExpanded = expandedEarlierPosts.has(index);
-        const dupeItems = dupes.map(d => {
-            const dDate = d.created_at ? new Date(d.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-            const dProfile = d.user_handle ? `@${escapeHtml(d.user_handle)}` : 'unknown';
-            let dLink = '';
-            if (d.url) {
-                try {
-                    const u = new URL(d.url);
-                    if (u.protocol === 'https:' || u.protocol === 'http:') dLink = `<a href="${escapeHtml(d.url)}" target="_blank" rel="noopener noreferrer" class="earlier-post-link">View →</a>`;
-                } catch {}
-            }
-            return `<div class="earlier-post-item"><span class="earlier-post-author">${dProfile}</span><span class="earlier-post-date">${dDate}</span>${dLink}</div>`;
-        }).join('');
-
-        earlierPostsHtml = `
-            <div class="earlier-posts-section">
-                <button class="earlier-posts-toggle" onclick="toggleEarlierPosts(${index})">
-                    <span class="earlier-posts-icon">${isEarlierExpanded ? SVG_CHEVRON_DOWN : SVG_CHEVRON_RIGHT}</span>
-                    ${dupes.length} earlier post${dupes.length > 1 ? 's' : ''}
-                </button>
-                <div class="earlier-posts-list ${isEarlierExpanded ? 'open' : ''}" id="earlier-posts-${index}">
-                    ${dupeItems}
-                </div>
-            </div>`;
+async function fetchSupabasePositions() {
+    const PAGE = 1000; let all = []; let from = 0;
+    while (true) {
+        const { data, error } = await supabaseClient
+            .from('phd_positions')
+            .select('uri, created_at, disciplines, country, position_type, user_handle, message, url, indexed_at')
+            .eq('is_verified_job', true)
+            .is('duplicate_of', null)
+            .gte('indexed_at', '2026-01-27')
+            .order('created_at', { ascending: false })
+            .range(from, from + PAGE - 1);
+        if (error) throw error;
+        all = all.concat(data.map(p => ({ ...p, country: normalizeCountry(p.country) })));
+        if (data.length < PAGE) break;
+        from += PAGE;
     }
-
-    const slug = extractSlug(position.uri);
-    const stretchedLink = slug
-        ? `<a class="card-stretched-link" href="/p/${slug}" aria-label="Open full job page"></a>`
-        : '';
-
-    return `
-        <article class="position-card" data-index="${index}">
-            ${stretchedLink}
-            <div class="card-header">
-                <div class="card-badges">${disciplineBadges}${typeBadges}</div>
-                ${dateStr ? `<span class="card-date">${SVG_CALENDAR} ${dateStr}</span>` : ''}
-            </div>
-            <div class="card-meta">
-                ${country ? `<span class="card-meta-item">${SVG_LOCATION} ${escapeHtml(country)}</span>` : ''}
-            </div>
-            <div class="card-author">
-                <a href="${escapeHtml(profileUrl)}" target="_blank" rel="noopener noreferrer">@${escapeHtml(position.user_handle || '')}</a>
-                ${isAggregator(position.user_handle) ? '<span class="aggregator-badge" title="Aggregator repost">agg</span>' : ''}
-            </div>
-            <div class="${messageClass}" id="card-msg-${index}">${escapeHtml(message)}</div>
-            ${isTruncated ? `<button class="card-expand-btn" onclick="toggleCardMessage(${index})">${isExpanded ? '[ show less ]' : '[ read more ]'}</button>` : ''}
-            <div class="card-actions">
-                ${validUrl
-                    ? `<a href="${escapeHtml(validUrl)}" target="_blank" rel="noopener noreferrer" class="card-link-btn">View Post →</a>`
-                    : '<span class="text-gray-400 text-sm">No link</span>'}
-            </div>
-            ${earlierPostsHtml}
-        </article>`;
+    return all;
 }
 
-function renderCardsBatch(reset = false) {
-    const container = document.getElementById('cards-grid');
-
-    if (reset) {
-        renderedCount = 0;
-        container.innerHTML = '';
-        expandedCards.clear();
+async function fetchDuplicates() {
+    if (USE_MOCK) return {};
+    const PAGE = 1000; let all = []; let from = 0;
+    while (true) {
+        const { data, error } = await supabaseClient
+            .from('phd_positions')
+            .select('uri, url, user_handle, created_at, duplicate_of')
+            .not('duplicate_of', 'is', null)
+            .gte('indexed_at', '2026-01-27')
+            .range(from, from + PAGE - 1);
+        if (error) { console.error('dup fetch failed', error); return {}; }
+        all = all.concat(data || []);
+        if ((data || []).length < PAGE) break;
+        from += PAGE;
     }
+    return buildDuplicateMap(all);
+}
 
-    const batch = currentFilteredPositions.slice(renderedCount, renderedCount + BATCH_SIZE);
-    if (batch.length === 0) {
-        updateCardCount();
-        setSentinelVisible(false);
-        return;
+// Three-tier loader: static snapshot → live Supabase. Returns {positions, duplicates, total}.
+async function loadFullData() {
+    if (USE_MOCK) {
+        const positions = await fetchMockPositions();
+        return { positions, duplicates: {}, total: positions.length };
     }
-
-    container.insertAdjacentHTML('beforeend',
-        batch.map((pos, i) => createCard(pos, renderedCount + i)).join('')
-    );
-    renderedCount += batch.length;
-
-    const hasMore = renderedCount < currentFilteredPositions.length;
-    setSentinelVisible(hasMore);
-    updateCardCount();
+    const snap = await fetchStaticSnapshot();
+    if (snap) return snap;
+    console.warn('falling back to live Supabase query');
+    const [positions, duplicates] = await Promise.all([fetchSupabasePositions(), fetchDuplicates()]);
+    return { positions, duplicates, total: positions.length };
 }
-
-function updateCardCount() {
-    const shown = renderedCount;
-    const filtered = currentFilteredPositions.length;
-    const total = totalPositionCount || allPositions.length;
-    const el = document.getElementById('card-count');
-
-    if (!isFullDataLoaded && totalPositionCount > allPositions.length) {
-        el.textContent = `Showing ${shown} of ${total} positions`;
-    } else if (filtered === allPositions.length) {
-        el.textContent = shown < allPositions.length
-            ? `Showing ${shown} of ${allPositions.length} positions`
-            : `${allPositions.length} positions`;
-    } else {
-        el.textContent = shown < filtered
-            ? `Showing ${shown} of ${filtered} (filtered from ${allPositions.length})`
-            : `${filtered} of ${allPositions.length} positions`;
-    }
-}
-
-function setSentinelVisible(visible) {
-    document.getElementById('scroll-sentinel').style.display = visible ? 'block' : 'none';
-}
-
-function setupInfiniteScroll() {
-    const sentinel = document.getElementById('scroll-sentinel');
-    scrollObserver = new IntersectionObserver(entries => {
-        if (entries[0].isIntersecting) renderCardsBatch();
-    }, { rootMargin: '300px' });
-    scrollObserver.observe(sentinel);
-}
-
-window.toggleCardMessage = function(index) {
-    if (expandedCards.has(index)) expandedCards.delete(index);
-    else expandedCards.add(index);
-
-    const msgEl = document.getElementById(`card-msg-${index}`);
-    const btn = msgEl.closest('.position-card').querySelector('.card-expand-btn');
-    const expanded = expandedCards.has(index);
-    msgEl.classList.toggle('truncated', !expanded);
-    msgEl.classList.toggle('expanded', expanded);
-    btn.textContent = expanded ? '[ show less ]' : '[ read more ]';
-};
-
-window.toggleEarlierPosts = function(index) {
-    if (expandedEarlierPosts.has(index)) expandedEarlierPosts.delete(index);
-    else expandedEarlierPosts.add(index);
-
-    const listEl = document.getElementById(`earlier-posts-${index}`);
-    const card = listEl.closest('.position-card');
-    const toggle = card.querySelector('.earlier-posts-toggle .earlier-posts-icon');
-    const expanded = expandedEarlierPosts.has(index);
-    listEl.classList.toggle('open', expanded);
-    toggle.innerHTML = expanded ? SVG_CHEVRON_DOWN : SVG_CHEVRON_RIGHT;
-};
-
-// ─── Global search ────────────────────────────────────────────────────────────
-
-function setSearchActive(active) {
-    document.getElementById('search-bar-container').classList.toggle('has-query', active);
-    document.getElementById('btn-search-clear').classList.toggle('hidden', !active);
-    if (active) document.getElementById('header-search-container').classList.add('expanded');
-}
-
-window.applySearch = function() {
-    const input = document.getElementById('global-search');
-    searchQuery = input.value.trim().toLowerCase();
-    setSearchActive(!!searchQuery);
-
-    const isTableMode = !document.getElementById('table-view').classList.contains('hidden');
-    if (isTableMode && gridApi) {
-        gridApi.setGridOption('quickFilterText', searchQuery);
-        updateTableCount();
-    } else {
-        applyCardFilters();
-    }
-};
-
-window.clearSearch = function() {
-    document.getElementById('global-search').value = '';
-    searchQuery = '';
-    setSearchActive(false);
-
-    const isTableMode = !document.getElementById('table-view').classList.contains('hidden');
-    if (isTableMode && gridApi) {
-        gridApi.setGridOption('quickFilterText', '');
-        updateTableCount();
-    } else {
-        applyCardFilters();
-    }
-};
-
-// ─── AG Grid (table mode) ─────────────────────────────────────────────────────
-
-function createCheckboxSetFilter(extractValues) {
-    return class CheckboxSetFilter {
-        init(params) {
-            this.params = params;
-            this.selectedValues = new Set();
-            let values = [...new Set(allPositions.flatMap(p => extractValues(p)))].sort();
-            for (const tail of ['Other', 'Unknown']) {
-                if (values.includes(tail)) { values = values.filter(v => v !== tail); values.push(tail); }
-            }
-            this.values = values;
-            this.gui = document.createElement('div');
-            this.gui.className = 'checkbox-filter-container';
-            this.gui.innerHTML = `
-                <div style="padding:10px;min-width:200px;">
-                    <div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #334155;">
-                        <label style="display:flex;align-items:center;cursor:pointer;">
-                            <input type="checkbox" data-select-all="true" checked style="margin-right:8px;">
-                            <span style="font-weight:500;">(Select All)</span>
-                        </label>
-                    </div>
-                    <div data-options="true" style="max-height:250px;overflow-y:auto;">
-                        ${this.values.map(v => `
-                            <label style="display:flex;align-items:center;cursor:pointer;padding:4px 0;">
-                                <input type="checkbox" value="${escapeHtml(v)}" checked style="margin-right:8px;">
-                                <span>${escapeHtml(v)}</span>
-                            </label>`).join('')}
-                    </div>
-                </div>`;
-            this.values.forEach(v => this.selectedValues.add(v));
-            const selectAll = this.gui.querySelector('[data-select-all]');
-            const opts = this.gui.querySelector('[data-options]');
-            selectAll.addEventListener('change', e => {
-                opts.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                    cb.checked = e.target.checked;
-                    e.target.checked ? this.selectedValues.add(cb.value) : this.selectedValues.delete(cb.value);
-                });
-                this.params.filterChangedCallback();
-            });
-            opts.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                cb.addEventListener('change', e => {
-                    e.target.checked ? this.selectedValues.add(e.target.value) : this.selectedValues.delete(e.target.value);
-                    selectAll.checked = this.selectedValues.size === this.values.length;
-                    this.params.filterChangedCallback();
-                });
-            });
-        }
-        getGui() { return this.gui; }
-        doesFilterPass(params) {
-            if (this.selectedValues.size === this.values.length) return true;
-            return extractValues(params.data).some(v => this.selectedValues.has(v));
-        }
-        isFilterActive() { return this.selectedValues.size !== this.values.length; }
-        getModel() { return this.isFilterActive() ? { values: [...this.selectedValues] } : null; }
-        setModel(model) {
-            const selectAll = this.gui.querySelector('[data-select-all]');
-            const opts = this.gui.querySelector('[data-options]');
-            if (!model) {
-                this.selectedValues = new Set(this.values);
-                this.gui.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
-            } else {
-                this.selectedValues = new Set(model.values);
-                opts.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                    cb.checked = this.selectedValues.has(cb.value);
-                });
-                selectAll.checked = this.selectedValues.size === this.values.length;
-            }
-        }
-    };
-}
-
-function renderCollapsibleBadges(params, badgeClass, fieldName) {
-    const values = params.value;
-    if (!values || !values.length) return '<span class="text-gray-400">\u2014</span>';
-    if (values.length === 1) return `<span class="${badgeClass}">${escapeHtml(values[0])}</span>`;
-    const cellKey = params.node.id + ':' + fieldName;
-    const isExpanded = expandedBadgeCells.has(cellKey);
-    if (isExpanded) {
-        return `<div class="badge-stack">${values.map(v => `<span class="${badgeClass}">${escapeHtml(v)}</span>`).join('')}<button class="badge-toggle" onclick="toggleBadgeExpand(event,'${cellKey}')">▴ less</button></div>`;
-    }
-    return `<div class="badge-collapsed"><span class="${badgeClass}">${escapeHtml(values[0])}</span><button class="badge-toggle" onclick="toggleBadgeExpand(event,'${cellKey}')">+${values.length - 1} ▾</button></div>`;
-}
-
-const expandedBadgeCells = new Set();
-const expandedRows = new Set();
-
-window.toggleBadgeExpand = function(event, cellKey) {
-    event.stopPropagation();
-    expandedBadgeCells.has(cellKey) ? expandedBadgeCells.delete(cellKey) : expandedBadgeCells.add(cellKey);
-    const rowNode = gridApi.getRowNode(cellKey.split(':')[0]);
-    if (rowNode) { gridApi.refreshCells({ rowNodes: [rowNode], force: true }); setTimeout(() => gridApi.resetRowHeights(), 10); }
-};
-
-window.toggleExpand = function(event, nodeId) {
-    event.stopPropagation();
-    expandedRows.has(nodeId) ? expandedRows.delete(nodeId) : expandedRows.add(nodeId);
-    const rowNode = gridApi.getRowNode(nodeId);
-    if (rowNode) { gridApi.refreshCells({ rowNodes: [rowNode], force: true }); setTimeout(() => gridApi.resetRowHeights(), 10); }
-};
-
-function getColumnDefs() {
-    const DisciplineFilter = createCheckboxSetFilter(p => p.disciplines || []);
-    const CountryFilter = createCheckboxSetFilter(p => { const v = p.country; return (v && v !== 'Unknown') ? [v] : ['Unknown']; });
-    const PositionTypeFilter = createCheckboxSetFilter(p => p.position_type || []);
-
-    return [
-        {
-            field: 'created_at', headerName: 'Date', width: 100, sort: 'desc', autoHeight: true,
-            cellClass: 'date-cell', filter: 'agDateColumnFilter',
-            filterParams: { comparator: (fd, cv) => { const cd = new Date(cv); cd.setHours(0,0,0,0); fd.setHours(0,0,0,0); return cd < fd ? -1 : cd > fd ? 1 : 0; } },
-            cellRenderer: p => { if (!p.value) return ''; const d = new Date(p.value); return `<div>${d.toLocaleDateString('en-US',{month:'short',day:'numeric'})}<br>${d.getFullYear()}</div>`; }
-        },
-        { field: 'disciplines', headerName: 'Discipline', width: 220, filter: DisciplineFilter, autoHeight: true, cellRenderer: p => renderCollapsibleBadges(p, 'discipline-badge', 'disciplines') },
-        { field: 'country', headerName: 'Country', width: 110, filter: CountryFilter, cellRenderer: p => (!p.value || p.value === 'Unknown') ? '<span class="text-gray-400">\u2014</span>' : `<span class="country-badge">${escapeHtml(p.value)}</span>` },
-        { field: 'position_type', headerName: 'Type', width: 140, filter: PositionTypeFilter, autoHeight: true, cellRenderer: p => renderCollapsibleBadges(p, 'position-type-badge', 'position_type') },
-        { field: 'user_handle', headerName: 'Author', width: 170, filter: 'agTextColumnFilter', cellRenderer: p => {
-            if (!p.value) return '';
-            const link = `<a href="https://bsky.app/profile/${p.value}" target="_blank" rel="noopener noreferrer">@${p.value}</a>`;
-            return isAggregator(p.value) ? `${link} <span class="aggregator-badge" title="Aggregator repost">agg</span>` : link;
-        } },
-        { field: 'message', headerName: 'Position', flex: 2, minWidth: 200, filter: 'agTextColumnFilter', cellClass: 'message-cell', autoHeight: true, wrapText: true,
-            cellRenderer: p => {
-                if (!p.value) return '';
-                const max = 150, expanded = expandedRows.has(p.node.id);
-                if (p.value.length <= max) return `<div class="py-1">${escapeHtml(p.value)}</div>`;
-                const text = expanded ? p.value : p.value.substring(0, max) + '...';
-                return `<div class="py-1">${escapeHtml(text)}<button class="expand-btn" onclick="toggleExpand(event,'${p.node.id}')">${expanded ? '[ show less ]' : '[ read more ]'}</button></div>`;
-            }
-        },
-        { field: 'url', headerName: 'Link', width: 110, filter: false, sortable: false,
-            cellRenderer: p => {
-                if (!p.value) return '';
-                try { const u = new URL(p.value); if (u.protocol !== 'https:' && u.protocol !== 'http:') return '<span class="text-gray-400">Invalid URL</span>'; return `<a href="${escapeHtml(p.value)}" target="_blank" rel="noopener noreferrer">View Post</a>`; }
-                catch { return '<span class="text-gray-400">Invalid URL</span>'; }
-            }
-        }
-    ];
-}
-
-function updateTableCount() {
-    if (!gridApi) return;
-    const displayed = gridApi.getDisplayedRowCount();
-    const total = allPositions.length;
-    const el = document.getElementById('card-count');
-    el.textContent = displayed === total ? `${total} positions` : `Showing ${displayed} of ${total} positions`;
-}
-
-function initGrid() {
-    const gridEl = document.getElementById('positions-grid');
-    gridApi = agGrid.createGrid(gridEl, {
-        columnDefs: getColumnDefs(),
-        defaultColDef: { sortable: true, resizable: true, filterParams: { buttons: ['reset', 'apply'], closeOnApply: true } },
-        suppressDragLeaveHidesColumns: true,
-        rowData: allPositions,
-        quickFilterText: searchQuery || undefined,
-        animateRows: true,
-        pagination: true,
-        paginationPageSize: 50,
-        paginationPageSizeSelector: [25, 50, 100],
-        domLayout: 'normal',
-        isExternalFilterPresent: () => hideAggregators,
-        doesExternalFilterPass: node => !isAggregator(node.data && node.data.user_handle),
-        onFilterChanged: updateTableCount,
-        onGridReady: () => setTimeout(updateTableCount, 100),
-    });
-}
-
-// ─── View switcher ────────────────────────────────────────────────────────────
-
-window.setView = function(mode) {
-    localStorage.setItem('preferred-view', mode);
-    const cardsView = document.getElementById('cards-view');
-    const tableView = document.getElementById('table-view');
-    const filterPanel = document.getElementById('filter-panel');
-    const btnClear = document.getElementById('btn-clear');
-    const btnCards = document.getElementById('btn-cards');
-    const btnTable = document.getElementById('btn-table');
-
-    if (mode === 'table') {
-        cardsView.classList.add('hidden');
-        filterPanel.classList.add('hidden');
-        btnClear.classList.add('hidden');
-        tableView.classList.remove('hidden');
-        btnCards.classList.remove('active');
-        btnTable.classList.add('active');
-        if (!gridApi) initGrid();
-        else {
-            gridApi.setGridOption('quickFilterText', searchQuery);
-            updateTableCount();
-        }
-    } else {
-        tableView.classList.add('hidden');
-        filterPanel.classList.remove('hidden');
-        btnClear.classList.remove('hidden');
-        cardsView.classList.remove('hidden');
-        btnCards.classList.add('active');
-        btnTable.classList.remove('active');
-        updateCardCount();
-    }
-};
-
-// ─── Card filters (accordion) ─────────────────────────────────────────────────
-
-const cardFilters = { types: new Set(), countries: new Set(), areas: new Set() };
-const filterOptions = { types: [], countries: [], areas: [] };
-const openSections = new Set();
-
-window.toggleFilterSection = function(sectionId) {
-    const body = document.getElementById(`body-${sectionId}`);
-    const chevron = document.getElementById(`chevron-${sectionId}`);
-    if (openSections.has(sectionId)) {
-        openSections.delete(sectionId);
-        body.classList.remove('open');
-        chevron.innerHTML = SVG_CHEVRON_RIGHT;
-    } else {
-        openSections.add(sectionId);
-        body.classList.add('open');
-        chevron.innerHTML = SVG_CHEVRON_DOWN;
-    }
-};
-
-window.toggleCardFilter = function(category, index) {
-    const value = filterOptions[category][index];
-    const set = cardFilters[category];
-    set.has(value) ? set.delete(value) : set.add(value);
-    updateFilterBadge(category);
-    applyCardFilters();
-};
-
-function updateFilterBadge(category) {
-    const badge = document.getElementById(`badge-${category}`);
-    const count = cardFilters[category].size;
-    badge.textContent = count;
-    badge.style.display = count > 0 ? 'inline-flex' : 'none';
-}
-
-function buildCheckboxList(containerId, category, values) {
-    filterOptions[category] = values;
-    document.getElementById(containerId).innerHTML = values.map((v, i) => `
-        <label class="filter-option">
-            <input type="checkbox" class="filter-checkbox" onchange="toggleCardFilter('${category}',${i})">
-            <span>${escapeHtml(v)}</span>
-        </label>`).join('');
-}
-
-function buildCardFilters(positions) {
-    const types = [...new Set(positions.flatMap(p => p.position_type || []))].sort();
-    buildCheckboxList('body-types', 'types', types);
-
-    let countries = [...new Set(positions.map(p => p.country).filter(Boolean))].sort();
-    countries = countries.filter(c => c !== 'Unknown');
-    if (positions.some(p => !p.country || p.country === 'Unknown')) countries.push('Unknown');
-    filterOptions.countries = countries;
-    buildCheckboxList('country-options', 'countries', countries);
-
-    const areas = [...new Set(positions.flatMap(p => p.disciplines || []))].sort();
-    buildCheckboxList('body-areas', 'areas', areas);
-}
-
-window.filterCountryOptions = function(query) {
-    const q = query.toLowerCase();
-    document.getElementById('country-options').innerHTML = filterOptions.countries
-        .map((v, i) => ({ v, i }))
-        .filter(({ v }) => v.toLowerCase().includes(q))
-        .map(({ v, i }) => `
-            <label class="filter-option">
-                <input type="checkbox" class="filter-checkbox" onchange="toggleCardFilter('countries',${i})" ${cardFilters.countries.has(v) ? 'checked' : ''}>
-                <span>${escapeHtml(v)}</span>
-            </label>`).join('');
-};
-
-function applyCardFilters() {
-    let filtered = allPositions;
-    if (searchQuery) {
-        filtered = filtered.filter(p =>
-            (p.message || '').toLowerCase().includes(searchQuery) ||
-            (p.user_handle || '').toLowerCase().includes(searchQuery) ||
-            (p.country || '').toLowerCase().includes(searchQuery) ||
-            (p.disciplines || []).some(d => d.toLowerCase().includes(searchQuery)) ||
-            (p.position_type || []).some(t => t.toLowerCase().includes(searchQuery))
-        );
-    }
-    if (cardFilters.types.size > 0) filtered = filtered.filter(p => (p.position_type || []).some(t => cardFilters.types.has(t)));
-    if (cardFilters.countries.size > 0) filtered = filtered.filter(p => cardFilters.countries.has(p.country || 'Unknown'));
-    if (cardFilters.areas.size > 0) filtered = filtered.filter(p => (p.disciplines || []).some(d => cardFilters.areas.has(d)));
-    if (hideAggregators) filtered = filtered.filter(p => !isAggregator(p.user_handle));
-    currentFilteredPositions = filtered;
-    renderCardsBatch(true);
-}
-
-window.toggleHideAggregators = function(checked) {
-    hideAggregators = !!checked;
-    const btn = document.getElementById('hide-aggregators-toggle');
-    if (btn) btn.setAttribute('aria-checked', hideAggregators ? 'true' : 'false');
-    if (gridApi) gridApi.onFilterChanged();
-    applyCardFilters();
-};
-
-window.toggleHideAggregatorsBtn = function() {
-    toggleHideAggregators(!hideAggregators);
-};
-
-window.clearCardFilters = function() {
-    cardFilters.types.clear(); cardFilters.countries.clear(); cardFilters.areas.clear();
-    document.querySelectorAll('.filter-checkbox').forEach(cb => cb.checked = false);
-    ['types', 'countries', 'areas'].forEach(cat => updateFilterBadge(cat));
-    const cs = document.getElementById('country-filter-search');
-    if (cs) cs.value = '';
-    hideAggregators = false;
-    const aggBtn = document.getElementById('hide-aggregators-toggle');
-    if (aggBtn) aggBtn.setAttribute('aria-checked', 'false');
-    currentFilteredPositions = allPositions;
-    renderCardsBatch(true);
-};
-
-// ─── Static data loading ──────────────────────────────────────────────────────
 
 function loadStaticData() {
     const el = document.getElementById('static-positions');
@@ -756,193 +197,430 @@ function loadStaticData() {
             const positions = data.positions.map(p => ({ ...p, country: normalizeCountry(p.country) }));
             return { positions, total: data.total || positions.length };
         }
-    } catch (e) {
-        console.warn('Failed to parse static positions:', e);
-    }
+    } catch (e) { console.warn('static parse failed', e); }
     return null;
 }
 
-function setFiltersLoading(loading) {
-    const panel = document.getElementById('filter-panel');
-    const indicator = document.getElementById('loading-indicator');
-    if (loading) {
-        panel.classList.add('filters-loading');
-        if (indicator) indicator.classList.remove('hidden');
-    } else {
-        panel.classList.remove('filters-loading');
-        if (indicator) indicator.classList.add('hidden');
-    }
+/* ───────────────────────── TIME HELPERS ───────────────────────── */
+function relTime(iso) {
+    if (!iso) return '';
+    const then = new Date(iso); const now = new Date();
+    const s = Math.max(0, (now - then) / 1000);
+    if (s < 60) return 'now';
+    if (s < 3600) return Math.floor(s / 60) + 'm';
+    if (s < 86400) return Math.floor(s / 3600) + 'h';
+    if (s < 86400 * 7) return Math.floor(s / 86400) + 'd';
+    return then.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+function dayLabel(iso) {
+    if (!iso) return 'Earlier';
+    const d = new Date(iso); const now = new Date();
+    const startOf = x => new Date(x.getFullYear(), x.getMonth(), x.getDate());
+    const diffDays = Math.round((startOf(now) - startOf(d)) / 86400000);
+    if (diffDays <= 0) return 'Today';
+    if (diffDays === 1) return 'Yesterday';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function onFullDataLoaded(positions, dupes) {
-    allPositions = positions;
-    duplicateMap = dupes;
-    totalPositionCount = positions.length;
-    isFullDataLoaded = true;
-
-    // Rebuild filters with complete data
-    cardFilters.types.clear();
-    cardFilters.countries.clear();
-    cardFilters.areas.clear();
-    buildCardFilters(positions);
-    setFiltersLoading(false);
-
-    // Re-render cards with full data
-    currentFilteredPositions = positions;
-    renderCardsBatch(true);
-
-    // Rebuild grid if it was initialized
-    if (gridApi) {
-        gridApi.setGridOption('rowData', positions);
-        gridApi.setGridOption('columnDefs', getColumnDefs());
-        updateTableCount();
-    }
-}
-
-function setupFilterClickOutside() {
-    document.addEventListener('click', e => {
-        if (openSections.size === 0) return;
-        const panel = document.getElementById('filter-panel');
-        if (!panel || panel.contains(e.target)) return;
-        for (const sectionId of [...openSections]) {
-            const body = document.getElementById(`body-${sectionId}`);
-            const chevron = document.getElementById(`chevron-${sectionId}`);
-            openSections.delete(sectionId);
-            if (body) body.classList.remove('open');
-            if (chevron) chevron.innerHTML = SVG_CHEVRON_RIGHT;
+/* ───────────────────────── FILTERING ───────────────────────── */
+function visiblePositions() {
+    const f = state.filters;
+    const q = state.search.trim().toLowerCase();
+    return state.all.filter(p => {
+        if (state.hideAggr && isAggregator(p.user_handle)) return false;
+        const types = p.position_type || [];
+        const discs = p.disciplines || [];
+        if (f.level.size && !types.some(t => f.level.has(t))) return false;
+        if (f.country.size && !f.country.has(p.country)) return false;
+        if (f.area.size && !discs.some(d => f.area.has(d))) return false;
+        if (q) {
+            const hay = [p.message, p.user_handle, p.country, discs.join(' '), types.join(' ')]
+                .join(' ').toLowerCase();
+            if (!hay.includes(q)) return false;
         }
+        return true;
     });
 }
 
-function setupSearchListeners() {
-    const searchInput = document.getElementById('global-search');
-    const searchContainer = document.getElementById('header-search-container');
+/* ───────────────────────── FEED RENDER ───────────────────────── */
+const MSG_LIMIT = 280;
 
-    searchInput.addEventListener('keydown', e => {
-        if (e.key === 'Enter') applySearch();
-        if (e.key === 'Escape') { searchInput.blur(); }
-    });
+function postHTML(p) {
+    const handle = p.user_handle || 'unknown';
+    const initial = handle[0] ? handle[0].toUpperCase() : '?';
+    const aggr = isAggregator(handle);
+    const discBadges = (p.disciplines || []).map(d =>
+        `<span class="b" style="background:${getDisciplineColor(d)}">${escapeHtml(discShort(d))}</span>`).join('');
+    const typeBadges = (p.position_type || []).map(t => `<span class="b b-pos">${escapeHtml(t)}</span>`).join('');
+    const countryBadge = (p.country && p.country !== 'Unknown') ? `<span class="b b-country">${escapeHtml(p.country)}</span>` : '';
 
-    searchInput.addEventListener('focus', () => {
-        searchContainer.classList.add('expanded');
-    });
+    const msg = p.message || '';
+    const truncated = msg.length > MSG_LIMIT;
+    const bodyText = truncated ? msg.slice(0, MSG_LIMIT).trimEnd() + '…' : msg;
+    const moreLink = truncated ? '<span class="more-link">show more</span>' : '';
 
-    searchInput.addEventListener('blur', () => {
-        if (!searchQuery) searchContainer.classList.remove('expanded');
+    const reposts = (p.uri && state.duplicateMap[p.uri]) || [];
+    const rep = reposts.length;
+    const tOpen = state.threadOpen.has(p.uri);
+    const profileUrl = `https://bsky.app/profile/${encodeURIComponent(handle)}`;
+    const postUrl = safeUrl(p.url) || profileUrl;
+
+    let threadHTML = '';
+    if (rep > 0) {
+        threadHTML = `<div class="p-thread ${tOpen ? 'open' : ''}" data-thread="${escapeHtml(p.uri)}">
+          <button class="p-thread-toggle" data-toggle="${escapeHtml(p.uri)}"><span class="arr">▸</span> ${rep} earlier repost${rep > 1 ? 's' : ''}</button>
+          <div class="p-thread-list">
+            ${reposts.map(r => {
+                const rl = safeUrl(r.url);
+                const h = `@${escapeHtml(r.user_handle || 'unknown')}`;
+                const hh = rl ? `<a class="h" href="${escapeHtml(rl)}" target="_blank" rel="noopener">${h}</a>` : `<span class="h">${h}</span>`;
+                return `<div class="p-thread-item"><span class="dot"></span>${hh}<span class="t">${escapeHtml(relTime(r.created_at))}</span></div>`;
+            }).join('')}
+          </div>
+        </div>`;
+    }
+
+    return `<article class="post" data-id="${escapeHtml(p.uri)}">
+      <div class="p-avatar ${aggr ? 'aggr' : ''}">${escapeHtml(initial)}</div>
+      <div class="p-head">
+        <a class="p-handle" href="${escapeHtml(profileUrl)}" target="_blank" rel="noopener" data-stop>@${escapeHtml(handle)}</a>
+        ${aggr ? '<span class="p-aggr-tag">aggr</span>' : ''}
+        <span class="p-time">${escapeHtml(relTime(p.created_at))}</span>
+        <button class="p-follow" data-follow="${escapeHtml(handle)}" title="Follow @${escapeHtml(handle)}">+ follow</button>
+      </div>
+      <div class="p-meta-strip">${discBadges}${typeBadges}${countryBadge}</div>
+      <div class="p-body">${escapeHtml(bodyText)}${moreLink}</div>
+      ${threadHTML}
+      <div class="p-actions">
+        <a class="p-act" href="${escapeHtml(postUrl)}" target="_blank" rel="noopener" data-stop style="margin-left:auto;color:var(--primary)">view on Bluesky →</a>
+      </div>
+    </article>`;
+}
+
+function emptyStateHTML() {
+    if (state.search || state.filters.level.size || state.filters.country.size || state.filters.area.size || state.hideAggr) {
+        return `<div class="feed-empty"><div class="ee-mark">—</div><div class="ee-t">No positions match these filters</div><div class="ee-d">Try removing a filter chip on the left or clearing your search.</div><button class="btn-primary" id="empty-clear">Clear filters</button></div>`;
+    }
+    return `<div class="feed-empty"><div class="ee-mark">—</div><div class="ee-t">No positions loaded yet</div><div class="ee-d">Hang tight — fetching the latest positions.</div></div>`;
+}
+
+function renderFeedReset() {
+    feedList = visiblePositions();
+    renderedCount = 0;
+    lastDayLabel = null;
+    const stream = $('#feed-stream');
+    if (!feedList.length) { stream.innerHTML = emptyStateHTML(); updateCounts(); return; }
+    stream.innerHTML = '';
+    renderNextBatch();
+    updateCounts();
+}
+
+function renderNextBatch() {
+    const stream = $('#feed-stream');
+    const slice = feedList.slice(renderedCount, renderedCount + BATCH_SIZE);
+    let html = '';
+    for (const p of slice) {
+        const dl = dayLabel(p.created_at);
+        if (dl !== lastDayLabel) {
+            const ct = feedList.filter(x => dayLabel(x.created_at) === dl).length;
+            html += `<div class="day-sep"><span class="lbl">${escapeHtml(dl)}</span><span class="ct">${ct} position${ct > 1 ? 's' : ''}</span></div>`;
+            lastDayLabel = dl;
+        }
+        html += postHTML(p);
+    }
+    stream.insertAdjacentHTML('beforeend', html);
+    renderedCount += slice.length;
+    const loader = $('#loader');
+    loader.classList.toggle('hidden', renderedCount >= feedList.length);
+}
+
+function updateCounts() {
+    const total = state.total || state.all.length;
+    const ctAll = $('#ct-all'); if (ctAll) ctAll.textContent = total.toLocaleString();
+    const tabCt = $('#tab-latest-ct'); if (tabCt) tabCt.textContent = feedList.length.toLocaleString();
+}
+
+/* ───────────────────────── INFINITE SCROLL ───────────────────────── */
+function setupInfiniteScroll() {
+    if (scrollObserver) scrollObserver.disconnect();
+    scrollObserver = new IntersectionObserver(entries => {
+        for (const e of entries) {
+            if (e.isIntersecting && renderedCount < feedList.length) renderNextBatch();
+        }
+    }, { rootMargin: '600px' });
+    scrollObserver.observe($('#loader'));
+}
+
+/* ───────────────────────── FILTER CHIPS ───────────────────────── */
+function renderFilterChips() {
+    // Level
+    $('#chips-level').innerHTML = LEVEL_CHIPS.map(([val, lab]) =>
+        `<span class="chip" data-level="${escapeHtml(val)}">${escapeHtml(lab)}</span>`).join('');
+    // Area
+    $('#chips-area').innerHTML = AREA_CHIPS.map(d =>
+        `<span class="chip" data-area="${escapeHtml(d)}">${escapeHtml(discShort(d))}</span>`).join('');
+    // Country — top 8 by frequency from loaded data
+    const counts = {};
+    for (const p of state.all) {
+        if (p.country && p.country !== 'Unknown') counts[p.country] = (counts[p.country] || 0) + 1;
+    }
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8).map(e => e[0]);
+    $('#chips-country').innerHTML = top.map(c =>
+        `<span class="chip" data-country="${escapeHtml(c)}">${escapeHtml(c)}</span>`).join('');
+
+    bindChips();
+}
+
+function bindChips() {
+    $$('.chip[data-level]').forEach(c => c.onclick = () => toggleChip(c, 'level', c.dataset.level));
+    $$('.chip[data-country]').forEach(c => c.onclick = () => toggleChip(c, 'country', c.dataset.country));
+    $$('.chip[data-area]').forEach(c => c.onclick = () => {
+        const on = c.classList.toggle('on');
+        if (on) { c.style.background = getDisciplineColor(c.dataset.area); c.style.borderColor = getDisciplineColor(c.dataset.area); c.style.color = '#fff'; state.filters.area.add(c.dataset.area); }
+        else { c.style.background = ''; c.style.borderColor = ''; c.style.color = ''; state.filters.area.delete(c.dataset.area); }
+        renderFeedReset();
     });
 }
 
-// ─── Cookie consent (vanilla-cookieconsent integration) ──────────────────────
-// Library handles its own UI/storage. We just wire it to Google Consent Mode v2:
-// when the user accepts the "analytics" category, flip analytics_storage to
-// granted; default-deny is set in the inline script in <head>.
+function toggleChip(el, kind, val) {
+    const on = el.classList.toggle('on');
+    if (on) state.filters[kind].add(val); else state.filters[kind].delete(val);
+    renderFeedReset();
+}
 
+function clearFilters() {
+    state.filters.level.clear(); state.filters.country.clear(); state.filters.area.clear();
+    state.hideAggr = false; state.search = '';
+    $('#cmd-input').value = '';
+    $('#chip-hideaggr').classList.remove('on');
+    $$('.chip.on').forEach(c => { c.classList.remove('on'); c.style.background = ''; c.style.borderColor = ''; c.style.color = ''; });
+    renderFeedReset();
+}
+
+/* ───────────────────────── ACTIVITY RAIL ───────────────────────── */
+function renderActivity() {
+    const today = state.all.filter(p => dayLabel(p.created_at) === 'Today').length;
+    const total = state.total || state.all.length;
+    $('#activity-today').innerHTML =
+        `<div>· <strong style="color:var(--fg)">+${today}</strong> new position${today === 1 ? '' : 's'} today</div>
+         <div>· <strong style="color:var(--fg)">${total.toLocaleString()}</strong> open positions</div>`;
+
+    // Top disciplines
+    const counts = {};
+    for (const p of state.all) for (const d of (p.disciplines || [])) counts[d] = (counts[d] || 0) + 1;
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const max = top.length ? top[0][1] : 1;
+    $('#activity-trends').innerHTML = top.map(([d, n], i) => `
+      <div class="trend-row" data-trend-area="${escapeHtml(d)}">
+        <span class="trend-rank">${i + 1}</span>
+        <span class="trend-name">${escapeHtml(discShort(d))}</span>
+        <span class="trend-bar"><span class="trend-fill" style="width:${Math.round(n / max * 100)}%;background:${getDisciplineColor(d)}"></span></span>
+        <span class="trend-ct">${n}</span>
+      </div>`).join('');
+}
+
+/* ───────────────────────── POST FLYOUT ───────────────────────── */
+function openFlyout(uri) {
+    const p = state.all.find(x => x.uri === uri); if (!p) return;
+    const handle = p.user_handle || 'unknown';
+    const aggr = isAggregator(handle);
+    const meta = [
+        ...(p.disciplines || []).map(d => `<span class="b" style="background:${getDisciplineColor(d)}">${escapeHtml(discShort(d))}</span>`),
+        ...(p.position_type || []).map(t => `<span class="b b-pos">${escapeHtml(t)}</span>`),
+        (p.country && p.country !== 'Unknown') ? `<span class="b b-country">${escapeHtml(p.country)}</span>` : '',
+    ].join('');
+    const reposts = (state.duplicateMap[uri] || []);
+    const profileUrl = `https://bsky.app/profile/${encodeURIComponent(handle)}`;
+    const postUrl = safeUrl(p.url) || profileUrl;
+    const date = p.created_at ? new Date(p.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+
+    $('#flyout-body').innerHTML = `
+      <div class="flyout-author">
+        <div class="p-avatar ${aggr ? 'aggr' : ''}" style="position:relative;top:0;left:0;width:40px;height:40px">${escapeHtml(handle[0] ? handle[0].toUpperCase() : '?')}</div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <a href="${escapeHtml(profileUrl)}" target="_blank" rel="noopener" style="font-family:var(--font-mono);font-size:14px;color:var(--fg);font-weight:600">@${escapeHtml(handle)}</a>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--fg-subtle)">${aggr ? 'aggregator · ' : ''}${escapeHtml(date)}</div>
+        </div>
+      </div>
+      <div class="p-meta-strip">${meta}</div>
+      <div class="flyout-msg">${escapeHtml(p.message || '')}</div>
+      ${reposts.length ? `<div class="flyout-section">
+        <div class="flyout-section-title">Earlier reposts · ${reposts.length}</div>
+        ${reposts.map(r => {
+            const rl = safeUrl(r.url);
+            const h = `@${escapeHtml(r.user_handle || 'unknown')}`;
+            const hh = rl ? `<a class="h" href="${escapeHtml(rl)}" target="_blank" rel="noopener">${h}</a>` : `<span class="h">${h}</span>`;
+            return `<div class="dup-row">${hh}<span class="t">${escapeHtml(relTime(r.created_at))}</span></div>`;
+        }).join('')}
+      </div>` : ''}
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <a class="btn-primary" href="${escapeHtml(postUrl)}" target="_blank" rel="noopener">View on Bluesky →</a>
+      </div>`;
+    $('#flyout').classList.add('open');
+    $('#backdrop').classList.add('open');
+}
+
+function closeOverlays() {
+    $$('.modal').forEach(m => m.classList.remove('open'));
+    $('#flyout').classList.remove('open');
+    $('#backdrop').classList.remove('open');
+}
+
+/* ───────────────────────── TOASTS ───────────────────────── */
+const ICON_CHECK = '<path d="M3 8.5l3 3 7-7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
+const ICON_BELL = '<path d="M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2zM8 1.9l-.8.16A4 4 0 0 0 4 6c0 .63-.13 2.2-.46 3.74-.16.77-.38 1.57-.66 2.26h10.24c-.29-.69-.5-1.49-.66-2.26C12.13 8.2 12 6.63 12 6a4 4 0 0 0-3.2-3.92L8 1.9z"/>';
+let toastT;
+function toast(msg, ok) {
+    const w = $('#toast-wrap');
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.innerHTML = `<span class="ti ${ok ? 'ok' : ''}"><svg class="svg" width="14" height="14" viewBox="0 0 16 16" fill="currentColor">${ok ? ICON_CHECK : ICON_BELL}</svg></span><span>${escapeHtml(msg)}</span>`;
+    w.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 250); }, 2800);
+}
+
+const COMING_SOON = 'Accounts are coming soon — sign-up will let you save searches & follow accounts.';
+
+/* ───────────────────────── AUTH-AWARE CHROME (Branch A: stubs) ───────────────────────── */
+function renderTopbar() {
+    $('#top-account').innerHTML =
+        `<button class="btn-signin" data-auth="signin">Log in</button>
+         <button class="btn-signup" data-auth="signup">Sign up</button>`;
+}
+function renderRailSubs() {
+    $('#rail-subs-section').innerHTML = `
+      <div class="rail-nudge">
+        <div class="nh">＋ Subscribe to a filter</div>
+        <div class="nb">Save any search and get new positions by daily or weekly alert. Free account — coming soon.</div>
+        <button class="nbtn" data-auth="signup">Create account</button>
+      </div>`;
+}
+
+/* ───────────────────────── COOKIE BANNER ───────────────────────── */
 function setupCookieBanner() {
     if (typeof window.CookieConsent === 'undefined') return;
-
-    const onAnalyticsConsent = () => {
-        if (typeof window.gtag === 'function') {
-            window.gtag('consent', 'update', { analytics_storage: 'granted' });
-        }
-    };
-
+    const grant = () => { if (typeof window.gtag === 'function') window.gtag('consent', 'update', { analytics_storage: 'granted' }); };
     window.CookieConsent.run({
-        guiOptions: {
-            consentModal: { layout: 'bar', position: 'bottom', equalWeightButtons: false }
-        },
-        categories: {
-            necessary: { enabled: true, readOnly: true },
-            analytics: {}
-        },
+        guiOptions: { consentModal: { layout: 'bar', position: 'bottom', equalWeightButtons: false } },
+        categories: { necessary: { enabled: true, readOnly: true }, analytics: {} },
         language: {
             default: 'en',
-            translations: {
-                en: {
-                    consentModal: {
-                        title: '> Cookies',
-                        description: 'We use Google Analytics for visitor stats. No ads, no profiling. <a href="/privacy">Privacy policy</a>.',
-                        acceptAllBtn: 'Accept',
-                        acceptNecessaryBtn: 'Decline',
-                        showPreferencesBtn: ''
-                    }
-                }
-            }
+            translations: { en: { consentModal: {
+                title: '> Cookies',
+                description: 'We use Google Analytics for visitor stats. No ads, no profiling. <a href="/privacy">Privacy policy</a>.',
+                acceptAllBtn: 'Accept', acceptNecessaryBtn: 'Decline', showPreferencesBtn: ''
+            } } }
         },
-        onConsent: ({ cookie }) => {
-            if (cookie.categories.includes('analytics')) onAnalyticsConsent();
-        },
-        onChange: ({ cookie }) => {
-            if (cookie.categories.includes('analytics')) onAnalyticsConsent();
-        }
+        onConsent: ({ cookie }) => { if (cookie.categories.includes('analytics')) grant(); },
+        onChange: ({ cookie }) => { if (cookie.categories.includes('analytics')) grant(); },
     });
 }
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
+/* ───────────────────────── EVENT WIRING ───────────────────────── */
+function selectStream(stream) {
+    if (stream === 'following' || stream === 'saved') { toast(COMING_SOON); return; }
+    state.stream = stream;
+    $$('.rail-link').forEach(x => x.classList.toggle('active', x.dataset.stream === stream));
+    renderFeedReset();
+}
+function selectTab(tab) {
+    if (tab === 'forme') { toast(COMING_SOON); return; }
+    state.tab = tab;
+    $$('.river-tab').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
+    renderFeedReset();
+}
+
+function wireEvents() {
+    $('#backdrop').onclick = closeOverlays;
+    $('#flyout-close').onclick = closeOverlays;
+    $('#mark').onclick = () => { state.search = ''; $('#cmd-input').value = ''; selectStream('all'); window.scrollTo({ top: 0 }); };
+    $('#clear-filters').onclick = clearFilters;
+
+    // command bar / search
+    const cmd = $('#cmd-input');
+    let searchT;
+    cmd.addEventListener('input', () => { clearTimeout(searchT); searchT = setTimeout(() => { state.search = cmd.value; renderFeedReset(); }, 180); });
+    cmd.addEventListener('keydown', e => { if (e.key === 'Escape') { cmd.value = ''; state.search = ''; renderFeedReset(); cmd.blur(); } });
+
+    // hide-aggregator chip
+    $('#chip-hideaggr').onclick = e => { state.hideAggr = !state.hideAggr; e.currentTarget.classList.toggle('on', state.hideAggr); renderFeedReset(); };
+
+    // streams + tabs
+    $$('.rail-link').forEach(l => l.onclick = () => selectStream(l.dataset.stream));
+    $$('.river-tab').forEach(t => t.onclick = () => selectTab(t.dataset.tab));
+
+    // trends → set area filter
+    $('#activity-trends').addEventListener('click', e => {
+        const row = e.target.closest('[data-trend-area]'); if (!row) return;
+        const area = row.dataset.trendArea;
+        const chip = document.querySelector(`.chip[data-area="${CSS.escape(area)}"]`);
+        if (chip && !chip.classList.contains('on')) chip.click();
+    });
+
+    // feed delegation
+    $('#feed-stream').addEventListener('click', e => {
+        if (e.target.closest('[data-stop]')) return; // let real links work
+        const fol = e.target.closest('[data-follow]');
+        if (fol) { e.stopPropagation(); toast(COMING_SOON); return; }
+        const tog = e.target.closest('[data-toggle]');
+        if (tog) {
+            e.stopPropagation();
+            const id = tog.dataset.toggle;
+            state.threadOpen.has(id) ? state.threadOpen.delete(id) : state.threadOpen.add(id);
+            const el = document.querySelector(`[data-thread="${CSS.escape(id)}"]`);
+            if (el) el.classList.toggle('open');
+            return;
+        }
+        const post = e.target.closest('.post');
+        if (post) openFlyout(post.dataset.id);
+    });
+
+    // auth entry points + empty-state clear (delegated)
+    document.addEventListener('click', e => {
+        if (e.target.closest('[data-auth]')) { toast(COMING_SOON); return; }
+        if (e.target.closest('#empty-clear')) { clearFilters(); return; }
+    });
+
+    // keyboard
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') closeOverlays();
+        if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); $('#cmd-input').focus(); }
+    });
+}
+
+/* ───────────────────────── INIT ───────────────────────── */
+function onDataReady(positions, duplicates, total) {
+    state.all = positions;
+    state.duplicateMap = duplicates || {};
+    state.total = total || positions.length;
+    renderFilterChips();
+    renderActivity();
+    renderFeedReset();
+}
 
 async function init() {
     setupCookieBanner();
-    const loadingEl = document.getElementById('loading');
-    const errorEl = document.getElementById('error');
-    const appContainer = document.getElementById('app-container');
+    renderTopbar();
+    renderRailSubs();
+    wireEvents();
+    setupInfiniteScroll();
 
     const staticData = loadStaticData();
-
     if (staticData) {
-        // Render static data immediately
-        allPositions = staticData.positions;
-        currentFilteredPositions = staticData.positions;
-        totalPositionCount = staticData.total;
-
-        loadingEl.classList.add('dismissed');
-        appContainer.classList.remove('hidden');
-
-        buildCardFilters(staticData.positions);
-        setFiltersLoading(true);
-        renderCardsBatch(true);
-        setupInfiniteScroll();
-        setupSearchListeners();
-        setupFilterClickOutside();
-
-        // Restore preferred view (desktop only)
-        const preferred = localStorage.getItem('preferred-view');
-        if (preferred === 'table' && window.innerWidth >= 768) setView('table');
-
-        // Background fetch of full data
+        // immediate paint from embedded data
+        onDataReady(staticData.positions, {}, staticData.total);
+        // background full load (snapshot/live) for complete data + duplicates
         loadFullData()
-            .then(({ positions, duplicates }) => {
-                onFullDataLoaded(positions, duplicates);
-            })
-            .catch(err => {
-                console.warn('Background fetch failed, using embedded static data:', err);
-                setFiltersLoading(false);
-                isFullDataLoaded = true;
-            });
+            .then(({ positions, duplicates, total }) => onDataReady(positions, duplicates, total))
+            .catch(err => console.warn('background load failed; using embedded data', err));
     } else {
-        // No embedded static data — fetch full data directly
         try {
-            const { positions, duplicates } = await loadFullData();
-            allPositions = positions;
-            currentFilteredPositions = positions;
-            duplicateMap = duplicates;
-            totalPositionCount = positions.length;
-            isFullDataLoaded = true;
-
-            loadingEl.classList.add('dismissed');
-            appContainer.classList.remove('hidden');
-
-            buildCardFilters(positions);
-            renderCardsBatch(true);
-            setupInfiniteScroll();
-            setupSearchListeners();
-        setupFilterClickOutside();
-
-            const preferred = localStorage.getItem('preferred-view');
-            if (preferred === 'table' && window.innerWidth >= 768) setView('table');
-
-        } catch (error) {
-            loadingEl.classList.add('dismissed');
-            errorEl.classList.remove('hidden');
-            console.error('Initialization error:', error);
+            const { positions, duplicates, total } = await loadFullData();
+            onDataReady(positions, duplicates, total);
+        } catch (err) {
+            console.error('init error', err);
+            $('#feed-stream').innerHTML = `<div class="feed-error">Failed to load positions. Please try again later.</div>`;
         }
     }
 }
