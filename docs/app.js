@@ -217,13 +217,15 @@ function relTime(iso) {
     return then.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 function dayLabel(iso) {
-    if (!iso) return 'Earlier';
+    if (!iso) return 'Older';
     const d = new Date(iso); const now = new Date();
     const startOf = x => new Date(x.getFullYear(), x.getMonth(), x.getDate());
     const diffDays = Math.round((startOf(now) - startOf(d)) / 86400000);
     if (diffDays <= 0) return 'Today';
     if (diffDays === 1) return 'Yesterday';
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    if (diffDays < 7) return 'This week';
+    if (diffDays < 31) return 'This month';
+    return 'Older';
 }
 
 /* ───────────────────────── FILTERING ───────────────────────── */
@@ -374,34 +376,52 @@ function countNames(extract) {
     return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(e => e[0]);
 }
 
+const CHIP_TOP_N = 5;
+const chipNames = { area: [], country: [] };   // full name lists by frequency (cached)
+
 function renderFilterChips() {
     // Level — fixed set
     $('#chips-level').innerHTML = LEVEL_CHIPS.map(([val, lab]) =>
         `<span class="chip" data-level="${escapeHtml(val)}">${escapeHtml(lab)}</span>`).join('');
-    // Area + Country — top 5 by frequency; the rest live behind a "more…" dropdown
-    buildChipRow('chips-area', countNames(p => p.disciplines || []), 'area', 5);
-    buildChipRow('chips-country', countNames(p => (p.country && p.country !== 'Unknown') ? [p.country] : []), 'country', 5);
+    // Area + Country — top 5 chips (+ any selected off-list) inline; full alpha list in dropdown
+    chipNames.area = countNames(p => p.disciplines || []);
+    chipNames.country = countNames(p => (p.country && p.country !== 'Unknown') ? [p.country] : []);
+    buildChipDropdown('area', 'chips-area');
+    buildChipDropdown('country', 'chips-country');
+    renderChipRow('area', 'chips-area');
+    renderChipRow('country', 'chips-country');
     bindChips();
 }
 
-function buildChipRow(containerId, names, kind, topN) {
+// Inline chips = top-N by frequency PLUS any currently-selected value not in the
+// top-N (so off-list picks show as selected bubbles), then the "all N…" trigger.
+function renderChipRow(kind, containerId) {
     const container = $('#' + containerId);
     if (!container) return;
-    const top = names.slice(0, topN);
+    const names = chipNames[kind];
+    const top = names.slice(0, CHIP_TOP_N);
+    const extra = [...state.filters[kind]].filter(v => !top.includes(v));
+    const shown = [...top, ...extra];
     const label = n => kind === 'area' ? discShort(n) : n;
     const chip = n => `<span class="chip" data-${kind}="${escapeHtml(n)}">${escapeHtml(label(n))}</span>`;
-    container.innerHTML = top.map(chip).join('') +
-        (names.length > topN ? `<span class="chip chip-more" data-more="${kind}">all ${names.length}…</span>` : '');
-    // Full-list dropdown (overlay): search (when long) + scrollable checklist of ALL names.
-    const frow = container.parentElement;
+    container.innerHTML = shown.map(chip).join('') +
+        (names.length > CHIP_TOP_N ? `<span class="chip chip-more" data-more="${kind}">all ${names.length}…</span>` : '');
+}
+
+// Full-list dropdown (overlay): optional search + scrollable, ALPHABETICAL checklist.
+function buildChipDropdown(kind, containerId) {
+    const frow = $('#' + containerId).parentElement;
+    const names = chipNames[kind];
     let dd = frow.querySelector('.chip-dropdown');
-    if (names.length > topN) {
+    if (names.length > CHIP_TOP_N) {
         if (!dd) { dd = document.createElement('div'); dd.className = 'chip-dropdown'; frow.appendChild(dd); }
+        const sorted = [...names].sort((a, b) => a.localeCompare(b));
         const needSearch = names.length > 8;
+        const label = n => kind === 'area' ? discShort(n) : n;
         dd.innerHTML =
             (needSearch ? `<input class="dd-search" placeholder="Filter ${kind === 'area' ? 'areas' : 'countries'}…">` : '') +
             `<div class="dd-list">` +
-            names.map(n => `<div class="dd-item" data-${kind}="${escapeHtml(n)}"><span class="dd-check">✓</span><span class="dd-lab">${escapeHtml(label(n))}</span></div>`).join('') +
+            sorted.map(n => `<div class="dd-item" data-${kind}="${escapeHtml(n)}"><span class="dd-check">✓</span><span class="dd-lab">${escapeHtml(label(n))}</span></div>`).join('') +
             `</div>`;
     } else if (dd) { dd.remove(); }
 }
@@ -411,18 +431,17 @@ function applyAreaChipStyle(c, on) {
     else { c.style.background = ''; c.style.borderColor = ''; c.style.color = ''; }
 }
 
-// Reflect a filter value's on/off state on both the top-5 chip and the dropdown item.
-function syncFilterValue(kind, val) {
-    const on = state.filters[kind].has(val);
-    const chip = document.querySelector(`.chip[data-${kind}="${CSS.escape(val)}"]`);
-    if (chip) { chip.classList.toggle('on', on); if (kind === 'area') applyAreaChipStyle(chip, on); }
-    const it = document.querySelector(`.chip-dropdown .dd-item[data-${kind}="${CSS.escape(val)}"]`);
-    if (it) it.classList.toggle('on', on);
-}
-
 function setFilterValue(kind, val, on) {
     if (on) state.filters[kind].add(val); else state.filters[kind].delete(val);
-    syncFilterValue(kind, val);
+    if (kind === 'level') {
+        const chip = document.querySelector(`.chip[data-level="${CSS.escape(val)}"]`);
+        if (chip) chip.classList.toggle('on', on);
+    } else {
+        renderChipRow(kind, 'chips-' + kind);            // show/hide off-list selected bubbles
+        const it = document.querySelector(`.chip-dropdown .dd-item[data-${kind}="${CSS.escape(val)}"]`);
+        if (it) it.classList.toggle('on', on);
+        bindChips();                                     // rebind the rebuilt chip row
+    }
     renderFeedReset();
 }
 
