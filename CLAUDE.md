@@ -57,6 +57,10 @@ SUPABASE_URL=https://xxx.supabase.co  # For Supabase storage
 SUPABASE_KEY=your-anon-key            # For Supabase storage
 TELEGRAM_BOT_TOKEN=your-bot-token     # For Telegram channel
 TELEGRAM_CHANNEL_ID=@your_channel     # Telegram channel ID
+SUPABASE_SERVICE_KEY=service-role-key # For subscription digest cron (bypasses RLS)
+RESEND_API_KEY=your-resend-key        # For subscription email digests
+EMAIL_FROM=PhD Sky <alerts@phdsky.org># Digest sender (verified Resend domain)
+EMAIL_PROVIDER=resend                 # Email backend (default: resend)
 ```
 
 ## Running
@@ -313,9 +317,13 @@ onboarding, subscriptions page, toasts).
   session restore (`getSession` + `onAuthStateChange`), and the profile menu
   (avatar → Feed / Subscriptions / Sign out) are wired in `app.js`. Bluesky &
   ORCID buttons render disabled ("soon") until the academic-OAuth branch.
-- Subscriptions / follows surfaces ("+ follow", "save current search", Following
-  stream, "For me" tab) still route to a "coming soon" toast until those branches
-  land — but the account they attach to is real.
+- **Saved-search subscriptions** are live: "save current search" / command-bar
+  Enter / the Subscriptions rail build a `subscriptions` row from the active
+  filter chips; the Subscriptions page (`#view-subs`) lists them with cadence
+  pills + email delivery toggle + delete. All via `supabaseClient.from('subscriptions')`
+  under owner-only RLS.
+- Follows surfaces ("+ follow", Following stream, "For me" tab) still route to a
+  "coming soon" toast until the account-follows branch lands.
 
 ### Accounts / Auth (Supabase Auth)
 
@@ -324,6 +332,30 @@ auto-created by an `on_auth_user_created` trigger) with owner-only RLS. Manual
 dashboard setup (documented in the migration header): enable Email/Google/GitHub
 providers, add OAuth client credentials, and register redirect URLs for
 `https://phdsky.org` and `http://localhost`.
+
+### Subscriptions (saved-search email digests)
+
+`migrations/004_subscriptions.sql` adds the `subscriptions` table (owner-only RLS,
+`cadence` ∈ instant/daily/weekly/off, `last_notified_at` watermark for idempotent
+digests). Backend pieces:
+
+- **`src/email/`** — provider-agnostic email (`EmailProvider` ABC +
+  `get_email_provider()`/`send_email()`, chosen by `EMAIL_PROVIDER`, default
+  `resend`). `resend_provider.py` posts to the Resend REST API over `requests`.
+- **`scripts/send_subscription_digests.py`** — standalone cron (mirrors
+  `post_to_telegram.py`). Uses the **service-role key** to read all due
+  subscriptions for a cadence, matches new positions (`created_at >
+  last_notified_at`) via the pure `position_matches()` helper, emails a digest,
+  and advances the watermark only on success. `python scripts/send_subscription_digests.py --cadence daily`.
+- **`.github/workflows/subscription-digests.yml`** — daily (08:00 UTC), weekly
+  (Mon 09:00 UTC), and hourly "instant" runs; picks the cadence from the schedule.
+- Tests: `tests/test_email.py` (mock provider) + `tests/test_digest.py`
+  (matching/formatting).
+
+New env / GitHub secrets: `RESEND_API_KEY`, `EMAIL_FROM`
+(e.g. `PhD Sky <alerts@phdsky.org>`), `SUPABASE_SERVICE_KEY` (service-role; cron
+only, never in the frontend). Manual: verify the `phdsky.org` domain in Resend
+(SPF/DKIM DNS).
 
 **`docs/aggregators.json`** - Hand-maintained list `{ "handles": [...] }` of Bluesky handles flagged as aggregator reposters. Source of truth for the UI filter. Updated via `scripts/find_aggregator_candidates.py`.
 
