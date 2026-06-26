@@ -368,33 +368,66 @@ function setupInfiniteScroll() {
 }
 
 /* ───────────────────────── FILTER CHIPS ───────────────────────── */
+function countNames(extract) {
+    const counts = {};
+    for (const p of state.all) for (const name of extract(p)) counts[name] = (counts[name] || 0) + 1;
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).map(e => e[0]);
+}
+
 function renderFilterChips() {
-    // Level
+    // Level — fixed set
     $('#chips-level').innerHTML = LEVEL_CHIPS.map(([val, lab]) =>
         `<span class="chip" data-level="${escapeHtml(val)}">${escapeHtml(lab)}</span>`).join('');
-    // Area
-    $('#chips-area').innerHTML = AREA_CHIPS.map(d =>
-        `<span class="chip" data-area="${escapeHtml(d)}">${escapeHtml(discShort(d))}</span>`).join('');
-    // Country — top 8 by frequency from loaded data
-    const counts = {};
-    for (const p of state.all) {
-        if (p.country && p.country !== 'Unknown') counts[p.country] = (counts[p.country] || 0) + 1;
-    }
-    const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8).map(e => e[0]);
-    $('#chips-country').innerHTML = top.map(c =>
-        `<span class="chip" data-country="${escapeHtml(c)}">${escapeHtml(c)}</span>`).join('');
-
+    // Area + Country — top 5 by frequency; the rest live behind a "more…" dropdown
+    buildChipRow('chips-area', countNames(p => p.disciplines || []), 'area', 5);
+    buildChipRow('chips-country', countNames(p => (p.country && p.country !== 'Unknown') ? [p.country] : []), 'country', 5);
     bindChips();
 }
 
+function buildChipRow(containerId, names, kind, topN) {
+    const container = $('#' + containerId);
+    if (!container) return;
+    const top = names.slice(0, topN);
+    const rest = names.slice(topN);
+    const label = n => kind === 'area' ? discShort(n) : n;
+    const chip = n => `<span class="chip" data-${kind}="${escapeHtml(n)}">${escapeHtml(label(n))}</span>`;
+    container.innerHTML = top.map(chip).join('') +
+        (rest.length ? `<span class="chip chip-more" data-more="${kind}">more…</span>` : '');
+    const frow = container.parentElement;
+    let panel = frow.querySelector('.chip-more-panel');
+    if (rest.length) {
+        if (!panel) { panel = document.createElement('div'); panel.className = 'chip-more-panel'; frow.appendChild(panel); }
+        panel.innerHTML = rest.map(chip).join('');
+    } else if (panel) { panel.remove(); }
+}
+
+function applyAreaChipStyle(c, on) {
+    if (on) { const col = getDisciplineColor(c.dataset.area); c.style.background = col; c.style.borderColor = col; c.style.color = '#fff'; }
+    else { c.style.background = ''; c.style.borderColor = ''; c.style.color = ''; }
+}
+
 function bindChips() {
-    $$('.chip[data-level]').forEach(c => c.onclick = () => toggleChip(c, 'level', c.dataset.level));
-    $$('.chip[data-country]').forEach(c => c.onclick = () => toggleChip(c, 'country', c.dataset.country));
-    $$('.chip[data-area]').forEach(c => c.onclick = () => {
-        const on = c.classList.toggle('on');
-        if (on) { c.style.background = getDisciplineColor(c.dataset.area); c.style.borderColor = getDisciplineColor(c.dataset.area); c.style.color = '#fff'; state.filters.area.add(c.dataset.area); }
-        else { c.style.background = ''; c.style.borderColor = ''; c.style.color = ''; state.filters.area.delete(c.dataset.area); }
-        renderFeedReset();
+    $$('.chip[data-level]').forEach(c => {
+        c.classList.toggle('on', state.filters.level.has(c.dataset.level));
+        c.onclick = () => toggleChip(c, 'level', c.dataset.level);
+    });
+    $$('.chip[data-country]').forEach(c => {
+        c.classList.toggle('on', state.filters.country.has(c.dataset.country));
+        c.onclick = () => toggleChip(c, 'country', c.dataset.country);
+    });
+    $$('.chip[data-area]').forEach(c => {
+        const sel = state.filters.area.has(c.dataset.area);
+        c.classList.toggle('on', sel); applyAreaChipStyle(c, sel);
+        c.onclick = () => {
+            const on = c.classList.toggle('on');
+            applyAreaChipStyle(c, on);
+            if (on) state.filters.area.add(c.dataset.area); else state.filters.area.delete(c.dataset.area);
+            renderFeedReset();
+        };
+    });
+    $$('.chip-more').forEach(c => c.onclick = () => {
+        const panel = c.closest('.f-row').querySelector('.chip-more-panel');
+        if (panel) panel.classList.toggle('open');
     });
 }
 
@@ -410,36 +443,58 @@ function clearFilters() {
     $('#cmd-input').value = '';
     $('#chip-hideaggr').classList.remove('on');
     $$('.chip.on').forEach(c => { c.classList.remove('on'); c.style.background = ''; c.style.borderColor = ''; c.style.color = ''; });
+    $$('.chip-more-panel.open').forEach(p => p.classList.remove('open'));
     renderFeedReset();
 }
 
 /* ───────────────────────── ACTIVITY RAIL ───────────────────────── */
 function renderActivity() {
     const today = state.all.filter(p => dayLabel(p.created_at) === 'Today').length;
-    const total = state.total || state.all.length;
     $('#activity-today').innerHTML =
-        `<div>· <strong style="color:var(--fg)">+${today}</strong> new position${today === 1 ? '' : 's'} today</div>
-         <div>· <strong style="color:var(--fg)">${total.toLocaleString()}</strong> open positions</div>`;
+        `<div>· <strong style="color:var(--fg)">+${today}</strong> new position${today === 1 ? '' : 's'} today</div>`;
 
-    // Top disciplines
-    const counts = {};
-    for (const p of state.all) for (const d of (p.disciplines || [])) counts[d] = (counts[d] || 0) + 1;
-    const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const dcounts = {};
+    for (const p of state.all) for (const d of (p.disciplines || [])) dcounts[d] = (dcounts[d] || 0) + 1;
+    renderTrendCard('#activity-trends', dcounts, 'area');
+
+    const ccounts = {};
+    for (const p of state.all) { const c = p.country; if (c && c !== 'Unknown') ccounts[c] = (ccounts[c] || 0) + 1; }
+    renderTrendCard('#activity-countries', ccounts, 'country');
+}
+
+// Renders a "top 5 + Other" stat list. kind 'area' uses discipline colors and
+// discipline topic-follows; kind 'country' uses the country color + country
+// topic-follows. Named rows click to set the matching filter; Other is inert.
+function renderTrendCard(sel, counts, kind) {
+    const el = $(sel); if (!el) return;
+    const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    const top = entries.slice(0, 5);
+    const otherSum = entries.slice(5).reduce((s, [, n]) => s + n, 0);
     const max = top.length ? top[0][1] : 1;
-    $('#activity-trends').innerHTML = top.map(([d, n], i) => {
-        const on = state.topics.has(d);
+    const colorFor = n => kind === 'area' ? getDisciplineColor(n) : 'var(--country-bg)';
+    const label = n => kind === 'area' ? discShort(n) : n;
+    const topicKind = kind === 'area' ? 'discipline' : 'country';
+    let html = top.map(([name, n], i) => {
+        const on = state.topics.has(name);
         const followBtn = state.user
-            ? `<span class="trend-follow ${on ? 'on' : ''}" data-topic="${escapeHtml(d)}">${on ? 'following' : 'follow'}</span>`
+            ? `<span class="trend-follow ${on ? 'on' : ''}" data-topic="${escapeHtml(name)}" data-topic-kind="${topicKind}">${on ? 'following' : 'follow'}</span>`
             : '';
-        return `
-      <div class="trend-row" data-trend-area="${escapeHtml(d)}">
+        return `<div class="trend-row" data-trend="${escapeHtml(name)}" data-trend-kind="${kind}">
         <span class="trend-rank">${i + 1}</span>
-        <span class="trend-name">${escapeHtml(discShort(d))}</span>
-        <span class="trend-bar"><span class="trend-fill" style="width:${Math.round(n / max * 100)}%;background:${getDisciplineColor(d)}"></span></span>
-        <span class="trend-ct">${n}</span>
-        ${followBtn}
+        <span class="trend-name">${escapeHtml(label(name))}</span>
+        <span class="trend-bar"><span class="trend-fill" style="width:${Math.round(n / max * 100)}%;background:${colorFor(name)}"></span></span>
+        <span class="trend-ct">${n}</span>${followBtn}
       </div>`;
     }).join('');
+    if (otherSum > 0) {
+        html += `<div class="trend-row trend-other">
+        <span class="trend-rank">·</span>
+        <span class="trend-name" style="color:var(--fg-subtle)">Other</span>
+        <span class="trend-bar"><span class="trend-fill" style="width:${Math.round(otherSum / max * 100)}%;background:var(--aggregator-bg)"></span></span>
+        <span class="trend-ct">${otherSum}</span>
+      </div>`;
+    }
+    el.innerHTML = html;
 }
 
 /* ───────────────────────── POST FLYOUT ───────────────────────── */
@@ -784,15 +839,19 @@ function wireEvents() {
     $$('.rail-link').forEach(l => l.onclick = () => selectStream(l.dataset.stream));
     $$('.river-tab').forEach(t => t.onclick = () => selectTab(t.dataset.tab));
 
-    // trends → follow topic, or set area filter
-    $('#activity-trends').addEventListener('click', e => {
+    // trends (areas + countries) → follow topic, or set the matching filter
+    const onTrendClick = e => {
         const tf = e.target.closest('[data-topic]');
-        if (tf) { e.stopPropagation(); toggleFollowTopic(tf.dataset.topic, 'discipline'); return; }
-        const row = e.target.closest('[data-trend-area]'); if (!row) return;
-        const area = row.dataset.trendArea;
-        const chip = document.querySelector(`.chip[data-area="${CSS.escape(area)}"]`);
-        if (chip && !chip.classList.contains('on')) chip.click();
-    });
+        if (tf) { e.stopPropagation(); toggleFollowTopic(tf.dataset.topic, tf.dataset.topicKind || 'discipline'); return; }
+        const row = e.target.closest('[data-trend]'); if (!row) return;
+        const name = row.dataset.trend;
+        const fk = row.dataset.trendKind === 'area' ? 'area' : 'country';
+        const chip = document.querySelector(`.chip[data-${fk}="${CSS.escape(name)}"]`);
+        if (chip) { if (!chip.classList.contains('on')) chip.click(); }
+        else if (!state.filters[fk].has(name)) { state.filters[fk].add(name); renderFeedReset(); }
+    };
+    $('#activity-trends').addEventListener('click', onTrendClick);
+    $('#activity-countries').addEventListener('click', onTrendClick);
 
     // feed delegation
     $('#feed-stream').addEventListener('click', e => {

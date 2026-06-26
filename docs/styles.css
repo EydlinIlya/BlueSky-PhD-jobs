@@ -128,6 +128,11 @@ body { padding-bottom: 34px; }
 .chip.on.disc-Chemistry { background: var(--disc-chemistry); border-color: var(--disc-chemistry); }
 .chip.on.disc-Psychology { background: var(--disc-psychology); border-color: var(--disc-psychology); }
 .chip .star { font-size: 10px; opacity: .9; }
+.chip.chip-more { color: var(--fg-subtle); border-style: dashed; }
+.chip.chip-more:hover { color: var(--primary); border-color: var(--primary); }
+.chip-more-panel { display: none; flex-wrap: wrap; gap: 5px; margin-top: 5px; padding: 0 4px; }
+.chip-more-panel.open { display: flex; }
+.trend-other .trend-name { font-style: italic; }
 
 /* ════════════════════════════════════════════════
    CENTER RIVER
