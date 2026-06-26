@@ -388,17 +388,22 @@ function buildChipRow(containerId, names, kind, topN) {
     const container = $('#' + containerId);
     if (!container) return;
     const top = names.slice(0, topN);
-    const rest = names.slice(topN);
     const label = n => kind === 'area' ? discShort(n) : n;
     const chip = n => `<span class="chip" data-${kind}="${escapeHtml(n)}">${escapeHtml(label(n))}</span>`;
     container.innerHTML = top.map(chip).join('') +
-        (rest.length ? `<span class="chip chip-more" data-more="${kind}">more…</span>` : '');
+        (names.length > topN ? `<span class="chip chip-more" data-more="${kind}">all ${names.length}…</span>` : '');
+    // Full-list dropdown (overlay): search (when long) + scrollable checklist of ALL names.
     const frow = container.parentElement;
-    let panel = frow.querySelector('.chip-more-panel');
-    if (rest.length) {
-        if (!panel) { panel = document.createElement('div'); panel.className = 'chip-more-panel'; frow.appendChild(panel); }
-        panel.innerHTML = rest.map(chip).join('');
-    } else if (panel) { panel.remove(); }
+    let dd = frow.querySelector('.chip-dropdown');
+    if (names.length > topN) {
+        if (!dd) { dd = document.createElement('div'); dd.className = 'chip-dropdown'; frow.appendChild(dd); }
+        const needSearch = names.length > 8;
+        dd.innerHTML =
+            (needSearch ? `<input class="dd-search" placeholder="Filter ${kind === 'area' ? 'areas' : 'countries'}…">` : '') +
+            `<div class="dd-list">` +
+            names.map(n => `<div class="dd-item" data-${kind}="${escapeHtml(n)}"><span class="dd-check">✓</span><span class="dd-lab">${escapeHtml(label(n))}</span></div>`).join('') +
+            `</div>`;
+    } else if (dd) { dd.remove(); }
 }
 
 function applyAreaChipStyle(c, on) {
@@ -406,35 +411,64 @@ function applyAreaChipStyle(c, on) {
     else { c.style.background = ''; c.style.borderColor = ''; c.style.color = ''; }
 }
 
+// Reflect a filter value's on/off state on both the top-5 chip and the dropdown item.
+function syncFilterValue(kind, val) {
+    const on = state.filters[kind].has(val);
+    const chip = document.querySelector(`.chip[data-${kind}="${CSS.escape(val)}"]`);
+    if (chip) { chip.classList.toggle('on', on); if (kind === 'area') applyAreaChipStyle(chip, on); }
+    const it = document.querySelector(`.chip-dropdown .dd-item[data-${kind}="${CSS.escape(val)}"]`);
+    if (it) it.classList.toggle('on', on);
+}
+
+function setFilterValue(kind, val, on) {
+    if (on) state.filters[kind].add(val); else state.filters[kind].delete(val);
+    syncFilterValue(kind, val);
+    renderFeedReset();
+}
+
 function bindChips() {
     $$('.chip[data-level]').forEach(c => {
         c.classList.toggle('on', state.filters.level.has(c.dataset.level));
-        c.onclick = () => toggleChip(c, 'level', c.dataset.level);
+        c.onclick = () => setFilterValue('level', c.dataset.level, !state.filters.level.has(c.dataset.level));
     });
     $$('.chip[data-country]').forEach(c => {
         c.classList.toggle('on', state.filters.country.has(c.dataset.country));
-        c.onclick = () => toggleChip(c, 'country', c.dataset.country);
+        c.onclick = () => setFilterValue('country', c.dataset.country, !state.filters.country.has(c.dataset.country));
     });
     $$('.chip[data-area]').forEach(c => {
         const sel = state.filters.area.has(c.dataset.area);
         c.classList.toggle('on', sel); applyAreaChipStyle(c, sel);
-        c.onclick = () => {
-            const on = c.classList.toggle('on');
-            applyAreaChipStyle(c, on);
-            if (on) state.filters.area.add(c.dataset.area); else state.filters.area.delete(c.dataset.area);
-            renderFeedReset();
-        };
+        c.onclick = () => setFilterValue('area', c.dataset.area, !state.filters.area.has(c.dataset.area));
     });
-    $$('.chip-more').forEach(c => c.onclick = () => {
-        const panel = c.closest('.f-row').querySelector('.chip-more-panel');
-        if (panel) panel.classList.toggle('open');
+    // "all N…" triggers open the fixed-position dropdown (closing any other)
+    $$('.chip-more').forEach(c => c.onclick = e => {
+        e.stopPropagation();
+        const dd = c.closest('.f-row').querySelector('.chip-dropdown');
+        $$('.chip-dropdown.open').forEach(o => { if (o !== dd) o.classList.remove('open'); });
+        const opening = !dd.classList.contains('open');
+        dd.classList.toggle('open', opening);
+        if (opening) {
+            const r = c.getBoundingClientRect();
+            dd.style.top = Math.round(r.bottom + 6) + 'px';
+            dd.style.left = Math.round(Math.min(r.left, window.innerWidth - 252)) + 'px';
+            const s = dd.querySelector('.dd-search');
+            if (s) s.focus();
+        }
     });
-}
-
-function toggleChip(el, kind, val) {
-    const on = el.classList.toggle('on');
-    if (on) state.filters[kind].add(val); else state.filters[kind].delete(val);
-    renderFeedReset();
+    // dropdown checklist items
+    $$('.chip-dropdown .dd-item').forEach(it => {
+        const kind = it.dataset.area !== undefined ? 'area' : 'country';
+        const val = it.dataset[kind];
+        it.classList.toggle('on', state.filters[kind].has(val));
+        it.onclick = () => setFilterValue(kind, val, !state.filters[kind].has(val));
+    });
+    // dropdown search box filters the visible list
+    $$('.chip-dropdown .dd-search').forEach(inp => inp.oninput = () => {
+        const q = inp.value.trim().toLowerCase();
+        inp.closest('.chip-dropdown').querySelectorAll('.dd-item').forEach(it => {
+            it.style.display = it.textContent.toLowerCase().includes(q) ? '' : 'none';
+        });
+    });
 }
 
 function clearFilters() {
@@ -443,7 +477,8 @@ function clearFilters() {
     $('#cmd-input').value = '';
     $('#chip-hideaggr').classList.remove('on');
     $$('.chip.on').forEach(c => { c.classList.remove('on'); c.style.background = ''; c.style.borderColor = ''; c.style.color = ''; });
-    $$('.chip-more-panel.open').forEach(p => p.classList.remove('open'));
+    $$('.chip-dropdown .dd-item.on').forEach(it => it.classList.remove('on'));
+    $$('.chip-dropdown.open').forEach(d => d.classList.remove('open'));
     renderFeedReset();
 }
 
@@ -835,6 +870,12 @@ function wireEvents() {
     // hide-aggregator chip
     $('#chip-hideaggr').onclick = e => { state.hideAggr = !state.hideAggr; e.currentTarget.classList.toggle('on', state.hideAggr); renderFeedReset(); };
 
+    // close fixed filter dropdowns on scroll (page or rail) so they don't drift
+    const closeDropdowns = () => $$('.chip-dropdown.open').forEach(d => d.classList.remove('open'));
+    window.addEventListener('scroll', closeDropdowns);
+    const railEl = document.querySelector('.left-rail');
+    if (railEl) railEl.addEventListener('scroll', closeDropdowns);
+
     // streams + tabs
     $$('.rail-link').forEach(l => l.onclick = () => selectStream(l.dataset.stream));
     $$('.river-tab').forEach(t => t.onclick = () => selectTab(t.dataset.tab));
@@ -875,11 +916,15 @@ function wireEvents() {
         if (post) openFlyout(post.dataset.id);
     });
 
-    // delegated: empty-state clear + close profile menu on outside click
+    // delegated: empty-state clear + close profile menu / filter dropdowns on outside click
     document.addEventListener('click', e => {
         if (e.target.closest('#empty-clear')) { clearFilters(); return; }
         const pm = $('#profile-menu');
         if (pm && pm.classList.contains('open') && !e.target.closest('.profile-wrap')) pm.classList.remove('open');
+        const ddOpen = $$('.chip-dropdown.open');
+        if (ddOpen.length && !e.target.closest('.chip-dropdown') && !e.target.closest('.chip-more')) {
+            ddOpen.forEach(d => d.classList.remove('open'));
+        }
     });
 
     // keyboard
