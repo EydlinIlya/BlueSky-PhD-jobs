@@ -1,0 +1,60 @@
+name: Subscription Digests
+
+# Emails saved-search subscription digests. Per-user, decoupled from ingest.
+# Daily digests in the morning, weekly on Monday, and an hourly "instant" batch.
+# Idempotent: advances each subscription's last_notified_at only after a
+# successful send (see scripts/send_subscription_digests.py).
+
+on:
+  workflow_dispatch:
+    inputs:
+      cadence:
+        description: "Cadence bucket to send"
+        required: true
+        default: daily
+        type: choice
+        options: [instant, daily, weekly]
+  schedule:
+    - cron: "0 6 * * *"   # 08:00 UTC — daily digest
+    - cron: "0 7 * * 1"   # Monday 09:00 UTC — weekly digest
+    - cron: "5 * * * *"   # hourly — "instant" batch
+
+permissions:
+  contents: read
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Determine cadence
+        id: cadence
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ github.event.inputs.cadence }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "0 7 * * 1" ]; then
+            echo "value=weekly" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "5 * * * *" ]; then
+            echo "value=instant" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=daily" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send subscription digests
+        run: python scripts/send_subscription_digests.py --cadence "${{ steps.cadence.outputs.value }}"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_PROVIDER: resend

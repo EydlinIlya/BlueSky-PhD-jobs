@@ -103,6 +103,7 @@ const state = {
     authMode: 'signup',      // 'signup' | 'signin'
     follows: new Set(),      // followed Bluesky handles (account_follows)
     topics: new Set(),       // followed topic tokens — disciplines/countries (topic_follows)
+    subs: [],                // this user's subscriptions (rows from `subscriptions`)
 };
 
 // Infinite scroll
@@ -740,7 +741,8 @@ function renderTopbar() {
               </div>
               <div class="pm-list">
                 <div class="pm-item" data-pm="feed">Feed</div>
-                <div class="pm-item" data-pm="subs">Subscriptions <span class="badge-ct">soon</span></div>
+                <div class="pm-item" data-pm="subs">Subscriptions <span class="badge-ct">${state.subs.length}</span></div>
+                <div class="pm-item" data-pm="following">Following <span class="badge-ct">${state.follows.size}</span></div>
                 <div class="pm-sep"></div>
                 <div class="pm-item danger" data-pm="logout">Sign out</div>
               </div>
@@ -752,7 +754,8 @@ function renderTopbar() {
             const a = it.dataset.pm;
             $('#profile-menu').classList.remove('open');
             if (a === 'logout') signOut();
-            else if (a === 'subs') toast(COMING_SOON);
+            else if (a === 'subs') selectStream('saved');
+            else if (a === 'following') selectStream('following');
             else if (a === 'feed') selectStream('all');
         });
     } else {
@@ -767,11 +770,18 @@ function renderRailSubs() {
     const u = state.user;
     const sec = $('#rail-subs-section');
     if (u) {
+        const list = state.subs.length ? state.subs.map(s => `
+          <div class="sub-row" data-open-subs="1">
+            <div class="ss-q"><span class="pre">_</span>${escapeHtml(subLabel(s))}</div>
+            <div class="ss-meta"><span class="cad ${s.cadence === 'daily' ? 'daily' : ''}">${escapeHtml(s.cadence === 'off' ? 'muted' : s.cadence)}</span></div>
+          </div>`).join('')
+          : `<div style="font-family:var(--font-mono);font-size:11px;color:var(--fg-subtle);padding:4px">No subscriptions yet.</div>`;
         sec.innerHTML = `
-          <div class="rail-title">Subscriptions</div>
-          <div style="font-family:var(--font-mono);font-size:11px;color:var(--fg-subtle);padding:4px;line-height:1.6">
-            Saved-search alerts arrive in the next release. Your account is ready.
-          </div>`;
+          <div class="rail-title">Subscriptions <span class="more" data-open-subs="1">manage</span></div>
+          ${list}
+          <button class="btn-add-search" id="rail-add-sub">＋ save current search</button>`;
+        sec.querySelectorAll('[data-open-subs]').forEach(el => el.onclick = () => setView('subs'));
+        $('#rail-add-sub').onclick = () => saveCurrentSearch();
     } else {
         sec.innerHTML = `
           <div class="rail-nudge">
@@ -839,6 +849,124 @@ async function toggleFollowTopic(token, kind) {
     toast(adding ? `Following ${discShort(token)}` : `Unfollowed ${discShort(token)}`, adding);
 }
 
+/* ───────────────────────── SUBSCRIPTIONS ───────────────────────── */
+const CADENCES = [['instant', 'Instant'], ['daily', 'Daily digest'], ['weekly', 'Weekly digest'], ['off', 'Muted']];
+
+function subLabel(s) {
+    const parts = [
+        ...(s.disciplines || []).map(discShort),
+        ...(s.position_types || []),
+        ...(s.countries || []),
+    ];
+    if (s.query_text) parts.push(`"${s.query_text}"`);
+    return parts.length ? parts.join(' · ') : 'all positions';
+}
+
+function currentFilterPayload() {
+    return {
+        query_text: state.search.trim() || null,
+        disciplines: [...state.filters.area],
+        countries: [...state.filters.country],
+        position_types: [...state.filters.level],
+        hide_aggregators: state.hideAggr,
+    };
+}
+
+async function loadSubs() {
+    if (!state.user) { state.subs = []; return; }
+    const { data, error } = await supabaseClient
+        .from('subscriptions').select('*').order('created_at', { ascending: false });
+    if (error) { console.warn('loadSubs failed', error); return; }
+    state.subs = data || [];
+}
+
+async function saveCurrentSearch() {
+    if (!state.user) { openAuth('signup'); return; }
+    const payload = currentFilterPayload();
+    const row = {
+        user_id: state.user.id,
+        ...payload,
+        cadence: 'daily',
+        deliver_email: true,
+        deliver_rss: false,
+        last_notified_at: new Date().toISOString(),  // only alert on positions after now
+    };
+    const { error } = await supabaseClient.from('subscriptions').insert(row);
+    if (error) { toast(`Could not save: ${error.message}`); return; }
+    await loadSubs();
+    renderRailSubs();
+    if (state.view === 'subs') renderSubsPage();
+    toast('Subscription saved · daily alerts on', true);
+}
+
+async function updateSub(id, fields) {
+    const { error } = await supabaseClient.from('subscriptions').update(fields).eq('id', id);
+    if (error) { toast(`Update failed: ${error.message}`); return; }
+    const s = state.subs.find(x => x.id === id);
+    if (s) Object.assign(s, fields);
+    renderRailSubs();
+    renderSubsPage();
+}
+
+async function deleteSub(id) {
+    const { error } = await supabaseClient.from('subscriptions').delete().eq('id', id);
+    if (error) { toast(`Delete failed: ${error.message}`); return; }
+    state.subs = state.subs.filter(x => x.id !== id);
+    renderRailSubs();
+    renderSubsPage();
+    toast('Subscription deleted');
+}
+
+function setView(v) {
+    state.view = v;
+    $('#view-feed').classList.toggle('hidden', v !== 'feed');
+    $('#view-subs').classList.toggle('hidden', v !== 'subs');
+    if (v === 'subs') renderSubsPage();
+    window.scrollTo({ top: 0 });
+}
+
+function renderSubsPage() {
+    const u = state.user;
+    const el = $('#view-subs');
+    if (!u) { el.innerHTML = ''; return; }
+    const cards = state.subs.length ? state.subs.map(s => {
+        const tags = [
+            ...(s.disciplines || []).map(d => `<span class="b" style="background:${getDisciplineColor(d)}">${escapeHtml(discShort(d))}</span>`),
+            ...(s.position_types || []).map(t => `<span class="b b-pos">${escapeHtml(t)}</span>`),
+            ...(s.countries || []).map(c => `<span class="b b-country">${escapeHtml(c)}</span>`),
+        ].join('') || '<span class="b b-disc-General">all positions</span>';
+        return `<div class="sub-card" data-sub="${escapeHtml(s.id)}">
+          <div class="sub-card-head">
+            <div class="sub-card-q"><span class="pre">_</span>${escapeHtml(subLabel(s))}</div>
+          </div>
+          <div class="sub-card-tags">${tags}</div>
+          <div class="sub-cadence-row">
+            ${CADENCES.map(([k, l]) => `<button class="cad-pill ${s.cadence === k ? 'on' : ''} ${k === 'off' ? 'off' : ''}" data-cad="${k}">${l}</button>`).join('')}
+          </div>
+          <div class="sub-delivery">
+            <div class="del-toggle ${s.deliver_email ? 'on' : ''}" data-del="deliver_email"><span class="sw2"></span> Email <span class="em">${escapeHtml(u.email || '')}</span></div>
+            <button class="sub-delete" data-del-sub="${escapeHtml(s.id)}">delete</button>
+          </div>
+        </div>`;
+    }).join('') : `
+      <div class="subs-empty">
+        <div class="ee">No subscriptions yet.</div>
+        <button class="btn-primary" id="subs-empty-add">＋ Save your current search</button>
+      </div>`;
+
+    el.innerHTML = `
+      <div class="subs-page">
+        <div class="subs-hero">
+          <div class="subs-h1"><span class="gt">&gt;</span> _subscriptions</div>
+          <div class="subs-lead">Saved searches re-run as new positions are indexed. New matches are delivered by email digest — pick a cadence per search. "Instant" sends hourly.</div>
+        </div>
+        <div>
+          <div class="subs-block-title"><span>Saved searches · ${state.subs.length}</span><span class="more" id="subs-add" style="color:var(--primary);cursor:pointer">＋ save current search</span></div>
+          ${cards}
+        </div>
+      </div>`;
+}
+
 /* ───────────────────────── COOKIE BANNER ───────────────────────── */
 function setupCookieBanner() {
     if (typeof window.CookieConsent === 'undefined') return;
@@ -861,9 +989,15 @@ function setupCookieBanner() {
 
 /* ───────────────────────── EVENT WIRING ───────────────────────── */
 function selectStream(stream) {
-    if (stream === 'saved') { toast(COMING_SOON); return; }   // subscriptions land in their own branch
+    if (stream === 'saved') {
+        if (!state.user) { openAuth('signup'); return; }
+        $$('.rail-link').forEach(x => x.classList.toggle('active', x.dataset.stream === 'saved'));
+        setView('subs');
+        return;
+    }
     if (stream === 'following' && !state.user) { openAuth('signup'); return; }
     state.stream = stream;
+    setView('feed');
     $$('.rail-link').forEach(x => x.classList.toggle('active', x.dataset.stream === stream));
     renderFeedReset();
 }
@@ -883,8 +1017,15 @@ function wireEvents() {
     // command bar / search
     const cmd = $('#cmd-input');
     let searchT;
-    cmd.addEventListener('input', () => { clearTimeout(searchT); searchT = setTimeout(() => { state.search = cmd.value; renderFeedReset(); }, 180); });
-    cmd.addEventListener('keydown', e => { if (e.key === 'Escape') { cmd.value = ''; state.search = ''; renderFeedReset(); cmd.blur(); } });
+    cmd.addEventListener('input', () => { clearTimeout(searchT); searchT = setTimeout(() => { state.search = cmd.value; if (state.view === 'feed') renderFeedReset(); }, 180); });
+    cmd.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { cmd.value = ''; state.search = ''; renderFeedReset(); cmd.blur(); }
+        if (e.key === 'Enter') {
+            state.search = cmd.value;
+            if (state.user) saveCurrentSearch();
+            else if (cmd.value.trim()) openAuth('signup');
+        }
+    });
 
     // hide-aggregator chip
     $('#chip-hideaggr').onclick = e => { state.hideAggr = !state.hideAggr; e.currentTarget.classList.toggle('on', state.hideAggr); renderFeedReset(); };
@@ -946,6 +1087,17 @@ function wireEvents() {
         }
     });
 
+    // subscriptions page interactions (delegated)
+    $('#view-subs').addEventListener('click', e => {
+        if (e.target.closest('#subs-add') || e.target.closest('#subs-empty-add')) { saveCurrentSearch(); return; }
+        const cad = e.target.closest('.cad-pill');
+        if (cad) { const card = e.target.closest('[data-sub]'); updateSub(card.dataset.sub, { cadence: cad.dataset.cad }); return; }
+        const del = e.target.closest('[data-del]');
+        if (del) { const card = e.target.closest('[data-sub]'); const s = state.subs.find(x => x.id === card.dataset.sub); updateSub(card.dataset.sub, { [del.dataset.del]: !s[del.dataset.del] }); return; }
+        const dsub = e.target.closest('[data-del-sub]');
+        if (dsub) { deleteSub(dsub.dataset.delSub); return; }
+    });
+
     // keyboard
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') closeOverlays();
@@ -968,7 +1120,7 @@ async function setupAuth() {
     try {
         const { data } = await supabaseClient.auth.getSession();
         state.user = data.session ? data.session.user : null;
-        if (state.user) await loadFollows();
+        if (state.user) { await loadFollows(); await loadSubs(); }
     } catch (e) { console.warn('auth session load failed', e); }
     renderTopbar();
     renderRailSubs();
@@ -976,8 +1128,11 @@ async function setupAuth() {
     supabaseClient.auth.onAuthStateChange(async (_event, session) => {
         const wasUser = !!state.user;
         state.user = session ? session.user : null;
-        if (state.user) await loadFollows();
-        else { state.follows = new Set(); state.topics = new Set(); if (wasUser && state.stream !== 'all') selectStream('all'); }
+        if (state.user) { await loadFollows(); await loadSubs(); }
+        else {
+            state.follows = new Set(); state.topics = new Set(); state.subs = [];
+            if (wasUser) { if (state.view === 'subs') setView('feed'); if (state.stream !== 'all') selectStream('all'); }
+        }
         renderTopbar();
         renderRailSubs();
         refreshFollowUI();
