@@ -123,8 +123,12 @@
 <!-- ========== SHELL ========== -->
 <div class="shell">
 
-  <!-- ── LEFT RAIL ── -->
-  <aside class="left-rail">
+  <!-- ── LEFT RAIL (becomes a bottom sheet on mobile) ── -->
+  <aside class="left-rail" id="left-rail">
+    <div class="sheet-header">
+      <span class="sheet-title">Filters</span>
+      <button class="btn-ghost sheet-close" id="sheet-close" style="padding:5px 11px">done</button>
+    </div>
     <div class="rail-section">
       <div class="rail-title">Stream</div>
       <div class="rail-link active" data-stream="all" id="nav-all">
@@ -145,7 +149,7 @@
     <div class="rail-section" id="rail-subs-section"></div>
 
     <!-- filters -->
-    <div class="rail-section">
+    <div class="rail-section rail-filters">
       <div class="rail-title">Filters <span class="more" id="clear-filters">clear</span></div>
       <div class="filter-chips">
         <div class="f-row">
@@ -208,6 +212,26 @@
   </aside>
 
 </div>
+
+<!-- ========== MOBILE BOTTOM NAV (mobile only) ========== -->
+<nav class="mobile-nav" id="mobile-nav">
+  <button class="mnav-btn active" data-mnav="all">
+    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v2H2zm0 4h12v2H2zm0 4h12v2H2z"/></svg>
+    <span>Feed</span>
+  </button>
+  <button class="mnav-btn" data-mnav="following">
+    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 1c-4.42 0-8 1.79-8 4v1h16v-1c0-2.21-3.58-4-8-4z"/></svg>
+    <span>Following</span>
+  </button>
+  <button class="mnav-btn" data-mnav="saved">
+    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 2v13.5l6-3 6 3V2H2zm1 1h10v10.5l-5-2.5-5 2.5V3z"/></svg>
+    <span>Subs</span>
+  </button>
+  <button class="mnav-btn" data-mnav="filters">
+    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1 3h14v2H1zm2 4h10v2H3zm2 4h6v2H5z"/></svg>
+    <span>Filters</span>
+  </button>
+</nav>
 
 <!-- ========== SHARED BACKDROP ========== -->
 <div class="backdrop" id="backdrop"></div>

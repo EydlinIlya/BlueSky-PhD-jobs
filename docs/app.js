@@ -469,8 +469,9 @@ function bindChips() {
         dd.classList.toggle('open', opening);
         if (opening) {
             const r = c.getBoundingClientRect();
-            dd.style.top = Math.round(r.bottom + 6) + 'px';
-            dd.style.left = Math.round(Math.min(r.left, window.innerWidth - 252)) + 'px';
+            // Clamp into the viewport so it never opens off-screen (esp. mobile).
+            dd.style.top = Math.round(Math.max(8, Math.min(r.bottom + 6, window.innerHeight - 280))) + 'px';
+            dd.style.left = Math.round(Math.max(8, Math.min(r.left, window.innerWidth - 252))) + 'px';
             const s = dd.querySelector('.dd-search');
             if (s) s.focus();
         }
@@ -596,7 +597,14 @@ function openFlyout(uri) {
 function closeOverlays() {
     $$('.modal').forEach(m => m.classList.remove('open'));
     $('#flyout').classList.remove('open');
+    const rail = $('#left-rail'); if (rail) rail.classList.remove('open');  // mobile filter sheet
     $('#backdrop').classList.remove('open');
+}
+
+// Highlight the matching bottom-nav item (mobile).
+function syncMobileNav() {
+    const active = state.view === 'subs' ? 'saved' : state.stream;
+    $$('.mnav-btn').forEach(b => b.classList.toggle('active', b.dataset.mnav === active));
 }
 
 /* ───────────────────────── TOASTS ───────────────────────── */
@@ -922,6 +930,7 @@ function setView(v) {
     $('#view-feed').classList.toggle('hidden', v !== 'feed');
     $('#view-subs').classList.toggle('hidden', v !== 'subs');
     if (v === 'subs') renderSubsPage();
+    syncMobileNav();
     window.scrollTo({ top: 0 });
 }
 
@@ -999,6 +1008,7 @@ function selectStream(stream) {
     state.stream = stream;
     setView('feed');
     $$('.rail-link').forEach(x => x.classList.toggle('active', x.dataset.stream === stream));
+    syncMobileNav();
     renderFeedReset();
 }
 function selectTab(tab) {
@@ -1039,6 +1049,17 @@ function wireEvents() {
     // streams + tabs
     $$('.rail-link').forEach(l => l.onclick = () => selectStream(l.dataset.stream));
     $$('.river-tab').forEach(t => t.onclick = () => selectTab(t.dataset.tab));
+
+    // mobile: bottom nav + filter sheet
+    const rail = $('#left-rail');
+    const closeSheet = () => { if (rail) rail.classList.remove('open'); $('#backdrop').classList.remove('open'); };
+    const sc = $('#sheet-close'); if (sc) sc.onclick = closeSheet;
+    $$('.mnav-btn').forEach(b => b.onclick = () => {
+        const a = b.dataset.mnav;
+        if (a === 'filters') { if (rail) rail.classList.add('open'); $('#backdrop').classList.add('open'); return; }
+        closeSheet();
+        selectStream(a);
+    });
 
     // trends (areas + countries) → follow topic, or set the matching filter
     const onTrendClick = e => {
