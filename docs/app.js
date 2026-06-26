@@ -99,6 +99,8 @@ const state = {
     hideAggr: false,
     filters: { level: new Set(), country: new Set(), area: new Set() },
     threadOpen: new Set(),
+    user: null,              // Supabase auth user | null
+    authMode: 'signup',      // 'signup' | 'signin'
 };
 
 // Infinite scroll
@@ -480,21 +482,175 @@ function toast(msg, ok) {
     setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 250); }, 2800);
 }
 
-const COMING_SOON = 'Accounts are coming soon — sign-up will let you save searches & follow accounts.';
+// Streams/tabs that depend on subscriptions (Branch C) / follows (Branch D).
+const COMING_SOON = 'This arrives in the next release — your account is ready for it.';
 
-/* ───────────────────────── AUTH-AWARE CHROME (Branch A: stubs) ───────────────────────── */
-function renderTopbar() {
-    $('#top-account').innerHTML =
-        `<button class="btn-signin" data-auth="signin">Log in</button>
-         <button class="btn-signup" data-auth="signup">Sign up</button>`;
+/* ───────────────────────── AUTH (Supabase) ───────────────────────── */
+// Native providers go through Supabase Auth; bluesky/orcid are deferred to the
+// auth-academic-oauth branch and render as "coming soon".
+const PROVIDERS = [
+    { id: 'bluesky', label: 'Continue with Bluesky', hint: 'soon', cls: 'bsky', soon: true,
+      glyph: '<svg width="18" height="18" viewBox="0 0 600 530"><path fill="#3b82f6" d="M135 75c66 49 137 150 163 204 26-54 97-155 163-204 48-36 126-63 126 26 0 18-10 150-16 171-21 73-95 91-161 80 115 20 144 85 81 150-120 124-172-31-185-66-2-7-4-10-4-7 0-3-2 0-4 7-13 35-65 190-185 66-63-65-34-130 81-150-66 11-140-7-161-80-6-21-16-153-16-171 0-89 78-62 126-26z"/></svg>' },
+    { id: 'orcid', label: 'Continue with ORCID', hint: 'soon', soon: true,
+      glyph: '<svg width="18" height="18" viewBox="0 0 256 256"><path fill="#A6CE39" d="M128 0C57.3 0 0 57.3 0 128s57.3 128 128 128 128-57.3 128-128S198.7 0 128 0z"/><path fill="#fff" d="M86.3 186.2H70.9V79.1h15.4v107.1zM108.9 79.1h41.6c39.6 0 57 28.3 57 53.6 0 27.5-21.5 53.6-56.8 53.6h-41.8V79.1zm15.4 93.3h24.5c34.9 0 42.9-26.5 42.9-39.7 0-21.5-13.7-39.7-43.7-39.7h-23.7v79.4zM88.7 56.8c0 5.5-4.5 10.1-10.1 10.1s-10.1-4.6-10.1-10.1c0-5.6 4.5-10.1 10.1-10.1s10.1 4.6 10.1 10.1z"/></svg>' },
+    { id: 'google', label: 'Continue with Google',
+      glyph: '<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.3 6.1 29.4 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 18.9 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.3 6.1 29.4 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.1-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4.1 5.6l6.2 5.2C41.4 35.6 44 30.3 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg>' },
+    { id: 'github', label: 'Continue with GitHub',
+      glyph: '<svg width="18" height="18" viewBox="0 0 16 16" fill="#e2e8f0"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>' },
+];
+const ICON_CLOSE = '<svg class="svg" width="14" height="14" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>';
+
+function authEnabled() { return !!supabaseClient; }
+
+function userInitials(u) {
+    const name = (u.user_metadata && (u.user_metadata.full_name || u.user_metadata.name)) || u.email || '?';
+    return name.split(/[ @.]/).filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
 }
-function renderRailSubs() {
-    $('#rail-subs-section').innerHTML = `
-      <div class="rail-nudge">
-        <div class="nh">＋ Subscribe to a filter</div>
-        <div class="nb">Save any search and get new positions by daily or weekly alert. Free account — coming soon.</div>
-        <button class="nbtn" data-auth="signup">Create account</button>
+function userName(u) {
+    return (u.user_metadata && (u.user_metadata.full_name || u.user_metadata.name)) || (u.email ? u.email.split('@')[0] : 'Researcher');
+}
+
+function openAuth(mode) {
+    if (!authEnabled()) { toast('Sign-in is unavailable in this mode.'); return; }
+    state.authMode = mode || 'signup';
+    renderAuthModal();
+    $('#modal-auth').classList.add('open');
+    $('#backdrop').classList.add('open');
+}
+
+function renderAuthModal() {
+    const signup = state.authMode === 'signup';
+    $('#auth-card').innerHTML = `
+      <button class="modal-close" data-close="1">${ICON_CLOSE}</button>
+      <div class="modal-head">
+        <div class="auth-mark"><span class="gt">&gt;</span> PhD_Positions</div>
+        <div class="auth-sub">${signup
+            ? 'Create a free account to subscribe to filters and follow accounts.'
+            : 'Welcome back. Sign in to manage your subscriptions.'}</div>
+      </div>
+      <div class="auth-tabs">
+        <button class="auth-tab ${signup ? 'active' : ''}" data-mode="signup">Sign up</button>
+        <button class="auth-tab ${!signup ? 'active' : ''}" data-mode="signin">Log in</button>
+      </div>
+      <div class="auth-body">
+        ${PROVIDERS.map(p => `
+          <button class="prov-btn ${p.cls || ''}" data-prov="${p.id}" ${p.soon ? 'disabled' : ''}>
+            <span class="glyph">${p.glyph}</span>
+            <span class="pl">${signup ? p.label : p.label.replace('Continue', 'Sign in')}</span>
+            ${p.hint ? `<span class="pr">${p.hint}</span>` : ''}
+          </button>`).join('')}
+        <div class="auth-divider">or</div>
+        <div class="field"><label>Email</label><input type="email" id="auth-email" placeholder="you@university.edu" autocomplete="email"></div>
+        <div class="field"><label>Password</label><input type="password" id="auth-pass" placeholder="••••••••" autocomplete="${signup ? 'new-password' : 'current-password'}"></div>
+        <button class="btn-primary" id="auth-email-submit" style="margin-top:4px">${signup ? 'Create account' : 'Log in'} →</button>
+        <div class="auth-foot">${signup
+            ? 'Already have an account? <a data-mode="signin">Log in</a>'
+            : 'New here? <a data-mode="signup">Create an account</a>'}</div>
       </div>`;
+    bindAuth();
+}
+
+function bindAuth() {
+    $('#auth-card').querySelectorAll('[data-prov]').forEach(b => b.onclick = () => doProviderAuth(b.dataset.prov));
+    const sub = $('#auth-email-submit');
+    if (sub) sub.onclick = doEmailAuth;
+    $('#auth-card').querySelectorAll('[data-mode]').forEach(a => a.onclick = () => { state.authMode = a.dataset.mode; renderAuthModal(); });
+    $('#auth-card').querySelectorAll('[data-close]').forEach(b => b.onclick = closeOverlays);
+}
+
+async function doProviderAuth(id) {
+    const prov = PROVIDERS.find(p => p.id === id);
+    if (!prov || prov.soon) { toast(`${prov ? prov.label.replace('Continue with ', '') : 'This provider'} sign-in is coming soon.`); return; }
+    const { error } = await supabaseClient.auth.signInWithOAuth({
+        provider: id,
+        options: { redirectTo: window.location.origin + window.location.pathname },
+    });
+    if (error) toast(`Sign-in failed: ${error.message}`);
+    // On success the browser redirects; session is restored on return.
+}
+
+async function doEmailAuth() {
+    const email = ($('#auth-email').value || '').trim();
+    const pass = $('#auth-pass').value || '';
+    if (!email) { $('#auth-email').focus(); return; }
+    if (!pass) { $('#auth-pass').focus(); return; }
+    const signup = state.authMode === 'signup';
+    const btn = $('#auth-email-submit'); btn.disabled = true;
+    try {
+        if (signup) {
+            const { data, error } = await supabaseClient.auth.signUp({ email, password: pass });
+            if (error) { toast(`Sign-up failed: ${error.message}`); return; }
+            if (data.session) { closeOverlays(); toast('Welcome to PhD Sky!', true); }
+            else { closeOverlays(); toast('Check your email to confirm your account.', true); }
+        } else {
+            const { error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
+            if (error) { toast(`Sign-in failed: ${error.message}`); return; }
+            closeOverlays(); toast('Signed in.', true);
+        }
+    } finally { btn.disabled = false; }
+}
+
+async function signOut() {
+    await supabaseClient.auth.signOut();
+    toast('Signed out.');
+}
+
+/* ───────────────────────── AUTH-AWARE CHROME ───────────────────────── */
+function renderTopbar() {
+    const u = state.user;
+    const wrap = $('#top-account');
+    if (u) {
+        wrap.innerHTML = `
+          <div class="profile-wrap">
+            <div class="avatar" id="avatar-btn" title="${escapeHtml(userName(u))}">${escapeHtml(userInitials(u))}</div>
+            <div class="profile-menu" id="profile-menu">
+              <div class="pm-header">
+                <div class="avatar sm">${escapeHtml(userInitials(u))}</div>
+                <div class="pm-id"><span class="pm-name">${escapeHtml(userName(u))}</span><span class="pm-handle">${escapeHtml(u.email || '')}</span></div>
+              </div>
+              <div class="pm-list">
+                <div class="pm-item" data-pm="feed">Feed</div>
+                <div class="pm-item" data-pm="subs">Subscriptions <span class="badge-ct">soon</span></div>
+                <div class="pm-sep"></div>
+                <div class="pm-item danger" data-pm="logout">Sign out</div>
+              </div>
+            </div>
+          </div>`;
+        const av = $('#avatar-btn');
+        av.onclick = e => { e.stopPropagation(); $('#profile-menu').classList.toggle('open'); };
+        wrap.querySelectorAll('[data-pm]').forEach(it => it.onclick = () => {
+            const a = it.dataset.pm;
+            $('#profile-menu').classList.remove('open');
+            if (a === 'logout') signOut();
+            else if (a === 'subs') toast(COMING_SOON);
+            else if (a === 'feed') selectStream('all');
+        });
+    } else {
+        wrap.innerHTML =
+            `<button class="btn-signin" data-auth="signin">Log in</button>
+             <button class="btn-signup" data-auth="signup">Sign up</button>`;
+        wrap.querySelectorAll('[data-auth]').forEach(b => b.onclick = () => openAuth(b.dataset.auth));
+    }
+}
+
+function renderRailSubs() {
+    const u = state.user;
+    const sec = $('#rail-subs-section');
+    if (u) {
+        sec.innerHTML = `
+          <div class="rail-title">Subscriptions</div>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--fg-subtle);padding:4px;line-height:1.6">
+            Saved-search alerts arrive in the next release. Your account is ready.
+          </div>`;
+    } else {
+        sec.innerHTML = `
+          <div class="rail-nudge">
+            <div class="nh">＋ Create a free account</div>
+            <div class="nb">Save searches, follow accounts, and get new positions by alert.</div>
+            <button class="nbtn" data-auth="signup">Sign up</button>
+          </div>`;
+        sec.querySelectorAll('[data-auth]').forEach(b => b.onclick = () => openAuth(b.dataset.auth));
+    }
 }
 
 /* ───────────────────────── COOKIE BANNER ───────────────────────── */
@@ -576,10 +732,11 @@ function wireEvents() {
         if (post) openFlyout(post.dataset.id);
     });
 
-    // auth entry points + empty-state clear (delegated)
+    // delegated: empty-state clear + close profile menu on outside click
     document.addEventListener('click', e => {
-        if (e.target.closest('[data-auth]')) { toast(COMING_SOON); return; }
         if (e.target.closest('#empty-clear')) { clearFilters(); return; }
+        const pm = $('#profile-menu');
+        if (pm && pm.classList.contains('open') && !e.target.closest('.profile-wrap')) pm.classList.remove('open');
     });
 
     // keyboard
@@ -599,11 +756,27 @@ function onDataReady(positions, duplicates, total) {
     renderFeedReset();
 }
 
+async function setupAuth() {
+    if (!authEnabled()) { renderTopbar(); renderRailSubs(); return; }
+    try {
+        const { data } = await supabaseClient.auth.getSession();
+        state.user = data.session ? data.session.user : null;
+    } catch (e) { console.warn('auth session load failed', e); }
+    renderTopbar();
+    renderRailSubs();
+    supabaseClient.auth.onAuthStateChange((_event, session) => {
+        state.user = session ? session.user : null;
+        renderTopbar();
+        renderRailSubs();
+    });
+}
+
 async function init() {
     setupCookieBanner();
     renderTopbar();
     renderRailSubs();
     wireEvents();
+    await setupAuth();
     setupInfiniteScroll();
 
     const staticData = loadStaticData();

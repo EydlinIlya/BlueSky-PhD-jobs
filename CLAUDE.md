@@ -308,9 +308,22 @@ onboarding, subscriptions page, toasts).
   reposts" toggle (`isAggregator()` against the inlined aggregator handle set)
 - The repost/earlier-posts thread reuses the existing `duplicate_of` dedup graph
   (`duplicateMap`)
-- Auth-dependent surfaces (Log in/Sign up, "+ follow", "save current search",
-  Following / Subscriptions streams, "For me" tab) are present but routed to a
-  "coming soon" toast until the auth/subscriptions/follows branches land
+- Accounts via **Supabase Auth** (`supabase.auth`): email/password + Google +
+  GitHub. The auth modal (signup/login tabs, provider buttons, email form),
+  session restore (`getSession` + `onAuthStateChange`), and the profile menu
+  (avatar → Feed / Subscriptions / Sign out) are wired in `app.js`. Bluesky &
+  ORCID buttons render disabled ("soon") until the academic-OAuth branch.
+- Subscriptions / follows surfaces ("+ follow", "save current search", Following
+  stream, "For me" tab) still route to a "coming soon" toast until those branches
+  land — but the account they attach to is real.
+
+### Accounts / Auth (Supabase Auth)
+
+`migrations/003_profiles.sql` adds a `profiles` table (one row per `auth.users`,
+auto-created by an `on_auth_user_created` trigger) with owner-only RLS. Manual
+dashboard setup (documented in the migration header): enable Email/Google/GitHub
+providers, add OAuth client credentials, and register redirect URLs for
+`https://phdsky.org` and `http://localhost`.
 
 **`docs/aggregators.json`** - Hand-maintained list `{ "handles": [...] }` of Bluesky handles flagged as aggregator reposters. Source of truth for the UI filter. Updated via `scripts/find_aggregator_candidates.py`.
 
