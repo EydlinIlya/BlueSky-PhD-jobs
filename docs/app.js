@@ -101,6 +101,8 @@ const state = {
     threadOpen: new Set(),
     user: null,              // Supabase auth user | null
     authMode: 'signup',      // 'signup' | 'signin'
+    follows: new Set(),      // followed Bluesky handles (account_follows)
+    topics: new Set(),       // followed topic tokens — disciplines/countries (topic_follows)
 };
 
 // Infinite scroll
@@ -230,8 +232,13 @@ function visiblePositions() {
     const q = state.search.trim().toLowerCase();
     return state.all.filter(p => {
         if (state.hideAggr && isAggregator(p.user_handle)) return false;
+        if (state.stream === 'following' && !state.follows.has(p.user_handle)) return false;
         const types = p.position_type || [];
         const discs = p.disciplines || [];
+        if (state.tab === 'forme' && state.topics.size) {
+            const matchTopic = discs.some(d => state.topics.has(d)) || state.topics.has(p.country);
+            if (!matchTopic) return false;
+        }
         if (f.level.size && !types.some(t => f.level.has(t))) return false;
         if (f.country.size && !f.country.has(p.country)) return false;
         if (f.area.size && !discs.some(d => f.area.has(d))) return false;
@@ -288,7 +295,7 @@ function postHTML(p) {
         <a class="p-handle" href="${escapeHtml(profileUrl)}" target="_blank" rel="noopener" data-stop>@${escapeHtml(handle)}</a>
         ${aggr ? '<span class="p-aggr-tag">aggr</span>' : ''}
         <span class="p-time">${escapeHtml(relTime(p.created_at))}</span>
-        <button class="p-follow" data-follow="${escapeHtml(handle)}" title="Follow @${escapeHtml(handle)}">+ follow</button>
+        ${(() => { const on = state.follows.has(handle); return `<button class="p-follow ${on ? 'on' : ''}" data-follow="${escapeHtml(handle)}" title="${on ? 'Unfollow' : 'Follow'} @${escapeHtml(handle)}">${on ? 'following' : '+ follow'}</button>`; })()}
       </div>
       <div class="p-meta-strip">${discBadges}${typeBadges}${countryBadge}</div>
       <div class="p-body">${escapeHtml(bodyText)}${moreLink}</div>
@@ -300,6 +307,12 @@ function postHTML(p) {
 }
 
 function emptyStateHTML() {
+    if (state.stream === 'following') {
+        return `<div class="feed-empty"><div class="ee-mark">—</div><div class="ee-t">${state.follows.size ? 'No recent positions from accounts you follow' : "You're not following any accounts yet"}</div><div class="ee-d">Tap <b>+ follow</b> on any poster to build a stream of just their positions.</div><button class="btn-primary" data-stream-go="all">Browse all positions</button></div>`;
+    }
+    if (state.tab === 'forme') {
+        return `<div class="feed-empty"><div class="ee-mark">—</div><div class="ee-t">${state.topics.size ? 'No matches in your topics right now' : 'For me is personalized to topics you follow'}</div><div class="ee-d">Follow disciplines from <b>Top areas</b> on the right to personalize this tab.</div><button class="btn-primary" data-tab-go="latest">Show all latest</button></div>`;
+    }
     if (state.search || state.filters.level.size || state.filters.country.size || state.filters.area.size || state.hideAggr) {
         return `<div class="feed-empty"><div class="ee-mark">—</div><div class="ee-t">No positions match these filters</div><div class="ee-d">Try removing a filter chip on the left or clearing your search.</div><button class="btn-primary" id="empty-clear">Clear filters</button></div>`;
     }
@@ -340,6 +353,7 @@ function updateCounts() {
     const total = state.total || state.all.length;
     const ctAll = $('#ct-all'); if (ctAll) ctAll.textContent = total.toLocaleString();
     const tabCt = $('#tab-latest-ct'); if (tabCt) tabCt.textContent = feedList.length.toLocaleString();
+    const folCt = $('#nav-following .ct'); if (folCt) folCt.textContent = state.user ? String(state.follows.size) : '—';
 }
 
 /* ───────────────────────── INFINITE SCROLL ───────────────────────── */
@@ -412,13 +426,20 @@ function renderActivity() {
     for (const p of state.all) for (const d of (p.disciplines || [])) counts[d] = (counts[d] || 0) + 1;
     const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
     const max = top.length ? top[0][1] : 1;
-    $('#activity-trends').innerHTML = top.map(([d, n], i) => `
+    $('#activity-trends').innerHTML = top.map(([d, n], i) => {
+        const on = state.topics.has(d);
+        const followBtn = state.user
+            ? `<span class="trend-follow ${on ? 'on' : ''}" data-topic="${escapeHtml(d)}">${on ? 'following' : 'follow'}</span>`
+            : '';
+        return `
       <div class="trend-row" data-trend-area="${escapeHtml(d)}">
         <span class="trend-rank">${i + 1}</span>
         <span class="trend-name">${escapeHtml(discShort(d))}</span>
         <span class="trend-bar"><span class="trend-fill" style="width:${Math.round(n / max * 100)}%;background:${getDisciplineColor(d)}"></span></span>
         <span class="trend-ct">${n}</span>
-      </div>`).join('');
+        ${followBtn}
+      </div>`;
+    }).join('');
 }
 
 /* ───────────────────────── POST FLYOUT ───────────────────────── */
@@ -653,6 +674,62 @@ function renderRailSubs() {
     }
 }
 
+/* ───────────────────────── FOLLOWS ───────────────────────── */
+async function loadFollows() {
+    if (!state.user) { state.follows = new Set(); state.topics = new Set(); return; }
+    const [acct, topic] = await Promise.all([
+        supabaseClient.from('account_follows').select('handle'),
+        supabaseClient.from('topic_follows').select('token'),
+    ]);
+    if (acct.error) console.warn('loadFollows (accounts) failed', acct.error);
+    if (topic.error) console.warn('loadFollows (topics) failed', topic.error);
+    state.follows = new Set((acct.data || []).map(r => r.handle));
+    state.topics = new Set((topic.data || []).map(r => r.token));
+}
+
+async function toggleFollowAccount(handle) {
+    if (!state.user) { openAuth('signup'); return; }
+    const adding = !state.follows.has(handle);
+    if (adding) {
+        state.follows.add(handle);
+        const { error } = await supabaseClient.from('account_follows')
+            .insert({ user_id: state.user.id, handle });
+        if (error) { state.follows.delete(handle); toast(`Follow failed: ${error.message}`); return; }
+    } else {
+        state.follows.delete(handle);
+        const { error } = await supabaseClient.from('account_follows')
+            .delete().eq('user_id', state.user.id).eq('handle', handle);
+        if (error) { state.follows.add(handle); toast(`Unfollow failed: ${error.message}`); return; }
+    }
+    // Update any visible follow buttons for this handle + the rail count.
+    $$(`[data-follow="${CSS.escape(handle)}"]`).forEach(b => {
+        b.classList.toggle('on', adding);
+        b.textContent = adding ? 'following' : '+ follow';
+    });
+    updateCounts();
+    if (state.stream === 'following') renderFeedReset();
+    toast(adding ? `Following @${handle}` : `Unfollowed @${handle}`, adding);
+}
+
+async function toggleFollowTopic(token, kind) {
+    if (!state.user) { openAuth('signup'); return; }
+    const adding = !state.topics.has(token);
+    if (adding) {
+        state.topics.add(token);
+        const { error } = await supabaseClient.from('topic_follows')
+            .insert({ user_id: state.user.id, token, kind });
+        if (error) { state.topics.delete(token); toast(`Follow failed: ${error.message}`); return; }
+    } else {
+        state.topics.delete(token);
+        const { error } = await supabaseClient.from('topic_follows')
+            .delete().eq('user_id', state.user.id).eq('token', token);
+        if (error) { state.topics.add(token); toast(`Unfollow failed: ${error.message}`); return; }
+    }
+    renderActivity();
+    if (state.tab === 'forme') renderFeedReset();
+    toast(adding ? `Following ${discShort(token)}` : `Unfollowed ${discShort(token)}`, adding);
+}
+
 /* ───────────────────────── COOKIE BANNER ───────────────────────── */
 function setupCookieBanner() {
     if (typeof window.CookieConsent === 'undefined') return;
@@ -675,13 +752,14 @@ function setupCookieBanner() {
 
 /* ───────────────────────── EVENT WIRING ───────────────────────── */
 function selectStream(stream) {
-    if (stream === 'following' || stream === 'saved') { toast(COMING_SOON); return; }
+    if (stream === 'saved') { toast(COMING_SOON); return; }   // subscriptions land in their own branch
+    if (stream === 'following' && !state.user) { openAuth('signup'); return; }
     state.stream = stream;
     $$('.rail-link').forEach(x => x.classList.toggle('active', x.dataset.stream === stream));
     renderFeedReset();
 }
 function selectTab(tab) {
-    if (tab === 'forme') { toast(COMING_SOON); return; }
+    if (tab === 'forme' && !state.user) { openAuth('signup'); return; }
     state.tab = tab;
     $$('.river-tab').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
     renderFeedReset();
@@ -706,8 +784,10 @@ function wireEvents() {
     $$('.rail-link').forEach(l => l.onclick = () => selectStream(l.dataset.stream));
     $$('.river-tab').forEach(t => t.onclick = () => selectTab(t.dataset.tab));
 
-    // trends → set area filter
+    // trends → follow topic, or set area filter
     $('#activity-trends').addEventListener('click', e => {
+        const tf = e.target.closest('[data-topic]');
+        if (tf) { e.stopPropagation(); toggleFollowTopic(tf.dataset.topic, 'discipline'); return; }
         const row = e.target.closest('[data-trend-area]'); if (!row) return;
         const area = row.dataset.trendArea;
         const chip = document.querySelector(`.chip[data-area="${CSS.escape(area)}"]`);
@@ -717,8 +797,12 @@ function wireEvents() {
     // feed delegation
     $('#feed-stream').addEventListener('click', e => {
         if (e.target.closest('[data-stop]')) return; // let real links work
+        const sg = e.target.closest('[data-stream-go]');
+        if (sg) { selectStream(sg.dataset.streamGo); return; }
+        const tg = e.target.closest('[data-tab-go]');
+        if (tg) { selectTab(tg.dataset.tabGo); return; }
         const fol = e.target.closest('[data-follow]');
-        if (fol) { e.stopPropagation(); toast(COMING_SOON); return; }
+        if (fol) { e.stopPropagation(); toggleFollowAccount(fol.dataset.follow); return; }
         const tog = e.target.closest('[data-toggle]');
         if (tog) {
             e.stopPropagation();
@@ -761,14 +845,34 @@ async function setupAuth() {
     try {
         const { data } = await supabaseClient.auth.getSession();
         state.user = data.session ? data.session.user : null;
+        if (state.user) await loadFollows();
     } catch (e) { console.warn('auth session load failed', e); }
     renderTopbar();
     renderRailSubs();
-    supabaseClient.auth.onAuthStateChange((_event, session) => {
+    refreshFollowUI();
+    supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+        const wasUser = !!state.user;
         state.user = session ? session.user : null;
+        if (state.user) await loadFollows();
+        else { state.follows = new Set(); state.topics = new Set(); if (wasUser && state.stream !== 'all') selectStream('all'); }
         renderTopbar();
         renderRailSubs();
+        refreshFollowUI();
     });
+}
+
+// Re-render surfaces that depend on follow state.
+function refreshFollowUI() {
+    updateCounts();
+    renderActivity();
+    if (state.stream === 'following' || state.tab === 'forme') renderFeedReset();
+    else { // refresh per-post follow buttons in place
+        $$('[data-follow]').forEach(b => {
+            const on = state.follows.has(b.dataset.follow);
+            b.classList.toggle('on', on);
+            b.textContent = on ? 'following' : '+ follow';
+        });
+    }
 }
 
 async function init() {

@@ -236,6 +236,9 @@ body { padding-bottom: 34px; }
 .trend-bar { width: 70px; height: 4px; background: var(--bg-deep); border-radius: 2px; overflow: hidden; }
 .trend-fill { height: 100%; border-radius: 2px; }
 .trend-ct { font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); width: 34px; text-align: right; }
+.trend-follow { font-family: var(--font-mono); font-size: 10px; color: var(--primary); cursor: pointer; padding: 2px 7px; border: 1px solid var(--border); border-radius: 5px; transition: all .15s; white-space: nowrap; }
+.trend-follow:hover { border-color: var(--primary); }
+.trend-follow.on { background: var(--primary); color: #fff; border-color: var(--primary); }
 
 /* ════════════════════════════════════════════════
    OVERLAYS (modal / flyout / drawer)

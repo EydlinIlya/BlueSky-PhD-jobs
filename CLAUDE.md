@@ -313,9 +313,12 @@ onboarding, subscriptions page, toasts).
   session restore (`getSession` + `onAuthStateChange`), and the profile menu
   (avatar → Feed / Subscriptions / Sign out) are wired in `app.js`. Bluesky &
   ORCID buttons render disabled ("soon") until the academic-OAuth branch.
-- Subscriptions / follows surfaces ("+ follow", "save current search", Following
-  stream, "For me" tab) still route to a "coming soon" toast until those branches
-  land — but the account they attach to is real.
+- **Follows** are live: "+ follow" on a post toggles an `account_follows` row;
+  the **Following** stream filters the feed to followed handles; the **For me**
+  tab filters by followed topics (`topic_follows`), which you add via the "follow"
+  buttons on the right-rail **Top areas** list.
+- The "save current search" / Subscriptions surface still routes to a "coming
+  soon" toast until the filter-subscriptions branch is merged in.
 
 ### Accounts / Auth (Supabase Auth)
 
@@ -324,6 +327,13 @@ auto-created by an `on_auth_user_created` trigger) with owner-only RLS. Manual
 dashboard setup (documented in the migration header): enable Email/Google/GitHub
 providers, add OAuth client credentials, and register redirect URLs for
 `https://phdsky.org` and `http://localhost`.
+
+### Follows (account + topic)
+
+`migrations/005_follows.sql` adds `account_follows` (followed Bluesky handles)
+and `topic_follows` (followed disciplines/countries), both owner-only RLS. The
+frontend reads/writes them via `supabaseClient` under the auth session;
+`state.follows` / `state.topics` drive the Following stream and For-me tab.
 
 **`docs/aggregators.json`** - Hand-maintained list `{ "handles": [...] }` of Bluesky handles flagged as aggregator reposters. Source of truth for the UI filter. Updated via `scripts/find_aggregator_candidates.py`.
 
