@@ -261,25 +261,27 @@ function followingCount() {
     return state.follows.size + state.topics.size + state.subs.length;
 }
 
-function visiblePositions() {
+// Filters shared by both tabs (level/country/area/search/hide-aggregator) —
+// NOT the following constraint.
+function passesFilters(p) {
+    if (state.hideAggr && isAggregator(p.user_handle)) return false;
     const f = state.filters;
+    const types = p.position_type || [], discs = p.disciplines || [];
+    if (f.level.size && !types.some(t => f.level.has(t))) return false;
+    if (f.country.size && !f.country.has(p.country)) return false;
+    if (f.area.size && !discs.some(d => f.area.has(d))) return false;
     const q = state.search.trim().toLowerCase();
+    if (q) {
+        const hay = [p.message, p.user_handle, p.country, discs.join(' '), types.join(' ')]
+            .join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+    }
+    return true;
+}
+
+function visiblePositions() {
     const following = state.tab === 'following';
-    return state.all.filter(p => {
-        if (state.hideAggr && isAggregator(p.user_handle)) return false;
-        if (following && !matchesFollowing(p)) return false;
-        const types = p.position_type || [];
-        const discs = p.disciplines || [];
-        if (f.level.size && !types.some(t => f.level.has(t))) return false;
-        if (f.country.size && !f.country.has(p.country)) return false;
-        if (f.area.size && !discs.some(d => f.area.has(d))) return false;
-        if (q) {
-            const hay = [p.message, p.user_handle, p.country, discs.join(' '), types.join(' ')]
-                .join(' ').toLowerCase();
-            if (!hay.includes(q)) return false;
-        }
-        return true;
-    });
+    return state.all.filter(p => passesFilters(p) && (!following || matchesFollowing(p)));
 }
 
 /* ───────────────────────── FEED RENDER ───────────────────────── */
@@ -382,9 +384,21 @@ function renderNextBatch() {
 
 function updateCounts() {
     const total = state.total || state.all.length;
-    const ctAll = $('#ct-all'); if (ctAll) ctAll.textContent = total.toLocaleString();
-    const tabCt = $('#tab-latest-ct'); if (tabCt) tabCt.textContent = feedList.length.toLocaleString();
-    const folCt = $('#nav-following .ct'); if (folCt) folCt.textContent = state.user ? String(state.follows.size) : '—';
+    // Latest = matches after filters (no filters → all jobs).
+    let latest = 0, followingMatched = 0, subsMatched = 0;
+    for (const p of state.all) {
+        if (!passesFilters(p)) continue;
+        latest++;
+        if (!state.user) continue;
+        if (matchesFollowing(p)) followingMatched++;
+        if (state.subs.some(s => subMatchesPosition(s, p))) subsMatched++;
+    }
+    const set = (sel, v) => { const el = $(sel); if (el) el.textContent = v; };
+    set('#ct-all', total.toLocaleString());
+    set('#tab-latest-ct', latest.toLocaleString());
+    set('#tab-following-ct', state.user ? followingMatched.toLocaleString() : '');
+    set('#nav-following .ct', state.user ? String(followingMatched) : '—');
+    set('#nav-bookmarks .ct', state.user ? String(subsMatched) : '—');
 }
 
 /* ───────────────────────── INFINITE SCROLL ───────────────────────── */
