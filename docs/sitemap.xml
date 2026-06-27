@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://phdsky.org/</loc><lastmod>2026-06-26</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>
-  <url><loc>https://phdsky.org/positions</loc><lastmod>2026-06-26</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>
-  <url><loc>https://phdsky.org/about</loc><lastmod>2026-06-26</lastmod><changefreq>monthly</changefreq><priority>0.4</priority></url>
-  <url><loc>https://phdsky.org/privacy</loc><lastmod>2026-06-26</lastmod><changefreq>yearly</changefreq><priority>0.3</priority></url>
+  <url><loc>https://phdsky.org/</loc><lastmod>2026-06-27</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>
+  <url><loc>https://phdsky.org/positions</loc><lastmod>2026-06-27</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>
+  <url><loc>https://phdsky.org/about</loc><lastmod>2026-06-27</lastmod><changefreq>monthly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://phdsky.org/privacy</loc><lastmod>2026-06-27</lastmod><changefreq>yearly</changefreq><priority>0.3</priority></url>
   <url><loc>https://phdsky.org/p/3lyfk5mtenc2o</loc><lastmod>2025-09-09</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3lyl6twmjg72s</loc><lastmod>2025-09-11</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3m2maeopwfh2l</loc><lastmod>2025-10-07</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
@@ -653,7 +653,6 @@
   <url><loc>https://phdsky.org/p/3mf7q2h65vy22</loc><lastmod>2026-02-19</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3mf7qwslmjc23</loc><lastmod>2026-02-19</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3mf7tuv5qtc2o</loc><lastmod>2026-02-19</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
-  <url><loc>https://phdsky.org/p/3mf7vvvvmb342</loc><lastmod>2026-02-19</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3mf7xnnhrj22u</loc><lastmod>2026-02-19</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3mf7y34fgys2l</loc><lastmod>2026-02-19</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3mf7y5x75gc2l</loc><lastmod>2026-02-19</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
@@ -7296,7 +7295,6 @@
   <url><loc>https://phdsky.org/p/3mnmmpyb4gt2e</loc><lastmod>2026-06-06</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3mnmq6u5rlt27</loc><lastmod>2026-06-06</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3mnmstlmdnk2c</loc><lastmod>2026-06-06</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
-  <url><loc>https://phdsky.org/p/3mnmw7xmjms2p</loc><lastmod>2026-06-06</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3mnmytz33zz2i</loc><lastmod>2026-06-06</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3mnn4zbl5mk2g</loc><lastmod>2026-06-06</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3mnn6u737t72h</loc><lastmod>2026-06-06</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
@@ -7412,7 +7410,6 @@
   <url><loc>https://phdsky.org/p/3mnugghhp3c2g</loc><lastmod>2026-06-09</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3mnuhqrbqqk2f</loc><lastmod>2026-06-09</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3mnuixogb5s27</loc><lastmod>2026-06-09</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
-  <url><loc>https://phdsky.org/p/3mnukmh2bxq22</loc><lastmod>2026-06-09</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3mnul5plwik2s</loc><lastmod>2026-06-09</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3mnulfd4sqs62</loc><lastmod>2026-06-09</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3mnuojacxu223</loc><lastmod>2026-06-09</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
@@ -8546,4 +8543,26 @@
   <url><loc>https://phdsky.org/p/3mp7llr3nhs25</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3mp7lxgncyv2v</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
   <url><loc>https://phdsky.org/p/3mp7mdedpfl2l</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mp7mycom4c22</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mp7nx7jmbv2l</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mp7om5y2bk2k</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mp7oqakbxn2y</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mp7qe45d7q2c</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mp7r554e522y</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mp7s6k4av22b</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mp7sqykgc72o</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mp7v7od3ig24</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mp7wm3wpu22y</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mp7wtjna2v2h</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mp7xfjguid2p</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mp7xn5olx32c</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mp7yhxrhc72t</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mpa2ygutsg2p</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mpa4o3dbco2p</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mpa4vdioi52k</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mpa5g7yb6s2w</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mpa5h4gnz52q</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mpa5jslbw52l</loc><lastmod>2026-06-26</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mpa5scakw62b</loc><lastmod>2026-06-27</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://phdsky.org/p/3mpa66m44zv2m</loc><lastmod>2026-06-27</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>
 </urlset>
