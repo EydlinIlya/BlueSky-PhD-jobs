@@ -156,6 +156,16 @@ body { padding-bottom: 34px; }
 .btn-add-search { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 10px; background: transparent; border: 1px dashed var(--border); border-radius: 7px; color: var(--fg-muted); font-family: var(--font-mono); font-size: 11px; cursor: pointer; transition: color .15s, border-color .15s, border-style .15s; }
 .btn-add-search:hover { color: var(--primary); border-color: var(--primary); border-style: solid; }
 
+/* following: account list in the rail */
+.follow-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; }
+.follow-row:hover { background: var(--bg-card); }
+.fr-handle { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: 12px; color: var(--fg-muted); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fr-handle:hover { color: var(--primary); }
+.fr-unfollow { flex-shrink: 0; width: 18px; height: 18px; line-height: 1; background: transparent; border: none; color: var(--fg-subtle); font-size: 15px; cursor: pointer; border-radius: 4px; }
+.fr-unfollow:hover { color: var(--red-500); }
+.rail-empty { font-family: var(--font-mono); font-size: 11px; color: var(--fg-subtle); padding: 4px; line-height: 1.6; }
+.rail-empty b { color: var(--fg-muted); }
+
 /* logged-out nudge in rail */
 .rail-nudge { background: linear-gradient(160deg, rgba(59,130,246,.10), rgba(139,92,246,.06)); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 9px; }
 .rail-nudge .nh { font-family: var(--font-mono); font-size: 12px; color: var(--fg); font-weight: 600; }

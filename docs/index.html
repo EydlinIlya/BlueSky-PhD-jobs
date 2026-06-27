@@ -133,17 +133,12 @@
       <div class="rail-title">Stream</div>
       <div class="rail-link active" data-stream="all" id="nav-all">
         <svg class="svg ic" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v2H2zm0 4h12v2H2zm0 4h12v2H2z"/></svg>
-        <span class="lab">All positions</span><span class="ct" id="ct-all">—</span>
-      </div>
-      <div class="rail-link" data-stream="following" id="nav-following">
-        <svg class="svg ic" viewBox="0 0 16 16" fill="currentColor"><path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 1c-4.42 0-8 1.79-8 4v1h16v-1c0-2.21-3.58-4-8-4z"/></svg>
-        <span class="lab">My feed</span><span class="ct">—</span>
-      </div>
-      <div class="rail-link" data-stream="saved" id="nav-bookmarks">
-        <svg class="svg ic" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2v13.5l6-3 6 3V2H2zm1 1h10v10.5l-5-2.5-5 2.5V3z"/></svg>
-        <span class="lab">Subscriptions</span><span class="ct">—</span>
+        <span class="lab">All positions</span>
       </div>
     </div>
+
+    <!-- following: list of accounts the user follows (auth-aware, rendered by app.js) -->
+    <div class="rail-section" id="rail-following-section"></div>
 
     <!-- subscriptions / nudge (auth-aware, rendered by app.js) -->
     <div class="rail-section" id="rail-subs-section"></div>
@@ -183,7 +178,7 @@
           <button class="river-tab active" data-tab="latest">Latest <span class="ct" id="tab-latest-ct"></span></button>
           <button class="river-tab" data-tab="following">My feed <span class="ct" id="tab-following-ct"></span></button>
         </div>
-        <div class="river-meta"><span class="live-dot"></span> filtered by AI · updated daily</div>
+        <div class="river-meta"><span class="live-dot"></span> powered by Llama · updated daily</div>
       </div>
       <div id="feed-stream"></div>
       <div class="loader hidden" id="loader"><div class="spin"></div> loading more positions…</div>

@@ -382,23 +382,17 @@ function renderNextBatch() {
     loader.classList.toggle('hidden', renderedCount >= feedList.length);
 }
 
+// Counts live only on the two top tabs.
 function updateCounts() {
-    const total = state.total || state.all.length;
-    // Latest = matches after filters (no filters → all jobs).
-    let latest = 0, followingMatched = 0, subsMatched = 0;
+    let latest = 0, followingMatched = 0;
     for (const p of state.all) {
         if (!passesFilters(p)) continue;
         latest++;
-        if (!state.user) continue;
-        if (matchesFollowing(p)) followingMatched++;
-        if (state.subs.some(s => subMatchesPosition(s, p))) subsMatched++;
+        if (state.user && matchesFollowing(p)) followingMatched++;
     }
     const set = (sel, v) => { const el = $(sel); if (el) el.textContent = v; };
-    set('#ct-all', total.toLocaleString());
     set('#tab-latest-ct', latest.toLocaleString());
     set('#tab-following-ct', state.user ? followingMatched.toLocaleString() : '');
-    set('#nav-following .ct', state.user ? String(followingMatched) : '—');
-    set('#nav-bookmarks .ct', state.user ? String(subsMatched) : '—');
 }
 
 /* ───────────────────────── INFINITE SCROLL ───────────────────────── */
@@ -852,6 +846,22 @@ function renderRailSubs() {
 }
 
 /* ───────────────────────── FOLLOWS ───────────────────────── */
+// Left-rail "Following" = a list of the accounts the user follows (no count).
+function renderRailFollowing() {
+    const sec = $('#rail-following-section');
+    if (!sec) return;
+    if (!state.user) { sec.innerHTML = ''; return; }
+    const handles = [...state.follows].sort((a, b) => a.localeCompare(b));
+    const list = handles.length ? handles.map(h => `
+        <div class="follow-row">
+          <a class="fr-handle" href="https://bsky.app/profile/${encodeURIComponent(h)}" target="_blank" rel="noopener">@${escapeHtml(h)}</a>
+          <button class="fr-unfollow" data-unfollow="${escapeHtml(h)}" title="Unfollow @${escapeHtml(h)}">×</button>
+        </div>`).join('')
+        : `<div class="rail-empty">Not following anyone yet. Tap <b>+ follow</b> on a post.</div>`;
+    sec.innerHTML = `<div class="rail-title">Following</div>${list}`;
+    sec.querySelectorAll('[data-unfollow]').forEach(b => b.onclick = () => toggleFollowAccount(b.dataset.unfollow));
+}
+
 async function loadFollows() {
     if (!state.user) { state.follows = new Set(); state.topics = new Set(); return; }
     const [acct, topic] = await Promise.all([
@@ -884,6 +894,7 @@ async function toggleFollowAccount(handle) {
         b.textContent = adding ? 'following' : '+ follow';
     });
     updateCounts();
+    renderRailFollowing();
     if (state.tab === 'following') renderFeedReset();
     toast(adding ? `Following @${handle}` : `Unfollowed @${handle}`, adding);
 }
@@ -1212,6 +1223,7 @@ async function setupAuth() {
 function refreshFollowUI() {
     updateCounts();
     renderActivity();
+    renderRailFollowing();
     if (state.tab === 'following') renderFeedReset();
     else { // refresh per-post follow buttons in place
         $$('[data-follow]').forEach(b => {
@@ -1226,6 +1238,7 @@ async function init() {
     setupCookieBanner();
     renderTopbar();
     renderRailSubs();
+    renderRailFollowing();
     wireEvents();
     setActiveNav();
     await setupAuth();
