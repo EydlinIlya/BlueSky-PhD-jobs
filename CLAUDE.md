@@ -316,16 +316,20 @@ onboarding, subscriptions page, toasts).
   GitHub. The auth modal (signup/login tabs, provider buttons, email form),
   session restore (`getSession` + `onAuthStateChange`), and the profile menu
   (avatar → Feed / Subscriptions / Sign out) are wired in `app.js`. Bluesky &
-  ORCID buttons render disabled ("soon") until the academic-OAuth branch.
+  ORCID provider buttons are **hidden** for now (kept in `PROVIDERS` with
+  `soon:true`, filtered out at render) until the academic-OAuth branch.
 - **Saved-search subscriptions** are live: "save current search" / command-bar
   Enter / the Subscriptions rail build a `subscriptions` row from the active
-  filter chips; the Subscriptions page (`#view-subs`) lists them with cadence
-  pills + email delivery toggle + delete. All via `supabaseClient.from('subscriptions')`
-  under owner-only RLS.
+  filter chips; the Subscriptions page (`#view-subs`) lists + deletes them. Every
+  subscription is a **weekly email digest** (no per-sub cadence choice in the UI;
+  rows are written with `cadence='weekly'`). All via
+  `supabaseClient.from('subscriptions')` under owner-only RLS.
 - **Follows** are live: "+ follow" on a post toggles an `account_follows` row;
-  the **Following** stream filters the feed to followed handles; the **For me**
-  tab filters by followed topics (`topic_follows`), which you add via the "follow"
-  buttons on the right-rail **Top areas** / **Top countries** lists.
+  "follow" on a right-rail Top-area/country toggles a `topic_follows` row.
+- The river's **Following** tab is a combined personalized feed:
+  followed accounts ∪ followed topics ∪ saved-search subscriptions
+  (`matchesFollowing()` / `subMatchesPosition()` in `app.js`). The left-rail
+  "Following" link and the mobile bottom-nav "Following" select the same tab.
 
 ### Accounts / Auth (Supabase Auth)
 

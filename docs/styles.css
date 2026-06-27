@@ -441,6 +441,8 @@ body { padding-bottom: 34px; }
 .del-toggle.on .sw2 { background: var(--primary); border-color: var(--primary); }
 .del-toggle.on .sw2::after { transform: translateX(13px); background: #fff; }
 .del-toggle .em { color: var(--fg-subtle); }
+.del-static { font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); }
+.del-static .em { color: var(--fg-subtle); }
 .sub-delete { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--fg-subtle); background: none; border: none; cursor: pointer; }
 .sub-delete:hover { color: var(--red-500); }
 

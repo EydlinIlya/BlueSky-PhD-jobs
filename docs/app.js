@@ -230,18 +230,46 @@ function dayLabel(iso) {
 }
 
 /* ───────────────────────── FILTERING ───────────────────────── */
+// Does a position match a saved subscription's filter? (mirrors the digest's
+// position_matches in scripts/send_subscription_digests.py)
+function subMatchesPosition(s, p) {
+    if (s.hide_aggregators && isAggregator(p.user_handle)) return false;
+    const discs = p.disciplines || [], types = p.position_type || [];
+    const wd = s.disciplines || [], wc = s.countries || [], wt = s.position_types || [];
+    if (wd.length && !discs.some(d => wd.includes(d))) return false;
+    if (wc.length && !wc.includes(p.country)) return false;
+    if (wt.length && !types.some(t => wt.includes(t))) return false;
+    const q = (s.query_text || '').trim().toLowerCase();
+    if (q) {
+        const hay = [p.message, p.user_handle, p.country, discs.join(' '), types.join(' ')].join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+    }
+    return true;
+}
+
+// The "Following" tab = everything you follow + everything you've subscribed to:
+// followed accounts ∪ followed topics ∪ saved-search subscriptions.
+function matchesFollowing(p) {
+    if (state.follows.has(p.user_handle)) return true;
+    const discs = p.disciplines || [];
+    if (discs.some(d => state.topics.has(d)) || state.topics.has(p.country)) return true;
+    for (const s of state.subs) if (subMatchesPosition(s, p)) return true;
+    return false;
+}
+
+function followingCount() {
+    return state.follows.size + state.topics.size + state.subs.length;
+}
+
 function visiblePositions() {
     const f = state.filters;
     const q = state.search.trim().toLowerCase();
+    const following = state.tab === 'following';
     return state.all.filter(p => {
         if (state.hideAggr && isAggregator(p.user_handle)) return false;
-        if (state.stream === 'following' && !state.follows.has(p.user_handle)) return false;
+        if (following && !matchesFollowing(p)) return false;
         const types = p.position_type || [];
         const discs = p.disciplines || [];
-        if (state.tab === 'forme' && state.topics.size) {
-            const matchTopic = discs.some(d => state.topics.has(d)) || state.topics.has(p.country);
-            if (!matchTopic) return false;
-        }
         if (f.level.size && !types.some(t => f.level.has(t))) return false;
         if (f.country.size && !f.country.has(p.country)) return false;
         if (f.area.size && !discs.some(d => f.area.has(d))) return false;
@@ -310,11 +338,11 @@ function postHTML(p) {
 }
 
 function emptyStateHTML() {
-    if (state.stream === 'following') {
-        return `<div class="feed-empty"><div class="ee-mark">—</div><div class="ee-t">${state.follows.size ? 'No recent positions from accounts you follow' : "You're not following any accounts yet"}</div><div class="ee-d">Tap <b>+ follow</b> on any poster to build a stream of just their positions.</div><button class="btn-primary" data-stream-go="all">Browse all positions</button></div>`;
-    }
-    if (state.tab === 'forme') {
-        return `<div class="feed-empty"><div class="ee-mark">—</div><div class="ee-t">${state.topics.size ? 'No matches in your topics right now' : 'For me is personalized to topics you follow'}</div><div class="ee-d">Follow disciplines from <b>Top areas</b> on the right to personalize this tab.</div><button class="btn-primary" data-tab-go="latest">Show all latest</button></div>`;
+    if (state.tab === 'following') {
+        if (followingCount() === 0) {
+            return `<div class="feed-empty"><div class="ee-mark">—</div><div class="ee-t">Build your Following feed</div><div class="ee-d">Tap <b>+ follow</b> on any poster, follow a discipline/country from <b>Top areas/countries</b>, or <b>save a search</b> — they all show up here together.</div><button class="btn-primary" data-tab-go="latest">Browse all positions</button></div>`;
+        }
+        return `<div class="feed-empty"><div class="ee-mark">—</div><div class="ee-t">Nothing new from your follows & subscriptions</div><div class="ee-d">When accounts you follow or your saved searches get new matches, they'll appear here.</div><button class="btn-primary" data-tab-go="latest">Show all latest</button></div>`;
     }
     if (state.search || state.filters.level.size || state.filters.country.size || state.filters.area.size || state.hideAggr) {
         return `<div class="feed-empty"><div class="ee-mark">—</div><div class="ee-t">No positions match these filters</div><div class="ee-d">Try removing a filter chip on the left or clearing your search.</div><button class="btn-primary" id="empty-clear">Clear filters</button></div>`;
@@ -601,10 +629,12 @@ function closeOverlays() {
     $('#backdrop').classList.remove('open');
 }
 
-// Highlight the matching bottom-nav item (mobile).
-function syncMobileNav() {
-    const active = state.view === 'subs' ? 'saved' : state.stream;
-    $$('.mnav-btn').forEach(b => b.classList.toggle('active', b.dataset.mnav === active));
+// Sync active state across left rail, river tabs, and the mobile bottom nav.
+function setActiveNav() {
+    const railKey = state.view === 'subs' ? 'saved' : (state.tab === 'following' ? 'following' : 'all');
+    $$('.rail-link').forEach(x => x.classList.toggle('active', x.dataset.stream === railKey));
+    $$('.river-tab').forEach(x => x.classList.toggle('active', x.dataset.tab === state.tab));
+    $$('.mnav-btn').forEach(b => b.classList.toggle('active', b.dataset.mnav === railKey));
 }
 
 /* ───────────────────────── TOASTS ───────────────────────── */
@@ -672,8 +702,8 @@ function renderAuthModal() {
         <button class="auth-tab ${!signup ? 'active' : ''}" data-mode="signin">Log in</button>
       </div>
       <div class="auth-body">
-        ${PROVIDERS.map(p => `
-          <button class="prov-btn ${p.cls || ''}" data-prov="${p.id}" ${p.soon ? 'disabled' : ''}>
+        ${PROVIDERS.filter(p => !p.soon).map(p => `
+          <button class="prov-btn ${p.cls || ''}" data-prov="${p.id}">
             <span class="glyph">${p.glyph}</span>
             <span class="pl">${signup ? p.label : p.label.replace('Continue', 'Sign in')}</span>
             ${p.hint ? `<span class="pr">${p.hint}</span>` : ''}
@@ -840,7 +870,7 @@ async function toggleFollowAccount(handle) {
         b.textContent = adding ? 'following' : '+ follow';
     });
     updateCounts();
-    if (state.stream === 'following') renderFeedReset();
+    if (state.tab === 'following') renderFeedReset();
     toast(adding ? `Following @${handle}` : `Unfollowed @${handle}`, adding);
 }
 
@@ -859,7 +889,7 @@ async function toggleFollowTopic(token, kind) {
         if (error) { state.topics.add(token); toast(`Unfollow failed: ${error.message}`); return; }
     }
     renderActivity();
-    if (state.tab === 'forme') renderFeedReset();
+    if (state.tab === 'following') renderFeedReset();
     toast(adding ? `Following ${discShort(token)}` : `Unfollowed ${discShort(token)}`, adding);
 }
 
@@ -900,7 +930,7 @@ async function saveCurrentSearch() {
     const row = {
         user_id: state.user.id,
         ...payload,
-        cadence: 'daily',
+        cadence: 'weekly',          // weekly digest only (no per-sub cadence choice)
         deliver_email: true,
         deliver_rss: false,
         last_notified_at: new Date().toISOString(),  // only alert on positions after now
@@ -910,7 +940,7 @@ async function saveCurrentSearch() {
     await loadSubs();
     renderRailSubs();
     if (state.view === 'subs') renderSubsPage();
-    toast('Subscription saved · daily alerts on', true);
+    toast('Subscription saved · weekly email digest', true);
 }
 
 async function updateSub(id, fields) {
@@ -936,7 +966,7 @@ function setView(v) {
     $('#view-feed').classList.toggle('hidden', v !== 'feed');
     $('#view-subs').classList.toggle('hidden', v !== 'subs');
     if (v === 'subs') renderSubsPage();
-    syncMobileNav();
+    setActiveNav();
     window.scrollTo({ top: 0 });
 }
 
@@ -955,11 +985,8 @@ function renderSubsPage() {
             <div class="sub-card-q"><span class="pre">_</span>${escapeHtml(subLabel(s))}</div>
           </div>
           <div class="sub-card-tags">${tags}</div>
-          <div class="sub-cadence-row">
-            ${CADENCES.map(([k, l]) => `<button class="cad-pill ${s.cadence === k ? 'on' : ''} ${k === 'off' ? 'off' : ''}" data-cad="${k}">${l}</button>`).join('')}
-          </div>
           <div class="sub-delivery">
-            <div class="del-toggle ${s.deliver_email ? 'on' : ''}" data-del="deliver_email"><span class="sw2"></span> Email <span class="em">${escapeHtml(u.email || '')}</span></div>
+            <span class="del-static">Weekly email digest → <span class="em">${escapeHtml(u.email || '')}</span></span>
             <button class="sub-delete" data-del-sub="${escapeHtml(s.id)}">delete</button>
           </div>
         </div>`;
@@ -973,7 +1000,7 @@ function renderSubsPage() {
       <div class="subs-page">
         <div class="subs-hero">
           <div class="subs-h1"><span class="gt">&gt;</span> _subscriptions</div>
-          <div class="subs-lead">Saved searches re-run as new positions are indexed. New matches are delivered by email digest — pick a cadence per search. "Instant" sends hourly.</div>
+          <div class="subs-lead">Saved searches re-run as new positions are indexed. New matches are delivered to your inbox as a <b>weekly email digest</b>.</div>
         </div>
         <div>
           <div class="subs-block-title"><span>Saved searches · ${state.subs.length}</span><span class="more" id="subs-add" style="color:var(--primary);cursor:pointer">＋ save current search</span></div>
@@ -1003,25 +1030,23 @@ function setupCookieBanner() {
 }
 
 /* ───────────────────────── EVENT WIRING ───────────────────────── */
-function selectStream(stream) {
+function selectTab(tab) {                          // 'latest' | 'following'
+    if (tab === 'following' && !state.user) { openAuth('signup'); return; }
+    state.tab = tab;
+    state.view = 'feed';
+    $('#view-feed').classList.remove('hidden');
+    $('#view-subs').classList.add('hidden');
+    setActiveNav();
+    renderFeedReset();
+    window.scrollTo({ top: 0 });
+}
+function selectStream(stream) {                     // rail / bottom-nav / profile entry
     if (stream === 'saved') {
         if (!state.user) { openAuth('signup'); return; }
-        $$('.rail-link').forEach(x => x.classList.toggle('active', x.dataset.stream === 'saved'));
         setView('subs');
         return;
     }
-    if (stream === 'following' && !state.user) { openAuth('signup'); return; }
-    state.stream = stream;
-    setView('feed');
-    $$('.rail-link').forEach(x => x.classList.toggle('active', x.dataset.stream === stream));
-    syncMobileNav();
-    renderFeedReset();
-}
-function selectTab(tab) {
-    if (tab === 'forme' && !state.user) { openAuth('signup'); return; }
-    state.tab = tab;
-    $$('.river-tab').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
-    renderFeedReset();
+    selectTab(stream === 'following' ? 'following' : 'latest');
 }
 
 function wireEvents() {
@@ -1117,10 +1142,6 @@ function wireEvents() {
     // subscriptions page interactions (delegated)
     $('#view-subs').addEventListener('click', e => {
         if (e.target.closest('#subs-add') || e.target.closest('#subs-empty-add')) { saveCurrentSearch(); return; }
-        const cad = e.target.closest('.cad-pill');
-        if (cad) { const card = e.target.closest('[data-sub]'); updateSub(card.dataset.sub, { cadence: cad.dataset.cad }); return; }
-        const del = e.target.closest('[data-del]');
-        if (del) { const card = e.target.closest('[data-sub]'); const s = state.subs.find(x => x.id === card.dataset.sub); updateSub(card.dataset.sub, { [del.dataset.del]: !s[del.dataset.del] }); return; }
         const dsub = e.target.closest('[data-del-sub]');
         if (dsub) { deleteSub(dsub.dataset.delSub); return; }
     });
@@ -1158,7 +1179,7 @@ async function setupAuth() {
         if (state.user) { await loadFollows(); await loadSubs(); }
         else {
             state.follows = new Set(); state.topics = new Set(); state.subs = [];
-            if (wasUser) { if (state.view === 'subs') setView('feed'); if (state.stream !== 'all') selectStream('all'); }
+            if (wasUser) selectStream('all');   // following/subs need auth → back to Latest
         }
         renderTopbar();
         renderRailSubs();
@@ -1170,7 +1191,7 @@ async function setupAuth() {
 function refreshFollowUI() {
     updateCounts();
     renderActivity();
-    if (state.stream === 'following' || state.tab === 'forme') renderFeedReset();
+    if (state.tab === 'following') renderFeedReset();
     else { // refresh per-post follow buttons in place
         $$('[data-follow]').forEach(b => {
             const on = state.follows.has(b.dataset.follow);
@@ -1185,6 +1206,7 @@ async function init() {
     renderTopbar();
     renderRailSubs();
     wireEvents();
+    setActiveNav();
     await setupAuth();
     setupInfiniteScroll();
 
