@@ -831,7 +831,7 @@ function renderRailSubs() {
         const list = state.subs.length ? state.subs.map(s => `
           <div class="sub-row" data-open-subs="1">
             <div class="ss-q"><span class="pre">_</span>${escapeHtml(subLabel(s))}</div>
-            <div class="ss-meta"><span class="cad ${s.cadence === 'daily' ? 'daily' : ''}">${escapeHtml(s.cadence === 'off' ? 'muted' : s.cadence)}</span></div>
+            <div class="ss-meta"><span class="cad">weekly</span></div>
           </div>`).join('')
           : `<div style="font-family:var(--font-mono);font-size:11px;color:var(--fg-subtle);padding:4px">No subscriptions yet.</div>`;
         sec.innerHTML = `
@@ -936,6 +936,13 @@ async function loadSubs() {
         .from('subscriptions').select('*').order('created_at', { ascending: false });
     if (error) { console.warn('loadSubs failed', error); return; }
     state.subs = data || [];
+    // The product is weekly-only now; normalize any legacy daily/instant/off rows.
+    const legacy = state.subs.filter(s => s.cadence !== 'weekly');
+    if (legacy.length) {
+        await Promise.all(legacy.map(s =>
+            supabaseClient.from('subscriptions').update({ cadence: 'weekly' }).eq('id', s.id)));
+        legacy.forEach(s => { s.cadence = 'weekly'; });
+    }
 }
 
 async function saveCurrentSearch() {

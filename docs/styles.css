@@ -84,6 +84,7 @@ body { padding-bottom: 34px; }
    ════════════════════════════════════════════════ */
 .sheet-header { display: none; }
 .mobile-nav { display: none; }
+.lbl-short { display: none; }   /* shown only on mobile (see media query) */
 
 @media (max-width: 820px) {
   body { padding-bottom: 60px; }   /* room for the fixed bottom nav */
@@ -127,6 +128,8 @@ body { padding-bottom: 34px; }
   .mark { font-size: 16px; }
   .cmd-kbd { display: none; }                 /* no ⌘K hint on touch */
   .river-head { position: static; }           /* topbar is two rows tall here */
+  .lbl-full { display: none; }                /* use the short tab label */
+  .lbl-short { display: inline; }
 }
 .rail-section { display: flex; flex-direction: column; gap: 7px; }
 .rail-title { font-family: var(--font-mono); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--fg-subtle); padding: 0 4px; display: flex; align-items: center; justify-content: space-between; }
