@@ -717,7 +717,13 @@ async function doEmailAuth() {
     const btn = $('#auth-email-submit'); btn.disabled = true;
     try {
         if (signup) {
-            const { data, error } = await supabaseClient.auth.signUp({ email, password: pass });
+            // Confirmation link returns to the current origin (must be in Supabase's
+            // redirect allow-list), so email signup works on previews / localhost,
+            // not just the Site URL (phdsky.org).
+            const { data, error } = await supabaseClient.auth.signUp({
+                email, password: pass,
+                options: { emailRedirectTo: window.location.origin + window.location.pathname },
+            });
             if (error) { toast(`Sign-up failed: ${error.message}`); return; }
             if (data.session) { closeOverlays(); toast('Welcome to PhD Sky!', true); }
             else { closeOverlays(); toast('Check your email to confirm your account.', true); }
