@@ -800,7 +800,7 @@ function renderTopbar() {
               <div class="pm-list">
                 <div class="pm-item" data-pm="feed">Feed</div>
                 <div class="pm-item" data-pm="subs">Subscriptions <span class="badge-ct">${state.subs.length}</span></div>
-                <div class="pm-item" data-pm="following">Following <span class="badge-ct">${state.follows.size}</span></div>
+                <div class="pm-item" data-pm="following">My feed</div>
                 <div class="pm-sep"></div>
                 <div class="pm-item danger" data-pm="logout">Sign out</div>
               </div>
