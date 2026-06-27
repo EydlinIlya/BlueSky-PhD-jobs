@@ -135,10 +135,11 @@
         <svg class="svg ic" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v2H2zm0 4h12v2H2zm0 4h12v2H2z"/></svg>
         <span class="lab">All positions</span>
       </div>
+      <div class="rail-link" data-stream="followlist" id="nav-followlist">
+        <svg class="svg ic" viewBox="0 0 16 16" fill="currentColor"><path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 1c-4.42 0-8 1.79-8 4v1h16v-1c0-2.21-3.58-4-8-4z"/></svg>
+        <span class="lab">Following</span>
+      </div>
     </div>
-
-    <!-- following: list of accounts the user follows (auth-aware, rendered by app.js) -->
-    <div class="rail-section" id="rail-following-section"></div>
 
     <!-- subscriptions / nudge (auth-aware, rendered by app.js) -->
     <div class="rail-section" id="rail-subs-section"></div>
@@ -186,6 +187,9 @@
 
     <!-- SUBSCRIPTIONS VIEW -->
     <div id="view-subs" class="hidden"></div>
+
+    <!-- FOLLOWING (accounts) VIEW -->
+    <div id="view-following" class="hidden"></div>
   </main>
 
   <!-- ── RIGHT RAIL ── -->

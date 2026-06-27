@@ -639,10 +639,16 @@ function closeOverlays() {
 
 // Sync active state across left rail, river tabs, and the mobile bottom nav.
 function setActiveNav() {
-    const railKey = state.view === 'subs' ? 'saved' : (state.tab === 'following' ? 'following' : 'all');
+    let railKey;
+    if (state.view === 'subs') railKey = 'saved';
+    else if (state.view === 'followlist') railKey = 'followlist';
+    else railKey = state.tab === 'latest' ? 'all' : '';   // My feed has no rail link
     $$('.rail-link').forEach(x => x.classList.toggle('active', x.dataset.stream === railKey));
-    $$('.river-tab').forEach(x => x.classList.toggle('active', x.dataset.tab === state.tab));
-    $$('.mnav-btn').forEach(b => b.classList.toggle('active', b.dataset.mnav === railKey));
+    $$('.river-tab').forEach(x => x.classList.toggle('active', state.view === 'feed' && x.dataset.tab === state.tab));
+    const mnavKey = state.view === 'subs' ? 'saved'
+        : state.view === 'followlist' ? ''
+        : (state.tab === 'following' ? 'following' : 'all');
+    $$('.mnav-btn').forEach(b => b.classList.toggle('active', b.dataset.mnav === mnavKey));
 }
 
 /* ───────────────────────── TOASTS ───────────────────────── */
@@ -846,20 +852,37 @@ function renderRailSubs() {
 }
 
 /* ───────────────────────── FOLLOWS ───────────────────────── */
-// Left-rail "Following" = a list of the accounts the user follows (no count).
-function renderRailFollowing() {
-    const sec = $('#rail-following-section');
-    if (!sec) return;
-    if (!state.user) { sec.innerHTML = ''; return; }
+// The rail "Following" tab opens this view: a list of accounts the user follows
+// (mirrors the Subscriptions page).
+function renderFollowingPage() {
+    const el = $('#view-following');
+    if (!el) return;
+    if (!state.user) { el.innerHTML = ''; return; }
     const handles = [...state.follows].sort((a, b) => a.localeCompare(b));
-    const list = handles.length ? handles.map(h => `
-        <div class="follow-row">
-          <a class="fr-handle" href="https://bsky.app/profile/${encodeURIComponent(h)}" target="_blank" rel="noopener">@${escapeHtml(h)}</a>
-          <button class="fr-unfollow" data-unfollow="${escapeHtml(h)}" title="Unfollow @${escapeHtml(h)}">×</button>
-        </div>`).join('')
-        : `<div class="rail-empty">Not following anyone yet. Tap <b>+ follow</b> on a post.</div>`;
-    sec.innerHTML = `<div class="rail-title">Following</div>${list}`;
-    sec.querySelectorAll('[data-unfollow]').forEach(b => b.onclick = () => toggleFollowAccount(b.dataset.unfollow));
+    const rows = handles.length ? handles.map(h => `
+        <div class="acct-row">
+          <div class="acct-avatar ${isAggregator(h) ? 'aggr' : ''}">${escapeHtml(h[0] ? h[0].toUpperCase() : '?')}</div>
+          <a class="acct-handle" href="https://bsky.app/profile/${encodeURIComponent(h)}" target="_blank" rel="noopener">@${escapeHtml(h)}</a>
+          ${isAggregator(h) ? '<span class="p-aggr-tag">aggr</span>' : ''}
+          <button class="acct-unfollow" data-unfollow="${escapeHtml(h)}">following</button>
+        </div>`).join('') : `
+        <div class="subs-empty">
+          <div class="ee">You're not following any accounts yet.</div>
+          <button class="btn-primary" data-tab-go="latest">Browse positions</button>
+        </div>`;
+    el.innerHTML = `
+      <div class="subs-page">
+        <div class="subs-hero">
+          <div class="subs-h1"><span class="gt">&gt;</span> _following</div>
+          <div class="subs-lead">Accounts you follow — their new positions appear in <b>My feed</b>. Follow more with <b>+ follow</b> on any post.</div>
+        </div>
+        <div>
+          <div class="subs-block-title"><span>Accounts · ${handles.length}</span></div>
+          ${rows}
+        </div>
+      </div>`;
+    el.querySelectorAll('[data-unfollow]').forEach(b => b.onclick = () => toggleFollowAccount(b.dataset.unfollow));
+    el.querySelectorAll('[data-tab-go]').forEach(b => b.onclick = () => selectTab(b.dataset.tabGo));
 }
 
 async function loadFollows() {
@@ -894,7 +917,7 @@ async function toggleFollowAccount(handle) {
         b.textContent = adding ? 'following' : '+ follow';
     });
     updateCounts();
-    renderRailFollowing();
+    if (state.view === 'followlist') renderFollowingPage();
     if (state.tab === 'following') renderFeedReset();
     toast(adding ? `Following @${handle}` : `Unfollowed @${handle}`, adding);
 }
@@ -997,7 +1020,9 @@ function setView(v) {
     state.view = v;
     $('#view-feed').classList.toggle('hidden', v !== 'feed');
     $('#view-subs').classList.toggle('hidden', v !== 'subs');
+    $('#view-following').classList.toggle('hidden', v !== 'followlist');
     if (v === 'subs') renderSubsPage();
+    if (v === 'followlist') renderFollowingPage();
     setActiveNav();
     window.scrollTo({ top: 0 });
 }
@@ -1062,12 +1087,13 @@ function setupCookieBanner() {
 }
 
 /* ───────────────────────── EVENT WIRING ───────────────────────── */
-function selectTab(tab) {                          // 'latest' | 'following'
+function selectTab(tab) {                          // 'latest' | 'following' (My feed)
     if (tab === 'following' && !state.user) { openAuth('signup'); return; }
     state.tab = tab;
     state.view = 'feed';
     $('#view-feed').classList.remove('hidden');
     $('#view-subs').classList.add('hidden');
+    $('#view-following').classList.add('hidden');
     setActiveNav();
     renderFeedReset();
     window.scrollTo({ top: 0 });
@@ -1076,6 +1102,11 @@ function selectStream(stream) {                     // rail / bottom-nav / profi
     if (stream === 'saved') {
         if (!state.user) { openAuth('signup'); return; }
         setView('subs');
+        return;
+    }
+    if (stream === 'followlist') {                  // rail "Following" → account list view
+        if (!state.user) { openAuth('signup'); return; }
+        setView('followlist');
         return;
     }
     selectTab(stream === 'following' ? 'following' : 'latest');
@@ -1223,7 +1254,7 @@ async function setupAuth() {
 function refreshFollowUI() {
     updateCounts();
     renderActivity();
-    renderRailFollowing();
+    if (state.view === 'followlist') renderFollowingPage();
     if (state.tab === 'following') renderFeedReset();
     else { // refresh per-post follow buttons in place
         $$('[data-follow]').forEach(b => {
@@ -1238,7 +1269,6 @@ async function init() {
     setupCookieBanner();
     renderTopbar();
     renderRailSubs();
-    renderRailFollowing();
     wireEvents();
     setActiveNav();
     await setupAuth();
