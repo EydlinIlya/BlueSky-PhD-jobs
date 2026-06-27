@@ -54,7 +54,12 @@ jobs:
         run: python scripts/send_subscription_digests.py --cadence "${{ steps.cadence.outputs.value }}"
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          # Digest needs an RLS-bypassing key. Prefer a dedicated SUPABASE_SERVICE_KEY
+          # if set, else reuse the existing privileged SUPABASE_KEY (the script falls
+          # back to SUPABASE_KEY). Do NOT use the publishable key here — RLS would
+          # hide other users' subscriptions.
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           EMAIL_PROVIDER: resend
