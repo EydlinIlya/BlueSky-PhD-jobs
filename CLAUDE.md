@@ -116,10 +116,12 @@ python bluesky_search.py --no-llm
 **`src/pipeline/`** - 4-stage persistent pipeline (Supabase only)
 - `runner.py` - Orchestrates stages; skips already-completed ones using `pipeline_runs` checkpoints
 - `checkpoint.py` - Documents `pipeline_runs` table schema
-- `stages/fetch.py` - Stage 1: fetch raw posts into `phd_positions_staging`
+- `stages/fetch.py` - Stage 1: fetch raw posts into `phd_positions_staging` (scoped to today's `run_date`)
 - `stages/filter.py` - Stage 2: LLM classification per row; tracks per-row completion via `filter_completed`
 - `stages/dedup.py` - Stage 3: TF-IDF + LLM dedup against existing canonical posts
 - `stages/publish.py` - Stage 4: upsert staging → `phd_positions`; delete staging. Telegram posting is handled out-of-band by `scripts/post_to_telegram.py`
+
+**Drain-all semantics:** only **Fetch** is scoped to today's `run_date` (it decides "what's new to pull"). **Filter, Dedup, and Publish drain the whole pending staging queue across ALL run_dates** (`get_staging_*`/`delete_staging` accept `run_date=None`). So if a day crashes before Publish, the next successful run sweeps up its leftover staging rows, classifies/dedups/publishes them, and Publish then clears the **entire** staging table plus **all** `pipeline_runs` rows. This guarantees orphaned staging can never accumulate. Per-row write-backs (`update_staging_filter`/`_dedup`) are keyed by each row's own `run_date`.
 
 **`scripts/find_aggregator_candidates.py`** - One-shot helper that lists Bluesky handles with ≥ `--min-posts` (default 5) canonical posts plus the bio from each handle's most recent post. Pure read; does not touch the pipeline or dedup. A human reviews the output and hand-edits `docs/aggregators.json` to add/remove aggregator handles. The frontend's **"Hide aggregator reposts"** toggle reads that JSON and filters the grid + card views accordingly. Dedup is unaffected because `preprocess_text()` already strips `[Bio: ...]` prefixes before TF-IDF comparison.
 
@@ -286,9 +288,9 @@ CREATE TABLE phd_positions_staging (
 
 **`duplicate_of` column:** `NULL` = canonical post (shown in UI). Contains URI of the newest (canonical) post in a duplicate group. When duplicates are detected, the older post gets `duplicate_of` set to the newer post's URI.
 
-**`pipeline_runs` table:** One row per active run. Stores completion timestamps for stages 1–3. The row is **deleted** after Stage 4 (Publish) succeeds so the next invocation on the same calendar day starts a fresh run (enabling 3×/day fetching). On crash mid-run the row survives, allowing the next invocation to resume from the last incomplete stage.
+**`pipeline_runs` table:** One row per active run. Stores completion timestamps for stages 1–3. **All** rows are **deleted** after Stage 4 (Publish) succeeds (drain-all) so the next invocation starts fresh and any stale rows from previously crashed days are cleared. On crash mid-run the row survives, allowing the next invocation to resume from the last incomplete stage.
 
-**`phd_positions_staging` table:** Transient table holding posts for the current run. Deleted (along with the pipeline_runs row) after a successful publish.
+**`phd_positions_staging` table:** Transient work queue. Fetch inserts under today's `run_date`; Filter/Dedup/Publish process rows across **all** run_dates. A successful publish clears the **entire** table (not just today's rows), so leftovers from a crashed day are swept up and published on the next run rather than orphaned.
 
 **`reposted_to_bluesky_at` column:** `NULL` = not yet reposted by the Bluesky repost bot. Added in migration `006_bluesky_repost.sql`, which also documents the one-time start-fresh `UPDATE` that pre-marks the existing backlog.
 
