@@ -30,6 +30,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+# Ensure the repo root is importable when run as `python scripts/repost_to_bluesky.py`
+# (Python puts scripts/ on sys.path, not the repo root, so `import src...` fails otherwise).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 load_dotenv()
 
 # How many rows to pull from Supabase before aggregator filtering (we over-fetch
