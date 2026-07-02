@@ -1,0 +1,41 @@
+name: Bluesky Repost
+
+# Quote-posts non-aggregator PhD/postdoc positions to the dedicated bot account,
+# adding hashtags for level, country, and subjects. Decoupled from the main
+# ingest pipeline so cadence is independent.
+#
+# Reads phd_positions where reposted_to_bluesky_at IS NULL (verified + canonical,
+# non-aggregator handle), quote-posts each, then marks the row. Idempotent —
+# a failed post leaves the row un-marked and is retried on the next run.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 */6 * * *"  # every 6 hours
+
+permissions:
+  contents: read
+
+jobs:
+  repost:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Run Bluesky repost
+        run: python scripts/repost_to_bluesky.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
+          BLUESKY_PASSWORD: ${{ secrets.BLUESKY_PASSWORD }}
