@@ -44,7 +44,8 @@ pip install -e .
 
 ## Environment Variables
 
-Required in `.env` (for Bluesky source):
+Required in `.env` (for Bluesky source). This is the bot account used for **both**
+search and the Bluesky repost job (`scripts/repost_to_bluesky.py`):
 ```
 BLUESKY_HANDLE=your-handle.bsky.social
 BLUESKY_PASSWORD=your-app-password
@@ -134,6 +135,25 @@ python bluesky_search.py --no-llm
   function is still exported for backward compatibility but is no longer
   called from `stages/publish.py`.
 
+**`scripts/repost_to_bluesky.py`** - Bluesky repost bot (standalone digest)
+- Runs as its own cron job (`.github/workflows/bluesky-repost.yml`), every 6h
+- Queries `phd_positions` for rows where `reposted_to_bluesky_at IS NULL` that are
+  verified + canonical (`duplicate_of IS NULL`) and whose `user_handle` is **not**
+  in `docs/aggregators.json` (aggregators filtered in Python)
+- **Quote-posts** each original (native reposts can't carry text) with clickable
+  hashtag facets for level (`position_type`), country, and subjects (`disciplines`),
+  built via `atproto.client_utils.TextBuilder.tag()`. Reuses
+  `src/sources/bluesky.py:get_client()` for auth.
+- Sets `reposted_to_bluesky_at` per row on success (and on skip of a
+  deleted/unavailable original) so it isn't retried forever; API errors leave the
+  row un-marked → retried next run (idempotent). Capped at `REPOST_LIMIT` (20)/run.
+- `--dry-run` prints the tag line + target URI without posting; `--limit N` overrides.
+- The bot account is the **same** account used for search (`BLUESKY_HANDLE`/
+  `BLUESKY_PASSWORD`); `BlueskySource.fetch_posts()` skips posts authored by that
+  handle (captured as `self._self_handle` after login) so we never re-ingest our own
+  reposts. **First-run:** pre-mark the existing backlog (see migration 006) so only
+  positions ingested after launch are reposted.
+
 **`src/dedup.py`** - Production deduplication helpers (used by `stages/dedup.py`)
 - `preprocess_text()` - Cleans post text (strips bio, URLs, linked pages)
 - `deduplicate_new_posts()` - TF-IDF similarity; auto-accepts >= 0.95, LLM-verifies 0.25–0.95 zone
@@ -213,13 +233,19 @@ CREATE TABLE phd_positions (
     position_type TEXT[],
     indexed_at TIMESTAMPTZ DEFAULT NOW(),
     duplicate_of TEXT,
-    posted_to_telegram_at TIMESTAMPTZ  -- NULL = un-posted; set by digest job
+    posted_to_telegram_at TIMESTAMPTZ,  -- NULL = un-posted; set by Telegram digest
+    reposted_to_bluesky_at TIMESTAMPTZ  -- NULL = un-reposted; set by Bluesky repost bot
 );
 
 -- Partial index keeps the digest's "find un-posted Bio+CS" query fast.
 CREATE INDEX IF NOT EXISTS phd_positions_unposted_idx
   ON phd_positions (created_at DESC)
   WHERE posted_to_telegram_at IS NULL;
+
+-- Partial index for the Bluesky repost bot's "find un-reposted" query.
+CREATE INDEX IF NOT EXISTS phd_positions_unreposted_idx
+  ON phd_positions (created_at)
+  WHERE reposted_to_bluesky_at IS NULL;
 
 CREATE TABLE pipeline_runs (
     id SERIAL PRIMARY KEY,
@@ -264,12 +290,16 @@ CREATE TABLE phd_positions_staging (
 
 **`phd_positions_staging` table:** Transient table holding posts for the current run. Deleted (along with the pipeline_runs row) after a successful publish.
 
+**`reposted_to_bluesky_at` column:** `NULL` = not yet reposted by the Bluesky repost bot. Added in migration `006_bluesky_repost.sql`, which also documents the one-time start-fresh `UPDATE` that pre-marks the existing backlog.
+
 ## GitHub Actions
 
 The workflow at `.github/workflows/scheduled-search.yml` runs daily at 8:30 AM UTC.
+The Telegram digest (`telegram-digest.yml`) and the Bluesky repost bot
+(`bluesky-repost.yml`, every 6h) run on their own separate schedules.
 
 Required secrets:
-- `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`
+- `BLUESKY_HANDLE`, `BLUESKY_PASSWORD` (the search + repost bot account)
 - `NVIDIA_API_KEY`
 - `SUPABASE_URL`, `SUPABASE_KEY`
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID` (optional — skipped if not set)

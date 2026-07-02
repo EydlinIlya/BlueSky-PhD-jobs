@@ -18,6 +18,7 @@ Aggregate PhD and academic position announcements from multiple sources into a u
 - **Incremental sync** - Only fetch new positions since last run
 - **4-stage persistent pipeline** - Supabase runs use checkpointed stages (fetch → filter → dedup → publish); a crash mid-filter resumes from the last unprocessed post on the next run
 - **Telegram channel** - Auto-posts Biology + CS positions (bioinformatics)
+- **Bluesky repost bot** - Quote-posts non-aggregator positions from a dedicated account, tagged with level, country, and subjects
 - **GitHub Actions** - Automated daily updates
 
 ## Setup
@@ -34,7 +35,7 @@ pip install -e .
 Create a `.env` file:
 
 ```bash
-# Required (for Bluesky source)
+# Required (for Bluesky source; also the account used by the repost bot)
 BLUESKY_HANDLE=your-handle.bsky.social
 BLUESKY_PASSWORD=your-app-password
 
@@ -173,6 +174,17 @@ CREATE INDEX IF NOT EXISTS phd_positions_unposted_idx
 -- rows as already-posted so the digest doesn't dump the historical Bio+CS
 -- backlog into the channel. Safe to skip if you want to re-post the backlog.
 UPDATE phd_positions SET posted_to_telegram_at = NOW() WHERE posted_to_telegram_at IS NULL;
+
+-- Bluesky repost bot tracking: NULL means un-reposted. Partial index keeps the
+-- bot's query fast. (See migration 006.)
+ALTER TABLE phd_positions ADD COLUMN IF NOT EXISTS reposted_to_bluesky_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS phd_positions_unreposted_idx
+  ON phd_positions (created_at)
+  WHERE reposted_to_bluesky_at IS NULL;
+
+-- Start fresh once: pre-mark the existing backlog so the bot only reposts
+-- positions ingested after launch (avoids flooding the feed).
+UPDATE phd_positions SET reposted_to_bluesky_at = NOW() WHERE reposted_to_bluesky_at IS NULL;
 ```
 
 3. Go to Settings → API and copy:
@@ -192,6 +204,10 @@ Two workflows run on cron:
   `posted_to_telegram_at IS NULL` and posts them to the channel, then marks
   them as posted. Runs **3×/day** (08:00, 14:00, 20:00 UTC). Decoupled from
   ingest so the website can refresh more often without spamming the channel.
+- **`bluesky-repost.yml`** — quote-posts non-aggregator positions where
+  `reposted_to_bluesky_at IS NULL` from a dedicated account, tagged with level,
+  country, and subjects. Runs **every 6h**. Uses the same `BLUESKY_HANDLE`/
+  `BLUESKY_PASSWORD` account as search (which excludes its own reposts).
 
 To enable:
 
@@ -212,6 +228,29 @@ Positions tagged with both **Biology** and **Computer Science** (bioinformatics,
 3. Add to `.env` or GitHub secrets: `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHANNEL_ID`
 
 If the secrets are not set, the Telegram step is silently skipped.
+
+## Bluesky Repost Bot
+
+A dedicated Bluesky account quote-posts **non-aggregator** positions (verified,
+canonical, `user_handle` not in `docs/aggregators.json`) with clickable hashtags
+for level, country, and subjects. Run by the `bluesky-repost.yml` workflow, every
+6h, decoupled from ingest.
+
+The bot account is the **same** account used for search
+(`BLUESKY_HANDLE`/`BLUESKY_PASSWORD`); the search source skips posts authored by
+that handle so we never re-ingest our own reposts.
+
+### Setup
+
+1. Create a new Bluesky account + an **app password**; set `BLUESKY_HANDLE` /
+   `BLUESKY_PASSWORD` (locally and as GitHub secrets) to it.
+2. Run migration 006 (adds `reposted_to_bluesky_at`) **including** the one-time
+   start-fresh `UPDATE` so the historical backlog isn't reposted.
+3. Test safely before enabling the cron:
+   ```bash
+   python scripts/repost_to_bluesky.py --dry-run --limit 3   # prints, posts nothing
+   python scripts/repost_to_bluesky.py --limit 1             # posts one
+   ```
 
 ## Frontend
 
