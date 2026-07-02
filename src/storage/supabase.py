@@ -268,18 +268,23 @@ class SupabaseStorage(StorageBackend):
         ).execute()
 
     def get_staging_unfiltered(
-        self, run_date, source: str | None = None
+        self, run_date=None, source: str | None = None
     ) -> list[dict]:
-        """Return staging rows where filter_completed=False (paginated)."""
-        run_date_str = self._run_date_str(run_date)
+        """Return staging rows where filter_completed=False (paginated).
+
+        run_date=None drains the whole pending queue across ALL run_dates, so
+        leftovers from a previous day's crashed run get classified too. Pass a
+        run_date only to scope to a single day.
+        """
 
         def build_query():
             q = (
                 self.client.table("phd_positions_staging")
                 .select("*")
-                .eq("run_date", run_date_str)
                 .eq("filter_completed", False)
             )
+            if run_date is not None:
+                q = q.eq("run_date", self._run_date_str(run_date))
             if source:
                 q = q.eq("source", source)
             return q
@@ -300,28 +305,35 @@ class SupabaseStorage(StorageBackend):
             "run_date", run_date_str
         ).eq("uri", uri).execute()
 
-    def get_staging_verified(self, run_date) -> list[dict]:
-        """Return staging rows where is_verified_job=True (paginated)."""
-        run_date_str = self._run_date_str(run_date)
-        return self._fetch_all_pages(
-            lambda: (
+    def get_staging_verified(self, run_date=None) -> list[dict]:
+        """Return staging rows where is_verified_job=True (paginated).
+
+        run_date=None returns verified rows across ALL run_dates (drain-all).
+        """
+        def build_query():
+            q = (
                 self.client.table("phd_positions_staging")
                 .select("*")
-                .eq("run_date", run_date_str)
                 .eq("is_verified_job", True)
             )
-        )
+            if run_date is not None:
+                q = q.eq("run_date", self._run_date_str(run_date))
+            return q
 
-    def get_staging_all(self, run_date) -> list[dict]:
-        """Return all staging rows for this run_date (paginated)."""
-        run_date_str = self._run_date_str(run_date)
-        return self._fetch_all_pages(
-            lambda: (
-                self.client.table("phd_positions_staging")
-                .select("*")
-                .eq("run_date", run_date_str)
-            )
-        )
+        return self._fetch_all_pages(build_query)
+
+    def get_staging_all(self, run_date=None) -> list[dict]:
+        """Return all staging rows (paginated).
+
+        run_date=None returns every staging row across ALL run_dates (drain-all).
+        """
+        def build_query():
+            q = self.client.table("phd_positions_staging").select("*")
+            if run_date is not None:
+                q = q.eq("run_date", self._run_date_str(run_date))
+            return q
+
+        return self._fetch_all_pages(build_query)
 
     def update_staging_dedup(
         self, run_date, uri: str, duplicate_of: str
@@ -332,23 +344,33 @@ class SupabaseStorage(StorageBackend):
             {"duplicate_of": duplicate_of}
         ).eq("run_date", run_date_str).eq("uri", uri).execute()
 
-    def delete_staging(self, run_date) -> None:
-        """Delete all staging rows for this run_date (post-publish cleanup)."""
-        run_date_str = self._run_date_str(run_date)
-        self.client.table("phd_positions_staging").delete().eq(
-            "run_date", run_date_str
-        ).execute()
+    def delete_staging(self, run_date=None) -> None:
+        """Delete staging rows (post-publish cleanup).
 
-    def delete_run(self, run_date) -> None:
-        """Delete the pipeline_runs row for this run_date.
-
-        Called after a successful publish so the next run of the same day
-        creates a fresh row and runs all stages again (for multiple daily runs).
+        run_date=None clears the ENTIRE staging table (drain-all publish); pass
+        a run_date to delete only that day's rows. `id >= 0` is a match-all
+        predicate (PostgREST refuses an unqualified delete).
         """
-        run_date_str = self._run_date_str(run_date)
-        self.client.table("pipeline_runs").delete().eq(
-            "run_date", run_date_str
-        ).execute()
+        q = self.client.table("phd_positions_staging").delete()
+        if run_date is not None:
+            q = q.eq("run_date", self._run_date_str(run_date))
+        else:
+            q = q.gte("id", 0)
+        q.execute()
+
+    def delete_run(self, run_date=None) -> None:
+        """Delete pipeline_runs checkpoint rows.
+
+        run_date=None clears ALL checkpoint rows — after a successful drain-all
+        publish nothing is in flight, so any stale rows from previously crashed
+        days are cleared too. Pass a run_date to delete only that day's row.
+        """
+        q = self.client.table("pipeline_runs").delete()
+        if run_date is not None:
+            q = q.eq("run_date", self._run_date_str(run_date))
+        else:
+            q = q.gte("id", 0)
+        q.execute()
 
     def update_post_classification(
         self,
