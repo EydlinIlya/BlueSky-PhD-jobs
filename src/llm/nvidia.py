@@ -6,11 +6,22 @@ import time
 import requests
 
 from .base import LLMProvider, LLMUnavailableError
-from .config import MAX_RETRIES, MAX_TIMEOUT_RETRIES, BASE_DELAY, MAX_DELAY, REQUEST_COOLDOWN, REQUEST_TIMEOUT
+from .config import (
+    DEFAULT_MODEL,
+    MAX_RETRIES,
+    MAX_TIMEOUT_RETRIES,
+    BASE_DELAY,
+    MAX_DELAY,
+    REQUEST_COOLDOWN,
+    REQUEST_TIMEOUT,
+)
 
 logger = logging.getLogger("bluesky_search")
 
-DEFAULT_NVIDIA_MODEL = "meta/llama-3.3-70b-instruct"
+# Single source of truth is config.DEFAULT_MODEL (llama-4-maverick: ~1s/call,
+# stable on the free tier). The old llama-3.3-70b default stalled >30s under
+# free-tier queuing and tripped REQUEST_TIMEOUT.
+DEFAULT_NVIDIA_MODEL = DEFAULT_MODEL
 NVIDIA_API_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
 
 
