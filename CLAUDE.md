@@ -54,6 +54,7 @@ BLUESKY_PASSWORD=your-app-password
 Optional:
 ```
 NVIDIA_API_KEY=your-nvidia-api-key    # For LLM filtering (Bluesky)
+MISTRAL_API_KEY=your-mistral-api-key  # Fallback LLM when NVIDIA is rate limited
 SUPABASE_URL=https://xxx.supabase.co  # For Supabase storage
 SUPABASE_KEY=your-anon-key            # For Supabase storage
 TELEGRAM_BOT_TOKEN=your-bot-token     # For Telegram channel
@@ -103,10 +104,15 @@ python bluesky_search.py --no-llm
 **`src/logger.py`** - Logging configuration
 
 **`src/llm/`** - LLM integration (for Bluesky)
-- `config.py` - Model settings, prompts, discipline list (includes `Ecology`), and position types. The `METADATA_PROMPT_TEMPLATE` contains an explicit rule that remote-sensing-of-forests/crop-fields posts must be classified as Ecology primary (Biology / CS only as secondary tags).
-- `base.py` - Abstract `LLMProvider` class
-- `nvidia.py` - NVIDIA API (Llama 4 Maverick) implementation
+- `config.py` - Model settings, prompts, discipline list (includes `Ecology`), and position types. The `METADATA_PROMPT_TEMPLATE` contains an explicit rule that remote-sensing-of-forests/crop-fields posts must be classified as Ecology primary (Biology / CS only as secondary tags). Also holds `MISTRAL_MODEL` and `FALLBACK_COOLDOWN`.
+- `base.py` - Abstract `LLMProvider` class + `LLMUnavailableError`
+- `openai_compatible.py` - `OpenAICompatibleProvider` base with the shared `/v1/chat/completions` retry / rate-limit / timeout logic. Raises `LLMUnavailableError` once a provider is exhausted so a fallback can take over.
+- `nvidia.py` - `NvidiaProvider` (Llama 4 Maverick via NVIDIA NIM); thin subclass of the OpenAI-compatible base
+- `mistral.py` - `MistralProvider` (Mistral La Plateforme); fallback for NVIDIA, same base
+- `fallback.py` - `FallbackProvider`: tries providers in priority order (NVIDIA → Mistral), failing over on `LLMUnavailableError`. A per-provider cooldown (`FALLBACK_COOLDOWN`, 1800s) skips a rate-limited/down primary so the per-post classify loop doesn't re-burn its retry budget on every post.
 - `classifier.py` - `JobClassifier` for filtering and metadata extraction
+
+`bluesky_search.py:get_classifier()` builds the provider from whichever keys are set: `NVIDIA_API_KEY` (primary) and/or `MISTRAL_API_KEY` (fallback). Both set → `FallbackProvider([NVIDIA, Mistral])`; one set → that provider alone; neither → `None` (no LLM).
 
 **`src/storage/`** - Storage backends
 - `base.py` - Abstract `StorageBackend` class
@@ -303,6 +309,7 @@ The Telegram digest (`telegram-digest.yml`) and the Bluesky repost bot
 Required secrets:
 - `BLUESKY_HANDLE`, `BLUESKY_PASSWORD` (the search + repost bot account)
 - `NVIDIA_API_KEY`
+- `MISTRAL_API_KEY` (optional — LLM fallback when NVIDIA is rate limited)
 - `SUPABASE_URL`, `SUPABASE_KEY`
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID` (optional — skipped if not set)
 

@@ -6,7 +6,13 @@ import sys
 from datetime import date
 
 from src.logger import setup_logger
-from src.llm import NvidiaProvider, JobClassifier, LLMUnavailableError
+from src.llm import (
+    NvidiaProvider,
+    MistralProvider,
+    FallbackProvider,
+    JobClassifier,
+    LLMUnavailableError,
+)
 from src.storage import StorageBackend, CSVStorage, SupabaseStorage
 from src.sync_state import SyncStateManager
 from src.sources import BlueskySource, ScholarshipDBSource
@@ -21,11 +27,24 @@ AVAILABLE_SOURCES = ["bluesky", "scholarshipdb"]
 
 
 def get_classifier() -> JobClassifier | None:
-    """Create a job classifier if API key is available."""
-    api_key = os.environ.get("NVIDIA_API_KEY")
-    if not api_key:
+    """Create a job classifier from whichever LLM keys are available.
+
+    NVIDIA is primary; Mistral is used as a fallback when NVIDIA is rate
+    limited or unavailable. If both keys are set, requests fail over from
+    NVIDIA to Mistral automatically. Returns None if no key is configured.
+    """
+    providers = []
+    nvidia_key = os.environ.get("NVIDIA_API_KEY")
+    if nvidia_key:
+        providers.append(NvidiaProvider(nvidia_key))
+    mistral_key = os.environ.get("MISTRAL_API_KEY")
+    if mistral_key:
+        providers.append(MistralProvider(mistral_key))
+
+    if not providers:
         return None
-    llm = NvidiaProvider(api_key)
+
+    llm = providers[0] if len(providers) == 1 else FallbackProvider(providers)
     return JobClassifier(llm)
 
 
@@ -143,9 +162,9 @@ def main():
     if not args.no_llm:
         classifier = get_classifier()
         if classifier:
-            logger.info("LLM filtering enabled (Llama)")
+            logger.info("LLM filtering enabled (NVIDIA primary, Mistral fallback if configured)")
         else:
-            logger.info("LLM filtering disabled (no NVIDIA_API_KEY)")
+            logger.info("LLM filtering disabled (no NVIDIA_API_KEY or MISTRAL_API_KEY)")
 
     # --- Supabase: use 4-stage persistent pipeline ---
     if args.storage == "supabase":

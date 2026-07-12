@@ -41,6 +41,8 @@ BLUESKY_PASSWORD=your-app-password
 
 # Optional - LLM filtering (recommended for Bluesky)
 NVIDIA_API_KEY=your-nvidia-api-key
+# Optional - Mistral fallback, used automatically when NVIDIA is rate limited
+MISTRAL_API_KEY=your-mistral-api-key
 
 # Optional - Supabase storage
 SUPABASE_URL=https://xxx.supabase.co
@@ -214,8 +216,9 @@ To enable:
 1. Push to GitHub
 2. Go to Settings → Secrets and variables → Actions
 3. Add secrets: `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`, `NVIDIA_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`
-4. (Optional) Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHANNEL_ID` for Telegram posting
-5. The workflows run automatically or can be triggered manually from the Actions tab
+4. (Optional) Add `MISTRAL_API_KEY` for LLM fallback when NVIDIA is rate limited
+5. (Optional) Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHANNEL_ID` for Telegram posting
+6. The workflows run automatically or can be triggered manually from the Actions tab
 
 ## Telegram Channel
 

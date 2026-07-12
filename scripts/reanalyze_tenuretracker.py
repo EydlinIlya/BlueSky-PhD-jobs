@@ -294,14 +294,19 @@ def apply_changes(analysis: dict, storage) -> None:
 
     reclassify = changes.get("reclassify", [])
     if reclassify:
-        api_key = os.environ.get("NVIDIA_API_KEY")
-        if not api_key:
-            logger.warning("NVIDIA_API_KEY not set — skipping reclassification of %d posts", len(reclassify))
+        nvidia_key = os.environ.get("NVIDIA_API_KEY")
+        mistral_key = os.environ.get("MISTRAL_API_KEY")
+        if not nvidia_key and not mistral_key:
+            logger.warning("No NVIDIA_API_KEY or MISTRAL_API_KEY — skipping reclassification of %d posts", len(reclassify))
         else:
-            from src.llm.nvidia import NvidiaProvider
-            from src.llm.classifier import JobClassifier
-            from src.llm.config import DEFAULT_MODEL
-            classifier = JobClassifier(NvidiaProvider(api_key, DEFAULT_MODEL))
+            from src.llm import NvidiaProvider, MistralProvider, FallbackProvider, JobClassifier
+            providers = []
+            if nvidia_key:
+                providers.append(NvidiaProvider(nvidia_key))
+            if mistral_key:
+                providers.append(MistralProvider(mistral_key))
+            llm = providers[0] if len(providers) == 1 else FallbackProvider(providers)
+            classifier = JobClassifier(llm)
             logger.info(f"Reclassifying {len(reclassify)} posts...")
             for i, entry in enumerate(reclassify):
                 logger.info(f"  [{i + 1}/{len(reclassify)}] {entry['uri']}")
