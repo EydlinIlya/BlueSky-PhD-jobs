@@ -10,8 +10,8 @@ class MockProvider(EmailProvider):
         self.succeed = succeed
         self.sent = []
 
-    def send(self, to, subject, html):
-        self.sent.append({"to": to, "subject": subject, "html": html})
+    def send(self, to, subject, html, headers=None):
+        self.sent.append({"to": to, "subject": subject, "html": html, "headers": headers})
         return self.succeed
 
 
@@ -38,7 +38,9 @@ def test_unknown_provider_raises():
         get_email_provider("smoke-signals")
 
 
-def test_resend_returns_false_without_api_key():
-    # No network call should happen when the key is missing.
+def test_resend_returns_false_without_api_key(monkeypatch):
+    # No network call should happen when the key is missing. Clear any key that a
+    # loaded .env may have put in the environment so the test is deterministic.
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
     provider = ResendProvider(api_key=None)
     assert provider.send("a@b.com", "Hi", "<p>x</p>") is False

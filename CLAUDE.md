@@ -360,15 +360,32 @@ digests). Backend pieces:
   subscriptions for a cadence, matches new positions (`created_at >
   last_notified_at`) via the pure `position_matches()` helper, emails a digest,
   and advances the watermark only on success. `python scripts/send_subscription_digests.py --cadence daily`.
+  Each email carries a `List-Unsubscribe` header (URL + mailto) and a footer
+  unsubscribe link + postal address (`MAILING_ADDRESS` env) for CAN-SPAM/ePrivacy.
 - **`.github/workflows/subscription-digests.yml`** — daily (08:00 UTC), weekly
   (Mon 09:00 UTC), and hourly "instant" runs; picks the cadence from the schedule.
 - Tests: `tests/test_email.py` (mock provider) + `tests/test_digest.py`
   (matching/formatting).
 
+**Email unsubscribe** (`migrations/006_unsubscribe_token.sql`): adds a secret
+`subscriptions.unsubscribe_token` and a `SECURITY DEFINER` RPC
+`unsubscribe_by_token(uuid)` (granted to `anon`) that turns off `deliver_email` /
+sets `cadence='off'` for the single matching row. The static page
+`docs/unsubscribe.html` reads `?token=` and calls that RPC with the public anon
+key, so an unauthenticated click works with no server. `send_subscription_digests.py`
+builds the link/header from each row's token.
+
+**Legal pages:** `docs/privacy.html` (covers accounts, subscriptions, follows,
+Resend, OAuth, retention/deletion, GDPR/CCPA rights) and `docs/terms.html`
+(service description, account rules, disclaimers, liability — set the governing-law
+jurisdiction). Both linked from the site footer; the signup modal shows a
+"By creating an account you agree to Terms & Privacy" line.
+
 New env / GitHub secrets: `RESEND_API_KEY`, `EMAIL_FROM`
 (e.g. `PhD Sky <alerts@phdsky.org>`), `SUPABASE_SERVICE_KEY` (service-role; cron
-only, never in the frontend). Manual: verify the `phdsky.org` domain in Resend
-(SPF/DKIM DNS).
+only, never in the frontend), `MAILING_ADDRESS` (postal address for the email
+footer). Manual: verify the `phdsky.org` domain in Resend (SPF/DKIM DNS), and run
+migration 006 in the Supabase SQL editor.
 
 **`docs/aggregators.json`** - Hand-maintained list `{ "handles": [...] }` of Bluesky handles flagged as aggregator reposters. Source of truth for the UI filter. Updated via `scripts/find_aggregator_candidates.py`.
 

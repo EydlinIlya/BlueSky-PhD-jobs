@@ -17,8 +17,11 @@ class EmailProvider(ABC):
     from the caller's perspective: a ``False`` return means "not sent, retry"."""
 
     @abstractmethod
-    def send(self, to: str, subject: str, html: str) -> bool:
-        """Send one email. Returns True on success, False on failure (no raise)."""
+    def send(self, to: str, subject: str, html: str, headers: dict | None = None) -> bool:
+        """Send one email. Returns True on success, False on failure (no raise).
+
+        ``headers`` carries optional extra SMTP headers (e.g. ``List-Unsubscribe``).
+        """
         raise NotImplementedError
 
 
@@ -31,6 +34,13 @@ def get_email_provider(name: str | None = None) -> EmailProvider:
     raise ValueError(f"Unknown EMAIL_PROVIDER: {provider!r}")
 
 
-def send_email(to: str, subject: str, html: str, *, provider: EmailProvider | None = None) -> bool:
+def send_email(
+    to: str,
+    subject: str,
+    html: str,
+    *,
+    headers: dict | None = None,
+    provider: EmailProvider | None = None,
+) -> bool:
     """Convenience: send a single email using the configured provider."""
-    return (provider or get_email_provider()).send(to, subject, html)
+    return (provider or get_email_provider()).send(to, subject, html, headers=headers)

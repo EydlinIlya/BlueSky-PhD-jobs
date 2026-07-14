@@ -61,18 +61,59 @@
 <div class="page" id="main">
   <nav class="crumb"><a href="/">&larr; All positions</a></nav>
   <h1><span style="color:var(--primary)">&gt;</span> Privacy</h1>
-  <p class="meta">Last updated 2026-05-08.</p>
+  <p class="meta">Last updated 2026-07-14.</p>
+
+  <h2>The short version</h2>
+  <p>
+    You can browse PhD Sky without an account and without giving us anything.
+    If you create an account to save searches, follow handles, or get email
+    digests, we store the minimum needed to do that. We don't sell your data,
+    and we don't collect sensitive categories (health, race, politics, finances,
+    precise location, etc.).
+  </p>
 
   <h2>What we collect from you</h2>
+  <p><strong>If you just browse:</strong> nothing is required. If you accept
+    analytics in the cookie banner, Google Analytics records a pseudonymous visit
+    (IP, country, page path, referrer, browser). We don't combine it with
+    anything to identify you.</p>
+  <p><strong>If you create an account,</strong> we store:</p>
+  <ul>
+    <li><strong>Your email address</strong> — to sign you in and send digests you ask for.</li>
+    <li><strong>A password</strong>, if you use email sign-up — stored hashed by our
+      auth provider (Supabase); we never see it in plain text.</li>
+    <li><strong>Basic profile info</strong> — an optional display name/handle. If you
+      sign in with Google or GitHub, we receive your name and email from that
+      provider (not your password).</li>
+    <li><strong>Your saved searches</strong> — the filters you save (disciplines,
+      countries, position types, keywords) and how often you want emails.</li>
+    <li><strong>Your follows</strong> — the Bluesky handles and topics you follow, so
+      we can build your feed.</li>
+  </ul>
   <p>
-    Nothing on the site itself. There are no signups, accounts, forms, comments,
-    or submission flows. Browsing is read-only.
+    Our infrastructure providers also process technical data (IP address,
+    device/User-Agent, timestamps) as a normal part of serving requests and
+    keeping the service secure.
   </p>
+
+  <h2>How we use it</h2>
+  <ul>
+    <li>To run your account, saved searches, feed, and follows.</li>
+    <li>To send the email digests you opted into (see below).</li>
+    <li>To keep the service working, secure, and free of abuse.</li>
+  </ul>
+  <p>We do <strong>not</strong> sell your data, run ads, or use your account data to
+    train AI models. (Public position text is classified by AI models to tag
+    discipline/country/type, but that processing uses the public post — not your
+    account information.)</p>
+
+  <h2>Email digests</h2>
   <p>
-    If you accept analytics in the cookie banner, Google Analytics records a
-    pseudonymous visit (anonymized IP, country, page path, referrer, browser).
-    We don't combine this with anything else to identify you, and we don't sell
-    or share it.
+    If you set up a saved search with email delivery, we send you digests of new
+    matching positions at your chosen frequency. Every email has a one-click
+    <strong>unsubscribe</strong> link and a <code>List-Unsubscribe</code> header, and
+    you can change or turn off delivery any time from your account. We stop
+    emailing that search as soon as you unsubscribe.
   </p>
 
   <h2>Cookies and local storage</h2>
@@ -80,7 +121,10 @@
     <li>
       <code>_ga</code>, <code>_ga_*</code> — Google Analytics. <strong>Only set
       after you click Accept</strong> in the cookie banner. Retained 24 months.
-      Stores a pseudonymous visitor ID.
+    </li>
+    <li>
+      <strong>Auth session</strong> (localStorage) — if you log in, our auth provider
+      stores your session token on your device so you stay signed in. Cleared on logout.
     </li>
     <li>
       <code>cookieConsent</code> (localStorage) — your accept/decline choice so
@@ -91,60 +135,68 @@
       reposts" toggle state. Stays on this device.
     </li>
   </ul>
-  <p>
-    Decline analytics → no cookies are set; the banner remembers your choice in
-    localStorage only.
-  </p>
+  <p>Decline analytics → no analytics cookies are set. The auth session and
+    consent/preference items are essential to features you use and aren't tracking.</p>
 
-  <h2>Third parties that may see your IP</h2>
+  <h2>Third parties (processors) we share data with</h2>
   <p>
-    The site is static, but loading it touches a few CDNs and APIs. They see
-    your IP and User-Agent as part of normal HTTP traffic:
+    We use a few service providers to run PhD Sky. They process data on our
+    behalf under their own privacy terms, and may store it in the United States:
   </p>
   <ul>
-    <li><a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel</a> — hosts the site.</li>
-    <li><a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Analytics</a> — only after you accept analytics.</li>
-    <li><a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Fonts</a> — serves the Fira Code / Fira Sans webfonts.</li>
-    <li><a href="https://www.jsdelivr.com/terms/privacy-policy-jsdelivr-net" target="_blank" rel="noopener">jsDelivr CDN</a> — serves AG Grid and the Supabase JS client.</li>
-    <li><a href="https://supabase.com/privacy" target="_blank" rel="noopener">Supabase</a> — read-only fallback when the static positions snapshot can't load. Anonymous public reads only.</li>
+    <li><a href="https://supabase.com/privacy" target="_blank" rel="noopener">Supabase</a> — accounts, authentication, and the database (email, hashed password, profile, saved searches, follows).</li>
+    <li><a href="https://resend.com/legal/privacy-policy" target="_blank" rel="noopener">Resend</a> — sends the digest emails (receives your email address and the digest content).</li>
+    <li><a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener">Vercel</a> — hosts the site and provides cookieless Web Analytics.</li>
+    <li><a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google</a> — Analytics (only after you accept), Fonts, and Google sign-in if you use it.</li>
+    <li><a href="https://docs.github.com/site-policy/privacy-policies/github-privacy-statement" target="_blank" rel="noopener">GitHub</a> — GitHub sign-in, if you use it.</li>
+    <li><a href="https://www.jsdelivr.com/terms/privacy-policy-jsdelivr-net" target="_blank" rel="noopener">jsDelivr CDN</a> — serves front-end libraries.</li>
   </ul>
 
   <h2>What we do with positions</h2>
   <p>
-    Each position links back to the original Bluesky post. The post text and
-    author handle are public on Bluesky; we re-display them with a link to the
-    source. The author always controls the original.
+    Each position links back to its original public post. The post text and
+    author handle are public on Bluesky (or another public source); we re-display
+    them with a link to the source. The author always controls the original.
   </p>
   <p>
-    To remove your own Bluesky post from this aggregator, email
-    <a href="mailto:eli.eydlin@gmail.com">eli.eydlin@gmail.com</a>. We'll
-    delete it from our database within a few days.
+    <strong>Removing your content:</strong> to remove your own post from this
+    aggregator, email <a href="mailto:eli.eydlin@gmail.com">eli.eydlin@gmail.com</a>.
+    We'll delete it from our database within a few days.
+  </p>
+
+  <h2>Data retention and deletion</h2>
+  <p>
+    We keep account data for as long as your account exists. When you delete your
+    account, your profile, saved searches, and follows are removed automatically.
+    Analytics data expires on its own schedule (up to 24 months). To delete your
+    account or request a copy of your data, use your account settings or email us.
   </p>
 
   <h2>Your rights</h2>
   <ul>
-    <li>
-      <strong>Opt out of analytics:</strong> click Decline in the cookie banner,
-      or install the
+    <li><strong>Access, correct, delete, or export</strong> your account data — from
+      your account settings, or by emailing the address below.</li>
+    <li><strong>Unsubscribe from emails</strong> — via the link in any digest or your
+      account settings.</li>
+    <li><strong>Opt out of analytics</strong> — click Decline in the cookie banner, or
+      install the
       <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener">Google Analytics Opt-out add-on</a>.
-      Already accepted? Clear <code>cookieConsent</code> from localStorage and
-      reload — the banner reappears so you can switch.
-    </li>
-    <li>
-      <strong>EU/UK visitors:</strong> our default-deny consent state means no
-      analytics cookies are set unless you opt in. You can request access,
-      correction, or deletion of any data we hold via the contact email below.
-    </li>
+      Already accepted? Clear <code>cookieConsent</code> from localStorage and reload.</li>
+    <li><strong>EU/UK/California residents</strong> — you have rights to access,
+      correction, deletion, portability, and to object to or restrict processing.
+      Our legal bases are your consent (analytics, emails) and legitimate
+      interest / performing the service you requested (accounts, aggregating
+      public postings). Contact us to exercise any of these.</li>
   </ul>
 
   <h2>Contact</h2>
   <p>
-    Questions, removal requests, or anything privacy-related:
+    Questions, removal requests, data requests, or anything privacy-related:
     <a href="mailto:eli.eydlin@gmail.com">eli.eydlin@gmail.com</a>.
   </p>
 
   <footer>
-    <a href="/">Home</a> · <a href="/about">About</a> · <a href="/positions">All positions</a> · <a href="https://github.com/EydlinIlya/BlueSky-PhD-jobs" target="_blank" rel="noopener">GitHub</a>
+    <a href="/">Home</a> · <a href="/about">About</a> · <a href="/terms">Terms</a> · <a href="/positions">All positions</a> · <a href="https://github.com/EydlinIlya/BlueSky-PhD-jobs" target="_blank" rel="noopener">GitHub</a>
   </footer>
 </div>
 </body>

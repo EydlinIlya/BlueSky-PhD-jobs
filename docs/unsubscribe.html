@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unsubscribe | PhD Sky</title>
+<meta name="description" content="Unsubscribe from PhD Sky email digests.">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/design-tokens.css">
+<style>
+  body { margin: 0; padding: 0; }
+  .page { max-width: 620px; margin: 0 auto; padding: 48px 16px 64px; }
+  .crumb { font-size: 13px; margin-bottom: 24px; font-family: var(--font-mono); }
+  .crumb a { color: var(--primary); text-decoration: none; }
+  .crumb a:hover { color: var(--accent); }
+  h1 {
+    font-family: var(--font-mono); font-size: 26px; font-weight: 700;
+    letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 20px; color: var(--fg);
+  }
+  p { line-height: 1.65; font-size: 15px; color: var(--fg); margin: 0 0 14px; }
+  .card {
+    background: var(--bg-elevated); border: 1px solid var(--border);
+    border-radius: 10px; padding: 24px;
+  }
+  .ok { color: var(--primary); }
+  .err { color: #ef4444; }
+  b { color: var(--fg); }
+  a { color: var(--primary); }
+  a:hover { color: var(--accent); }
+  footer {
+    margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border);
+    font-size: 13px; color: var(--fg-subtle); font-family: var(--font-mono);
+  }
+  footer a { color: var(--primary); }
+</style>
+</head>
+<body>
+<div class="page">
+  <nav class="crumb"><a href="/">&larr; PhD Sky</a></nav>
+  <h1><span style="color:var(--primary)">&gt;</span> Unsubscribe</h1>
+  <div class="card">
+    <p id="status">Processing your request…</p>
+  </div>
+  <footer>
+    <a href="/">Home</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a>
+  </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  const SUPABASE_URL = 'https://qenpxgztlptegosdhhhi.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_149HAw6pWDQTRPF_NLISmA_oSCU7q3_';
+  const statusEl = document.getElementById('status');
+
+  function show(html, cls) {
+    statusEl.className = cls || '';
+    statusEl.innerHTML = html;
+  }
+
+  (async () => {
+    const token = new URLSearchParams(location.search).get('token');
+    if (!token) {
+      show('This link is missing its unsubscribe token. If you keep getting emails, '
+        + 'reply to any digest or email <a href="mailto:eli.eydlin@gmail.com">eli.eydlin@gmail.com</a>.', 'err');
+      return;
+    }
+    try {
+      const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const { data, error } = await client.rpc('unsubscribe_by_token', { p_token: token });
+      if (error) throw error;
+      if (data === null) {
+        show('You&rsquo;re already unsubscribed, or this link has already been used. '
+          + 'No further emails will be sent for it.', 'ok');
+      } else {
+        show('<b class="ok">You&rsquo;re unsubscribed.</b><br><br>'
+          + 'We&rsquo;ve turned off email for your saved search '
+          + '(<b>' + String(data).replace(/</g, '&lt;') + '</b>). '
+          + 'You can re-enable it any time from your '
+          + '<a href="/account">account</a>.', 'ok');
+      }
+    } catch (e) {
+      show('Something went wrong unsubscribing. Please try again, or email '
+        + '<a href="mailto:eli.eydlin@gmail.com">eli.eydlin@gmail.com</a> and we&rsquo;ll remove you manually.', 'err');
+      console.error(e);
+    }
+  })();
+</script>
+</body>
+</html>

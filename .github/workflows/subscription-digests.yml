@@ -63,3 +63,5 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           EMAIL_PROVIDER: resend
+          # Physical postal address shown in the email footer (CAN-SPAM).
+          MAILING_ADDRESS: ${{ secrets.MAILING_ADDRESS }}

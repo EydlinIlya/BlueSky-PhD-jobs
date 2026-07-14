@@ -729,6 +729,7 @@ function renderAuthModal() {
         <div class="auth-foot">${signup
             ? 'Already have an account? <a data-mode="signin">Log in</a>'
             : 'New here? <a data-mode="signup">Create an account</a>'}</div>
+        ${signup ? `<div class="auth-foot" style="margin-top:8px">By creating an account you agree to our <a href="/terms" target="_blank" rel="noopener">Terms</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</div>` : ''}
       </div>`;
     bindAuth();
 }

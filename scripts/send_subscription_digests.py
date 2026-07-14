@@ -38,6 +38,17 @@ load_dotenv()
 SITE_URL = os.environ.get("SITE_BASE_URL", "https://phdsky.org/")
 MAX_POSITIONS_PER_DIGEST = 40
 
+# CAN-SPAM requires a valid physical postal address in every digest. Set the
+# real address via env in production; the placeholder makes the gap obvious.
+POSTAL_ADDRESS = os.environ.get("MAILING_ADDRESS", "[Your mailing address — set MAILING_ADDRESS]")
+# mailto fallback for List-Unsubscribe (works even if the URL flow is down).
+UNSUB_MAILTO = os.environ.get("UNSUB_MAILTO", "eli.eydlin@gmail.com")
+
+
+def unsubscribe_url(sub: dict, site_url: str = SITE_URL) -> str:
+    """One-click unsubscribe link carrying the subscription's secret token."""
+    return f"{site_url}unsubscribe?token={sub.get('unsubscribe_token', '')}"
+
 _AGGREGATORS_FILE = Path(__file__).resolve().parent.parent / "docs" / "aggregators.json"
 try:
     AGGREGATORS = set(json.loads(_AGGREGATORS_FILE.read_text(encoding="utf-8")).get("handles", []))
@@ -96,9 +107,15 @@ def subscription_label(sub: dict) -> str:
     return " · ".join(parts) if parts else "all positions"
 
 
-def format_digest_html(sub: dict, positions: list[dict], site_url: str = SITE_URL) -> str:
+def format_digest_html(
+    sub: dict,
+    positions: list[dict],
+    site_url: str = SITE_URL,
+    unsub_url: str | None = None,
+) -> str:
     """Render the digest email body (simple, email-client-safe inline styles)."""
     label = html.escape(subscription_label(sub))
+    unsub_url = unsub_url or unsubscribe_url(sub, site_url)
     rows = []
     for p in positions[:MAX_POSITIONS_PER_DIGEST]:
         title = " / ".join(p.get("position_type") or []) or "Position"
@@ -122,9 +139,13 @@ def format_digest_html(sub: dict, positions: list[dict], site_url: str = SITE_UR
         f'<div style="font:13px sans-serif;color:#a8b8c8;margin:8px 0 18px">'
         f'{n} new position{"s" if n != 1 else ""} matching <b style="color:#e2e8f0">{label}</b></div>'
         f'{"".join(rows)}'
-        f'<div style="font:12px sans-serif;color:#64748b;margin-top:20px">'
-        f'You receive this because you subscribed on <a href="{html.escape(site_url)}" style="color:#3b82f6">PhD Sky</a>. '
-        f'Manage or unsubscribe from your account.</div>'
+        f'<div style="font:12px sans-serif;color:#64748b;margin-top:20px;line-height:1.6">'
+        f'You receive this because you created this saved search on '
+        f'<a href="{html.escape(site_url)}" style="color:#3b82f6">PhD Sky</a>. '
+        f'<a href="{html.escape(unsub_url)}" style="color:#3b82f6">Unsubscribe</a> from these emails, '
+        f'or <a href="{html.escape(site_url)}account" style="color:#3b82f6">manage your subscriptions</a>.'
+        f'<br>PhD Sky · {html.escape(POSTAL_ADDRESS)}'
+        f'</div>'
         f'</div>'
     )
 
@@ -194,8 +215,14 @@ def run(cadence: str) -> int:
             print(f"  sub {sub['id']}: no email on profile, skipping")
             continue
         subject = f"{len(matches)} new: {subscription_label(sub)}"[:120]
-        body = format_digest_html(sub, matches)
-        if send_email(email, subject, body):
+        unsub = unsubscribe_url(sub)
+        body = format_digest_html(sub, matches, unsub_url=unsub)
+        # List-Unsubscribe lets mail clients surface a native unsubscribe button.
+        # (URL flow + mailto fallback; the URL is handled by docs/unsubscribe.html.)
+        unsub_headers = {
+            "List-Unsubscribe": f"<{unsub}>, <mailto:{UNSUB_MAILTO}?subject=unsubscribe>",
+        }
+        if send_email(email, subject, body, headers=unsub_headers):
             newest = max(p["created_at"] for p in matches)
             client.table("subscriptions").update(
                 {"last_notified_at": newest}).eq("id", sub["id"]).execute()

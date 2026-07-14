@@ -27,10 +27,14 @@ class ResendProvider(EmailProvider):
         self.api_key = api_key or os.environ.get("RESEND_API_KEY")
         self.sender = sender or os.environ.get("EMAIL_FROM") or DEFAULT_FROM
 
-    def send(self, to: str, subject: str, html: str) -> bool:
+    def send(self, to: str, subject: str, html: str, headers: dict | None = None) -> bool:
         if not self.api_key:
             print("ResendProvider: RESEND_API_KEY not set — skipping send")
             return False
+        payload = {"from": self.sender, "to": [to], "subject": subject, "html": html}
+        if headers:
+            # Resend passes these through as email headers (e.g. List-Unsubscribe).
+            payload["headers"] = headers
         try:
             resp = requests.post(
                 RESEND_API_URL,
@@ -38,7 +42,7 @@ class ResendProvider(EmailProvider):
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
                 },
-                json={"from": self.sender, "to": [to], "subject": subject, "html": html},
+                json=payload,
                 timeout=30,
             )
         except requests.RequestException as e:
