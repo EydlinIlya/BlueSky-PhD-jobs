@@ -1,7 +1,22 @@
 """LLM configuration: model settings and prompts."""
 
+import os
+
 # Model configuration
-DEFAULT_MODEL = "meta/llama-4-maverick-17b-128e-instruct"
+DEFAULT_MODEL = os.environ.get("NVIDIA_MODEL", "meta/llama-4-maverick-17b-128e-instruct")
+
+# Mistral fallback model (used when NVIDIA is rate limited / unavailable).
+# All Mistral chat models are instruct-tuned. Default is mistral-medium-latest:
+# it won a benchmark vs the 41 hand-labeled ground-truth posts — best job-filter
+# accuracy (88% / F1 92%), metadata tied at top, and it beat mistral-large-latest.
+# Override with the MISTRAL_MODEL env var if needed.
+MISTRAL_MODEL = os.environ.get("MISTRAL_MODEL", "mistral-medium-latest")
+
+# When a provider fails over in FallbackProvider, skip it for this many seconds
+# so we don't re-hit a rate-limited/down primary on every post in the classify
+# loop. Kept high (30 min) because a down NVIDIA costs a full timeout-retry
+# cycle (~3 min) each time the cooldown lapses before it fails back to Mistral.
+FALLBACK_COOLDOWN = 1800  # seconds
 
 # Rate limit settings
 MAX_RETRIES = 5        # retries for rate limits / transient errors

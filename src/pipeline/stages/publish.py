@@ -39,11 +39,13 @@ def _staging_to_save_dict(row: dict) -> dict:
 def run(run_date, storage, args) -> None:
     """Publish all staging rows to phd_positions, clean up, post to Telegram."""
 
-    all_rows = storage.get_staging_all(run_date)
+    # Drain the entire staging table (all run_dates), so leftovers from a
+    # previous day's crashed run are published here too.
+    all_rows = storage.get_staging_all()
 
     if not all_rows:
         logger.info("No staging posts to publish")
-        storage.delete_run(run_date)
+        storage.delete_run()
         return
 
     logger.info(f"Publishing {len(all_rows)} posts to phd_positions...")
@@ -53,9 +55,11 @@ def run(run_date, storage, args) -> None:
     saved_count = storage.save_posts(posts_to_save)
     logger.info(f"Saved {saved_count} posts to phd_positions")
 
-    # Clean up: remove staging rows and the pipeline_runs checkpoint row.
-    # Deleting the checkpoint allows subsequent runs on the same calendar day
-    # to start fresh (each fetches only posts newer than the last publish).
-    storage.delete_staging(run_date)
-    storage.delete_run(run_date)
+    # Clean up: clear the ENTIRE staging table and ALL pipeline_runs checkpoints.
+    # After a successful drain-all publish nothing is in flight, so this also
+    # removes any stale rows from previously crashed days. Deleting the
+    # checkpoints lets subsequent runs on the same calendar day start fresh
+    # (each fetches only posts newer than the last publish).
+    storage.delete_staging()
+    storage.delete_run()
     logger.info(f"Stage 4 (Publish) complete: {saved_count} posts published")

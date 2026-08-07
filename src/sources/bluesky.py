@@ -281,6 +281,10 @@ class BlueskySource(DataSource):
         self.queries = queries or DEFAULT_QUERIES
         self.limit = limit
         self._client: Client | None = None
+        # Handle of the logged-in account, captured after login. The bot account
+        # both searches and quote-posts (scripts/repost_to_bluesky.py), so we must
+        # skip its own posts here or we'd re-ingest our own reposts (feedback loop).
+        self._self_handle: str | None = None
 
     @property
     def name(self) -> str:
@@ -290,6 +294,8 @@ class BlueskySource(DataSource):
         """Get or create authenticated client."""
         if self._client is None:
             self._client = get_client()
+            me = getattr(self._client, "me", None)
+            self._self_handle = (getattr(me, "handle", "") or "").lower() or None
         return self._client
 
     def fetch_posts(
@@ -323,6 +329,10 @@ class BlueskySource(DataSource):
                 if post.uri in seen_uris:
                     continue
                 seen_uris.add(post.uri)
+
+                # Skip our own bot account's quote-posts to avoid re-ingesting them
+                if self._self_handle and post.author.handle.lower() == self._self_handle:
+                    continue
 
                 # Skip posts older than our last sync
                 if since_timestamp and post.record.created_at < since_timestamp:

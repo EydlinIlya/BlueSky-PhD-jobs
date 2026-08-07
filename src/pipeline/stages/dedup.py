@@ -14,9 +14,14 @@ logger = setup_logger()
 
 
 def run(run_date, storage, llm) -> None:
-    """Deduplicate verified staging posts against existing canonical DB posts."""
+    """Deduplicate verified staging posts against existing canonical DB posts.
 
-    verified_rows = storage.get_staging_verified(run_date)
+    Drains all verified staging rows across run_dates (including leftovers from
+    a previous day's crashed run); duplicate marks are written back keyed by
+    each row's own run_date.
+    """
+
+    verified_rows = storage.get_staging_verified()
 
     if not verified_rows:
         logger.info("No verified staging posts to dedup")
@@ -33,6 +38,7 @@ def run(run_date, storage, llm) -> None:
     for row in verified_rows:
         post = {
             "uri": row["uri"],
+            "run_date": row.get("run_date"),
             "message": row.get("message", ""),
             "url": row.get("url", ""),
             "user": row.get("user_handle", ""),
@@ -53,10 +59,10 @@ def run(run_date, storage, llm) -> None:
         llm,
     )
 
-    # Write duplicate marks back to staging rows
+    # Write duplicate marks back to staging rows (keyed by each row's run_date)
     for post in posts_with_dedup:
         if post.get("duplicate_of"):
-            storage.update_staging_dedup(run_date, post["uri"], post["duplicate_of"])
+            storage.update_staging_dedup(post["run_date"], post["uri"], post["duplicate_of"])
 
     # Mark existing DB posts as duplicates (older posts that were superseded)
     if db_updates:

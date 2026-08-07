@@ -44,7 +44,8 @@ pip install -e .
 
 ## Environment Variables
 
-Required in `.env` (for Bluesky source):
+Required in `.env` (for Bluesky source). This is the bot account used for **both**
+search and the Bluesky repost job (`scripts/repost_to_bluesky.py`):
 ```
 BLUESKY_HANDLE=your-handle.bsky.social
 BLUESKY_PASSWORD=your-app-password
@@ -53,6 +54,7 @@ BLUESKY_PASSWORD=your-app-password
 Optional:
 ```
 NVIDIA_API_KEY=your-nvidia-api-key    # For LLM filtering (Bluesky)
+MISTRAL_API_KEY=your-mistral-api-key  # Fallback LLM when NVIDIA is rate limited
 SUPABASE_URL=https://xxx.supabase.co  # For Supabase storage
 SUPABASE_KEY=your-anon-key            # For Supabase storage
 TELEGRAM_BOT_TOKEN=your-bot-token     # For Telegram channel
@@ -106,10 +108,15 @@ python bluesky_search.py --no-llm
 **`src/logger.py`** - Logging configuration
 
 **`src/llm/`** - LLM integration (for Bluesky)
-- `config.py` - Model settings, prompts, discipline list (includes `Ecology`), and position types. The `METADATA_PROMPT_TEMPLATE` contains an explicit rule that remote-sensing-of-forests/crop-fields posts must be classified as Ecology primary (Biology / CS only as secondary tags).
-- `base.py` - Abstract `LLMProvider` class
-- `nvidia.py` - NVIDIA API (Llama 4 Maverick) implementation
+- `config.py` - Model settings, prompts, discipline list (includes `Ecology`), and position types. The `METADATA_PROMPT_TEMPLATE` contains an explicit rule that remote-sensing-of-forests/crop-fields posts must be classified as Ecology primary (Biology / CS only as secondary tags). Also holds `MISTRAL_MODEL` and `FALLBACK_COOLDOWN`.
+- `base.py` - Abstract `LLMProvider` class + `LLMUnavailableError`
+- `openai_compatible.py` - `OpenAICompatibleProvider` base with the shared `/v1/chat/completions` retry / rate-limit / timeout logic. Raises `LLMUnavailableError` once a provider is exhausted so a fallback can take over.
+- `nvidia.py` - `NvidiaProvider` (Llama 4 Maverick via NVIDIA NIM); thin subclass of the OpenAI-compatible base
+- `mistral.py` - `MistralProvider` (Mistral La Plateforme); fallback for NVIDIA, same base
+- `fallback.py` - `FallbackProvider`: tries providers in priority order (NVIDIA → Mistral), failing over on `LLMUnavailableError`. A per-provider cooldown (`FALLBACK_COOLDOWN`, 1800s) skips a rate-limited/down primary so the per-post classify loop doesn't re-burn its retry budget on every post.
 - `classifier.py` - `JobClassifier` for filtering and metadata extraction
+
+`bluesky_search.py:get_classifier()` builds the provider from whichever keys are set: `NVIDIA_API_KEY` (primary) and/or `MISTRAL_API_KEY` (fallback). Both set → `FallbackProvider([NVIDIA, Mistral])`; one set → that provider alone; neither → `None` (no LLM).
 
 **`src/storage/`** - Storage backends
 - `base.py` - Abstract `StorageBackend` class
@@ -119,10 +126,12 @@ python bluesky_search.py --no-llm
 **`src/pipeline/`** - 4-stage persistent pipeline (Supabase only)
 - `runner.py` - Orchestrates stages; skips already-completed ones using `pipeline_runs` checkpoints
 - `checkpoint.py` - Documents `pipeline_runs` table schema
-- `stages/fetch.py` - Stage 1: fetch raw posts into `phd_positions_staging`
+- `stages/fetch.py` - Stage 1: fetch raw posts into `phd_positions_staging` (scoped to today's `run_date`)
 - `stages/filter.py` - Stage 2: LLM classification per row; tracks per-row completion via `filter_completed`
 - `stages/dedup.py` - Stage 3: TF-IDF + LLM dedup against existing canonical posts
 - `stages/publish.py` - Stage 4: upsert staging → `phd_positions`; delete staging. Telegram posting is handled out-of-band by `scripts/post_to_telegram.py`
+
+**Drain-all semantics:** only **Fetch** is scoped to today's `run_date` (it decides "what's new to pull"). **Filter, Dedup, and Publish drain the whole pending staging queue across ALL run_dates** (`get_staging_*`/`delete_staging` accept `run_date=None`). So if a day crashes before Publish, the next successful run sweeps up its leftover staging rows, classifies/dedups/publishes them, and Publish then clears the **entire** staging table plus **all** `pipeline_runs` rows. This guarantees orphaned staging can never accumulate. Per-row write-backs (`update_staging_filter`/`_dedup`) are keyed by each row's own `run_date`.
 
 **`scripts/find_aggregator_candidates.py`** - One-shot helper that lists Bluesky handles with ≥ `--min-posts` (default 5) canonical posts plus the bio from each handle's most recent post. Pure read; does not touch the pipeline or dedup. A human reviews the output and hand-edits `docs/aggregators.json` to add/remove aggregator handles. The frontend's **"Hide aggregator reposts"** toggle reads that JSON and filters the grid + card views accordingly. Dedup is unaffected because `preprocess_text()` already strips `[Bio: ...]` prefixes before TF-IDF comparison.
 
@@ -137,6 +146,25 @@ python bluesky_search.py --no-llm
   than the channel cadence. The legacy `post_batch_to_telegram(positions)`
   function is still exported for backward compatibility but is no longer
   called from `stages/publish.py`.
+
+**`scripts/repost_to_bluesky.py`** - Bluesky repost bot (standalone digest)
+- Runs as its own cron job (`.github/workflows/bluesky-repost.yml`), every 6h
+- Queries `phd_positions` for rows where `reposted_to_bluesky_at IS NULL` that are
+  verified + canonical (`duplicate_of IS NULL`) and whose `user_handle` is **not**
+  in `docs/aggregators.json` (aggregators filtered in Python)
+- **Quote-posts** each original (native reposts can't carry text) with clickable
+  hashtag facets for level (`position_type`), country, and subjects (`disciplines`),
+  built via `atproto.client_utils.TextBuilder.tag()`. Reuses
+  `src/sources/bluesky.py:get_client()` for auth.
+- Sets `reposted_to_bluesky_at` per row on success (and on skip of a
+  deleted/unavailable original) so it isn't retried forever; API errors leave the
+  row un-marked → retried next run (idempotent). Capped at `REPOST_LIMIT` (20)/run.
+- `--dry-run` prints the tag line + target URI without posting; `--limit N` overrides.
+- The bot account is the **same** account used for search (`BLUESKY_HANDLE`/
+  `BLUESKY_PASSWORD`); `BlueskySource.fetch_posts()` skips posts authored by that
+  handle (captured as `self._self_handle` after login) so we never re-ingest our own
+  reposts. **First-run:** pre-mark the existing backlog (see migration 006) so only
+  positions ingested after launch are reposted.
 
 **`src/dedup.py`** - Production deduplication helpers (used by `stages/dedup.py`)
 - `preprocess_text()` - Cleans post text (strips bio, URLs, linked pages)
@@ -217,13 +245,19 @@ CREATE TABLE phd_positions (
     position_type TEXT[],
     indexed_at TIMESTAMPTZ DEFAULT NOW(),
     duplicate_of TEXT,
-    posted_to_telegram_at TIMESTAMPTZ  -- NULL = un-posted; set by digest job
+    posted_to_telegram_at TIMESTAMPTZ,  -- NULL = un-posted; set by Telegram digest
+    reposted_to_bluesky_at TIMESTAMPTZ  -- NULL = un-reposted; set by Bluesky repost bot
 );
 
 -- Partial index keeps the digest's "find un-posted Bio+CS" query fast.
 CREATE INDEX IF NOT EXISTS phd_positions_unposted_idx
   ON phd_positions (created_at DESC)
   WHERE posted_to_telegram_at IS NULL;
+
+-- Partial index for the Bluesky repost bot's "find un-reposted" query.
+CREATE INDEX IF NOT EXISTS phd_positions_unreposted_idx
+  ON phd_positions (created_at)
+  WHERE reposted_to_bluesky_at IS NULL;
 
 CREATE TABLE pipeline_runs (
     id SERIAL PRIMARY KEY,
@@ -264,17 +298,22 @@ CREATE TABLE phd_positions_staging (
 
 **`duplicate_of` column:** `NULL` = canonical post (shown in UI). Contains URI of the newest (canonical) post in a duplicate group. When duplicates are detected, the older post gets `duplicate_of` set to the newer post's URI.
 
-**`pipeline_runs` table:** One row per active run. Stores completion timestamps for stages 1–3. The row is **deleted** after Stage 4 (Publish) succeeds so the next invocation on the same calendar day starts a fresh run (enabling 3×/day fetching). On crash mid-run the row survives, allowing the next invocation to resume from the last incomplete stage.
+**`pipeline_runs` table:** One row per active run. Stores completion timestamps for stages 1–3. **All** rows are **deleted** after Stage 4 (Publish) succeeds (drain-all) so the next invocation starts fresh and any stale rows from previously crashed days are cleared. On crash mid-run the row survives, allowing the next invocation to resume from the last incomplete stage.
 
-**`phd_positions_staging` table:** Transient table holding posts for the current run. Deleted (along with the pipeline_runs row) after a successful publish.
+**`phd_positions_staging` table:** Transient work queue. Fetch inserts under today's `run_date`; Filter/Dedup/Publish process rows across **all** run_dates. A successful publish clears the **entire** table (not just today's rows), so leftovers from a crashed day are swept up and published on the next run rather than orphaned.
+
+**`reposted_to_bluesky_at` column:** `NULL` = not yet reposted by the Bluesky repost bot. Added in migration `006_bluesky_repost.sql`, which also documents the one-time start-fresh `UPDATE` that pre-marks the existing backlog.
 
 ## GitHub Actions
 
 The workflow at `.github/workflows/scheduled-search.yml` runs daily at 8:30 AM UTC.
+The Telegram digest (`telegram-digest.yml`) and the Bluesky repost bot
+(`bluesky-repost.yml`, every 6h) run on their own separate schedules.
 
 Required secrets:
-- `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`
+- `BLUESKY_HANDLE`, `BLUESKY_PASSWORD` (the search + repost bot account)
 - `NVIDIA_API_KEY`
+- `MISTRAL_API_KEY` (optional — LLM fallback when NVIDIA is rate limited)
 - `SUPABASE_URL`, `SUPABASE_KEY`
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID` (optional — skipped if not set)
 
@@ -377,7 +416,7 @@ digests). Backend pieces:
 - Tests: `tests/test_email.py` (mock provider) + `tests/test_digest.py`
   (matching/formatting).
 
-**Email unsubscribe** (`migrations/006_unsubscribe_token.sql`): adds a secret
+**Email unsubscribe** (`migrations/007_unsubscribe_token.sql`): adds a secret
 `subscriptions.unsubscribe_token` and a `SECURITY DEFINER` RPC
 `unsubscribe_by_token(uuid)` (granted to `anon`) that turns off `deliver_email` /
 sets `cadence='off'` for the single matching row. The static page
@@ -395,7 +434,12 @@ New env / GitHub secrets: `RESEND_API_KEY`, `EMAIL_FROM`
 (e.g. `PhD Sky <alerts@phdsky.org>`), `SUPABASE_SERVICE_KEY` (service-role; cron
 only, never in the frontend), `MAILING_ADDRESS` (postal address for the email
 footer). Manual: verify the `phdsky.org` domain in Resend (SPF/DKIM DNS), and run
-migration 006 in the Supabase SQL editor.
+migration 007 in the Supabase SQL editor.
+
+**Migration numbering:** 006 is `006_bluesky_repost.sql` (repost bot, from main).
+The unsubscribe migration was renumbered to 007 on merge to resolve the
+collision — if you already ran it as 006, no action is needed, the SQL is
+identical.
 
 **`docs/aggregators.json`** - Hand-maintained list `{ "handles": [...] }` of Bluesky handles flagged as aggregator reposters. Source of truth for the UI filter. Updated via `scripts/find_aggregator_candidates.py`.
 

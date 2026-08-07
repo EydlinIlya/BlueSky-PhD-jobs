@@ -17,12 +17,17 @@ logger = setup_logger()
 
 
 def run(run_date, storage, classifier) -> None:
-    """Apply LLM filtering to unfiltered staging rows."""
+    """Apply LLM filtering to unfiltered staging rows.
+
+    Drains the whole pending queue: unfiltered rows from ANY run_date are
+    classified, so leftovers from a previous day's crashed run get processed
+    here. Each write-back is keyed by the row's own run_date.
+    """
 
     # Auto-complete ScholarshipDB rows (pre-verified, no LLM needed)
-    scholarshipdb_rows = storage.get_staging_unfiltered(run_date, source="scholarshipdb")
+    scholarshipdb_rows = storage.get_staging_unfiltered(source="scholarshipdb")
     for row in scholarshipdb_rows:
-        storage.update_staging_filter(run_date, row["uri"], {
+        storage.update_staging_filter(row["run_date"], row["uri"], {
             "is_verified_job": True,
             "disciplines": row.get("disciplines"),
             "country": row.get("country"),
@@ -32,7 +37,7 @@ def run(run_date, storage, classifier) -> None:
         logger.info(f"Auto-completed {len(scholarshipdb_rows)} ScholarshipDB rows")
 
     # Process Bluesky rows
-    bluesky_rows = storage.get_staging_unfiltered(run_date, source="bluesky")
+    bluesky_rows = storage.get_staging_unfiltered(source="bluesky")
 
     if not bluesky_rows:
         logger.info("No unfiltered Bluesky rows to process")
@@ -40,7 +45,7 @@ def run(run_date, storage, classifier) -> None:
         # --no-llm: accept all Bluesky posts without classification
         logger.info(f"No LLM — marking {len(bluesky_rows)} Bluesky rows as verified")
         for row in bluesky_rows:
-            storage.update_staging_filter(run_date, row["uri"], {
+            storage.update_staging_filter(row["run_date"], row["uri"], {
                 "is_verified_job": True,
                 "disciplines": row.get("disciplines") or [],
                 "country": row.get("country"),
@@ -59,11 +64,11 @@ def run(run_date, storage, classifier) -> None:
                     f"Pipeline will resume from this row on next run. Error: {e}"
                 )
                 raise
-            storage.update_staging_filter(run_date, row["uri"], result)
+            storage.update_staging_filter(row["run_date"], row["uri"], result)
             if i % 10 == 0:
                 logger.info(f"  Classified {i}/{len(bluesky_rows)}")
 
-    verified_count = len(storage.get_staging_verified(run_date))
+    verified_count = len(storage.get_staging_verified())
 
     storage.update_run(
         run_date,
