@@ -295,6 +295,16 @@ No build step; plain HTML + CSS + vanilla JS.
   (wraps `<script id="static-positions">`) and `<!-- SEO_NOSCRIPT_START/END -->`,
   both rewritten by `scripts/generate_seo_pages.py`
 
+**Security invariant — embedding post text in HTML.** Position `message` is
+verbatim Bluesky text, i.e. attacker-authored. `json.dumps` does *not* escape
+`<`, `>` or `&`, so a post containing the literal `</script>` terminates the
+element early and the rest executes as markup (stored XSS → Supabase session
+theft from `localStorage`). Every `<script>` block built from position data must
+go through `json_for_script()` in `scripts/generate_seo_pages.py`, never bare
+`json.dumps`; every HTML-body interpolation goes through `escape_html()`
+(Python) or `escapeHtml()` (`docs/app.js`). Covered by
+`tests/test_seo_escaping.py`.
+
 **`docs/colors_and_type.css`** - Design-system tokens (slate/cobalt/amber, Fira
 Code/Sans). Loads before `styles.css`. (Legacy `design-tokens.css` is retained
 only for the standalone `positions.html` / about / privacy pages.)
@@ -388,6 +398,34 @@ footer). Manual: verify the `phdsky.org` domain in Resend (SPF/DKIM DNS), and ru
 migration 006 in the Supabase SQL editor.
 
 **`docs/aggregators.json`** - Hand-maintained list `{ "handles": [...] }` of Bluesky handles flagged as aggregator reposters. Source of truth for the UI filter. Updated via `scripts/find_aggregator_candidates.py`.
+
+### Crawlable static surface (`scripts/generate_seo_pages.py`)
+
+The board is a JS app, so everything a crawler indexes is generated as static
+HTML next to it. Googlebot renders JS, which means `<noscript>` is **discarded** —
+it is kept for non-rendering scrapers only and must never be the sole path to a
+page.
+
+| URL | File | Role |
+|-----|------|------|
+| `/p/<slug>` | `docs/p/<slug>.html` | One per position; holds the `JobPosting` markup that drives Google Jobs eligibility |
+| `/positions`, `/positions/<n>` | `docs/positions.html`, `docs/positions/<n>.html` | Paginated over the **whole** corpus (`POSITIONS_PER_PAGE`) |
+| `/area/<slug>`, `/country/<slug>` | `docs/area/*.html`, `docs/country/*.html` | Facet hubs — the actual ranking targets |
+
+Two invariants worth preserving:
+
+- **Every `/p/` page needs an internal link.** Sitemaps drive discovery; internal
+  links drive crawl priority. The paginated listing exists to guarantee this, and
+  `docs/app.js` `postHTML()` links each post's timestamp to its `/p/` permalink
+  (`data-stop` keeps the flyout working). A previous redesign dropped that link
+  and orphaned the corpus — `tests/test_seo_escaping.py` now guards it.
+- **Listing pages use `CollectionPage` + `ItemList`**, not `Dataset` (wrong type,
+  and it asserted a CC0 license over third-party posts). Hubs below
+  `FACET_MIN_POSITIONS`, and catch-all labels in `FACET_EXCLUDE_DISCIPLINES`, are
+  skipped so they don't become thin pages.
+
+Generated directories are pruned each run, so a shrinking corpus doesn't leave
+stale pages serving 200s.
 
 **`vercel.json`** - Static deploy config for Vercel (serves `docs/`). The site is canonical at **<https://phdsky.org/>** (Vercel from `main:/docs`). The legacy GitHub Pages URL redirects here from the `gh-pages` branch (its `docs/` contains only a meta-refresh + JS redirect to `phdsky.org`). `scripts/generate_seo_pages.py` defaults `BASE_URL` to `https://phdsky.org/`; override with `SITE_BASE_URL` env if you need a different host.
 

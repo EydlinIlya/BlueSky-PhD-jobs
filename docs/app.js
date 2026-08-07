@@ -307,6 +307,14 @@ function postHTML(p) {
     const profileUrl = `https://bsky.app/profile/${encodeURIComponent(handle)}`;
     const postUrl = safeUrl(p.url) || profileUrl;
 
+    // Timestamp doubles as the permalink to the static /p/<slug> page. This is
+    // the feed's only internal link to that page, so crawlers can reach the
+    // per-job corpus (the <noscript> block is dropped by JS-rendering crawlers).
+    const slug = extractSlug(p.uri);
+    const timeHTML = slug
+        ? `<a class="p-time" href="/p/${slug}" data-stop title="Permalink">${escapeHtml(relTime(p.created_at))}</a>`
+        : `<span class="p-time">${escapeHtml(relTime(p.created_at))}</span>`;
+
     let threadHTML = '';
     if (rep > 0) {
         threadHTML = `<div class="p-thread ${tOpen ? 'open' : ''}" data-thread="${escapeHtml(p.uri)}">
@@ -327,7 +335,7 @@ function postHTML(p) {
       <div class="p-head">
         <a class="p-handle" href="${escapeHtml(profileUrl)}" target="_blank" rel="noopener" data-stop>@${escapeHtml(handle)}</a>
         ${aggr ? '<span class="p-aggr-tag">aggr</span>' : ''}
-        <span class="p-time">${escapeHtml(relTime(p.created_at))}</span>
+        ${timeHTML}
         ${(() => { const on = state.follows.has(handle); return `<button class="p-follow ${on ? 'on' : ''}" data-follow="${escapeHtml(handle)}" title="${on ? 'Unfollow' : 'Follow'} @${escapeHtml(handle)}">${on ? 'following' : '+ follow'}</button>`; })()}
       </div>
       <div class="p-meta-strip">${discBadges}${typeBadges}${countryBadge}</div>

@@ -3,7 +3,14 @@
 Produces:
 - Embedded static JSON in docs/index.html (50 newest positions)
 - <noscript> fallback with 30 positions as semantic HTML
-- docs/positions.html - standalone static page with up to 500 positions + JSON-LD
+- docs/positions.html + docs/positions/<n>.html - paginated listing of the FULL
+  corpus, CollectionPage/ItemList JSON-LD. Pagination is what gives every
+  per-job page an internal link; the sitemap alone leaves the tail orphaned.
+- docs/area/<slug>.html, docs/country/<slug>.html - facet hubs. These are the
+  real ranking targets ("Biology PhD positions in Germany" beats 214 separate
+  38-word pages competing with each other).
+- docs/p/<slug>.html - per-job pages carrying the JobPosting markup that makes
+  the site eligible for Google Jobs
 - docs/sitemap.xml
 """
 
@@ -41,6 +48,18 @@ EMPLOYMENT_TYPE_MAP = {
 
 JOB_VALID_DAYS = 90  # default expiry; academic posts rarely state one
 
+# /positions listing. Paginated so every per-job page gets an internal link
+# (the sitemap alone leaves the tail effectively orphaned).
+POSITIONS_PER_PAGE = 200
+# Facet hubs list only their most recent slice — they exist to rank and to pass
+# links, not to mirror the whole corpus (pagination already covers that).
+FACET_MAX_ITEMS = 200
+FACET_MIN_POSITIONS = 5  # below this a hub is thin content; skip it
+# Catch-all discipline labels that make meaningless landing pages — nobody
+# searches "General call PhD positions". They stay as tags, just not as hubs.
+FACET_EXCLUDE_DISCIPLINES = {"General call", "Other"}
+LISTING_PREVIEW_CHARS = 300
+
 
 COUNTRY_ISO = {
     "Australia": "AU", "Austria": "AT", "Belgium": "BE", "Brazil": "BR",
@@ -67,6 +86,26 @@ def escape_html(text):
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace('"', "&quot;")
+    )
+
+
+def json_for_script(data, **dumps_kwargs):
+    """json.dumps() escaped for safe embedding inside an HTML <script> element.
+
+    json.dumps leaves `<`, `>` and `&` untouched, so post text containing the
+    literal `</script>` would terminate the element early and let the remainder
+    of an attacker-authored Bluesky post execute as markup. Position `message`
+    is verbatim user content, so every <script> block we build from it must go
+    through here.
+
+    The \\uXXXX forms are valid JSON and JSON.parse restores the original
+    characters, so consumers (docs/app.js, Google's parsers) need no change.
+    """
+    return (
+        json.dumps(data, **dumps_kwargs)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
     )
 
 
@@ -292,7 +331,7 @@ def update_index_html(positions, total_count):
             "url": pos.get("url", ""),
         })
 
-    static_data = json.dumps(
+    static_data = json_for_script(
         {"positions": static_positions, "total": total_count},
         separators=(",", ":"),
     )
@@ -337,76 +376,135 @@ def update_index_html(positions, total_count):
     print(f"Updated index.html: {len(static_positions)} embedded positions, total={total_count}")
 
 
-def generate_positions_html(positions):
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+def slugify(text):
+    """URL-safe slug for facet pages ('Chemistry & Materials Science' -> 'chemistry-materials-science')."""
+    s = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
+    return s or None
 
-    articles = []
-    for pos in positions[:500]:
+
+def _collection_schema(name, description, canonical, positions):
+    """CollectionPage + ItemList.
+
+    Replaces the old `Dataset` markup, which described this as a research
+    dataset for Google Dataset Search — the wrong type for a job listing, and it
+    also asserted a CC0 license over third-party Bluesky posts we don't own.
+    ItemList is what Google actually reads on a listing page, and it points at
+    the per-job pages that carry the JobPosting markup.
+    """
+    items = []
+    for pos in positions:
         slug = extract_slug(pos.get("uri"))
-        date = pos.get("created_at", "")[:10]
-        country = pos.get("country") or ""
-        country_html = f" | {escape_html(country)}" if country and country != "Unknown" else ""
-        disciplines = pos.get("disciplines") or []
-        disc_html = ", ".join(escape_html(d) for d in disciplines)
-        types = pos.get("position_type") or []
-        type_html = ", ".join(escape_html(t) for t in types)
-        full_message = pos.get("message") or ""
-        preview = full_message[:400] + ("..." if len(full_message) > 400 else "")
-        message = escape_html(preview)
-        handle = escape_html(pos.get("user_handle") or "")
-        url = pos.get("url") or ""
-
-        heading_inner = f"{disc_html} &mdash; {type_html}"
-        heading = (
-            f'<a href="/p/{slug}" style="color:#e2e8f0;text-decoration:none;">{heading_inner}</a>'
-            if slug else heading_inner
-        )
-
-        cta_parts = []
-        if slug:
-            cta_parts.append(f'<a href="/p/{slug}" style="color:#6366f1;">Read more &rarr;</a>')
-        if url:
-            cta_parts.append(f'<a href="{escape_html(url)}" style="color:#94a3b8;">View on Bluesky</a>')
-        cta_html = " &middot; ".join(cta_parts)
-
-        articles.append(
-            f'<article style="background:#1e293b;border:1px solid #334155;border-radius:8px;padding:1.5rem;margin-bottom:1rem;">\n'
-            f'  <h2 style="font-size:1rem;margin:0 0 0.5rem 0;color:#e2e8f0;">{heading}</h2>\n'
-            f'  <p style="font-size:0.85rem;color:#94a3b8;margin:0 0 0.75rem 0;">{date}{country_html} | @{handle}</p>\n'
-            f'  <p style="font-size:0.95rem;line-height:1.6;color:#e2e8f0;margin:0 0 0.75rem 0;white-space:pre-wrap;">{message}</p>\n'
-            f"  <p>{cta_html}</p>\n"
-            f"</article>"
-        )
-
-    n = len(articles)
-    dataset_schema = {
+        if not slug:
+            continue
+        items.append({
+            "@type": "ListItem",
+            "position": len(items) + 1,
+            "url": f"{BASE_URL}p/{slug}",
+        })
+    return {
         "@context": "https://schema.org",
-        "@type": "Dataset",
-        "name": "PhD & Postdoc Positions from Bluesky",
-        "description": f"Complete listing of {n} PhD, postdoc, and research positions aggregated from Bluesky social network. AI-powered filtering updated daily.",
-        "url": f"{BASE_URL}positions",
-        "creator": {
-            "@type": "Organization",
-            "name": "BlueSky PhD Jobs",
-            "url": BASE_URL,
+        "@type": "CollectionPage",
+        "name": name,
+        "description": description,
+        "url": canonical,
+        "isPartOf": {"@type": "WebSite", "name": "PhD Sky", "url": BASE_URL},
+        "mainEntity": {
+            "@type": "ItemList",
+            "numberOfItems": len(items),
+            "itemListElement": items,
         },
-        "dateModified": today,
-        "keywords": [
-            "PhD positions", "postdoc jobs", "academic jobs",
-            "research positions", "Bluesky", "university jobs",
-            "doctoral research", "STEM careers",
-        ],
-        "isAccessibleForFree": True,
-        "license": "https://creativecommons.org/publicdomain/zero/1.0/",
-        "distribution": [{
-            "@type": "DataDownload",
-            "encodingFormat": "text/html",
-            "contentUrl": f"{BASE_URL}positions",
-        }],
     }
-    jsonld = json.dumps(dataset_schema, indent=2)
 
-    html = f"""<!DOCTYPE html>
+
+_LISTING_CSS = """
+:root{--bg:#0f172a;--card:#1e293b;--bd:#334155;--fg:#e2e8f0;--mut:#94a3b8;--pri:#6366f1;--acc:#10b981}
+*{box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--fg);margin:0;padding:2rem 1rem;line-height:1.55}
+.container{max-width:820px;margin:0 auto}
+h1{font-size:1.6rem;margin:0 0 .4rem}
+.subtitle{color:var(--mut);font-size:.9rem;margin:0 0 1.5rem}
+a{color:var(--pri)}a:hover{color:var(--acc)}
+.back-link{display:inline-block;margin-bottom:1.25rem;font-size:.9rem}
+.facets{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.5rem}
+.facets h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:0 0 .5rem}
+.facets ul{list-style:none;margin:0 0 1rem;padding:0;display:flex;flex-wrap:wrap;gap:.35rem .8rem}
+.facets ul:last-child{margin-bottom:0}
+.facets li{font-size:.85rem}
+article{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:1.25rem;margin-bottom:1rem}
+article h3{font-size:1rem;margin:0 0 .4rem}
+article h3 a{color:var(--fg);text-decoration:none}
+article h3 a:hover{color:var(--pri)}
+.meta{font-size:.82rem;color:var(--mut);margin:0 0 .6rem}
+.msg{font-size:.94rem;margin:0 0 .6rem;white-space:pre-wrap}
+.cta{font-size:.85rem;margin:0}
+nav.pager{margin:2rem 0 1rem;font-size:.9rem}
+nav.pager .rel{display:flex;justify-content:space-between;gap:1rem;margin-bottom:.75rem}
+nav.pager .nums{display:flex;flex-wrap:wrap;gap:.3rem .6rem;color:var(--mut);font-size:.85rem}
+nav.pager .nums .cur{color:var(--fg);font-weight:600}
+footer{margin-top:2rem;padding-top:1.25rem;border-top:1px solid var(--bd);font-size:.85rem;color:var(--mut)}
+"""
+
+
+def _position_article(pos):
+    """One listing entry. Links to the per-job page, which holds JobPosting."""
+    slug = extract_slug(pos.get("uri"))
+    date = (pos.get("created_at") or "")[:10]
+    country = pos.get("country") or ""
+    country_html = f" &middot; {escape_html(country)}" if country and country != "Unknown" else ""
+    disc_html = ", ".join(escape_html(d) for d in (pos.get("disciplines") or []))
+    type_html = ", ".join(escape_html(t) for t in (pos.get("position_type") or []))
+    full_message = pos.get("message") or ""
+    preview = full_message[:LISTING_PREVIEW_CHARS] + (
+        "..." if len(full_message) > LISTING_PREVIEW_CHARS else "")
+    message = escape_html(preview)
+    handle = escape_html(pos.get("user_handle") or "")
+    url = pos.get("url") or ""
+
+    heading_inner = f"{disc_html} &mdash; {type_html}" if disc_html or type_html else "Position"
+    heading = f'<a href="/p/{slug}">{heading_inner}</a>' if slug else heading_inner
+
+    cta = []
+    if slug:
+        cta.append(f'<a href="/p/{slug}">Read full posting &rarr;</a>')
+    if url:
+        cta.append(f'<a href="{escape_html(url)}" rel="nofollow">View on Bluesky</a>')
+
+    return (
+        "<article>\n"
+        f"  <h3>{heading}</h3>\n"
+        f'  <p class="meta">{date}{country_html} &middot; @{handle}</p>\n'
+        f'  <p class="msg">{message}</p>\n'
+        f'  <p class="cta">{" &middot; ".join(cta)}</p>\n'
+        "</article>"
+    )
+
+
+def _facet_nav(facets):
+    """Browse-by block. Present on every listing page so the hubs stay shallow."""
+    if not facets:
+        return ""
+    blocks = []
+    for label, entries in facets:
+        if not entries:
+            continue
+        lis = "".join(
+            f'<li><a href="{href}">{escape_html(name)}</a> <span style="color:var(--mut)">{n}</span></li>'
+            for name, href, n in entries
+        )
+        blocks.append(f"<h2>{escape_html(label)}</h2>\n<ul>{lis}</ul>")
+    if not blocks:
+        return ""
+    return '<div class="facets">\n' + "\n".join(blocks) + "\n</div>"
+
+
+def _listing_page(*, title, description, canonical, h1, lead, articles, jsonld,
+                  facet_nav="", pager="", prev_url=None, next_url=None, robots="index, follow"):
+    rel = ""
+    if prev_url:
+        rel += f'\n    <link rel="prev" href="{prev_url}">'
+    if next_url:
+        rel += f'\n    <link rel="next" href="{next_url}">'
+    return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -418,77 +516,197 @@ def generate_positions_html(positions):
     </script>
     <script defer src="/_vercel/insights/script.js"></script>
 
-    <title>All PhD & Postdoc Positions | Academic Job Board</title>
-    <meta name="description" content="Complete listing of PhD, postdoc, and research positions aggregated from Bluesky. Updated daily.">
-    <meta name="keywords" content="PhD positions, postdoc jobs, academic jobs, research positions, Bluesky, university jobs, doctoral research, STEM careers">
-    <meta name="author" content="BlueSky PhD Jobs">
-    <meta name="robots" content="index, follow">
-    <link rel="canonical" href="{BASE_URL}positions">
-    <!-- Open Graph -->
-    <meta property="og:title" content="All PhD & Postdoc Positions | Academic Job Board">
-    <meta property="og:description" content="Complete listing of PhD, postdoc, and research positions aggregated from Bluesky. Updated daily.">
+    <title>{escape_html(title)}</title>
+    <meta name="description" content="{escape_html(description)}">
+    <meta name="robots" content="{robots}">
+    <link rel="canonical" href="{canonical}">{rel}
+    <meta property="og:title" content="{escape_html(title)}">
+    <meta property="og:description" content="{escape_html(description)}">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="{BASE_URL}positions">
-    <meta property="og:site_name" content="BlueSky PhD Jobs">
+    <meta property="og:url" content="{canonical}">
+    <meta property="og:site_name" content="PhD Sky">
     <meta property="og:image" content="{BASE_URL}assets/og-image.png">
-    <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="All PhD & Postdoc Positions | Academic Job Board">
-    <meta name="twitter:description" content="Complete listing of PhD, postdoc, and research positions aggregated from Bluesky. Updated daily.">
+    <meta name="twitter:title" content="{escape_html(title)}">
+    <meta name="twitter:description" content="{escape_html(description)}">
     <meta name="twitter:image" content="{BASE_URL}assets/og-image.png">
-    <!-- Dataset structured data -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <script type="application/ld+json">
 {jsonld}
     </script>
-    <style>
-        body {{
-            font-family: 'Segoe UI', system-ui, sans-serif;
-            background: #0f172a;
-            color: #e2e8f0;
-            margin: 0;
-            padding: 2rem 1rem;
-        }}
-        .container {{
-            max-width: 800px;
-            margin: 0 auto;
-        }}
-        h1 {{
-            font-size: 1.5rem;
-            margin-bottom: 0.5rem;
-        }}
-        .subtitle {{
-            color: #94a3b8;
-            font-size: 0.9rem;
-            margin-bottom: 2rem;
-        }}
-        a {{ color: #6366f1; }}
-        a:hover {{ color: #10b981; }}
-        .back-link {{
-            display: inline-block;
-            margin-bottom: 1.5rem;
-            font-size: 0.9rem;
-        }}
-    </style>
+    <style>{_LISTING_CSS}</style>
 </head>
 <body>
 <div class="container">
-    <a href="./" class="back-link">&larr; Back to interactive board</a>
-    <h1>PhD &amp; Postdoc Positions</h1>
-    <p class="subtitle">Showing {len(articles)} positions &middot; Last updated {today}</p>
-{"".join(articles)}
-    <p style="text-align:center;margin-top:2rem;">
-        <a href="./">Browse all positions with filters &rarr;</a>
-    </p>
+    <a href="/" class="back-link">&larr; Back to the interactive board</a>
+    <h1>{escape_html(h1)}</h1>
+    <p class="subtitle">{lead}</p>
+{facet_nav}
+{articles}
+{pager}
+    <footer>
+        <a href="/">Browse all PhD &amp; Postdoc positions</a> &middot;
+        <a href="/positions">All positions</a> &middot;
+        <a href="/about">About</a>
+    </footer>
 </div>
 </body>
 </html>"""
 
-    path = os.path.join(DOCS_DIR, "positions.html")
+
+def _write_page(rel_path, html):
+    path = os.path.join(DOCS_DIR, rel_path)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(html)
 
-    size_kb = len(html.encode("utf-8")) / 1024
-    print(f"Generated positions.html: {len(articles)} positions, {size_kb:.0f}KB")
+
+def _clean_orphans(subdir, keep):
+    """Remove stale generated .html in `subdir` that this run didn't write."""
+    d = os.path.join(DOCS_DIR, subdir)
+    if not os.path.isdir(d):
+        return 0
+    removed = 0
+    for fn in os.listdir(d):
+        if fn.endswith(".html") and fn not in keep:
+            os.remove(os.path.join(d, fn))
+            removed += 1
+    return removed
+
+
+def build_facets(positions):
+    """Discipline and country hubs, newest-first, skipping thin ones.
+
+    Facets under FACET_MIN_POSITIONS are dropped rather than published: a hub
+    with two entries is thin content that dilutes the good ones.
+    """
+    by_disc, by_country = {}, {}
+    for pos in positions:
+        for d in (pos.get("disciplines") or []):
+            by_disc.setdefault(d, []).append(pos)
+        c = pos.get("country")
+        if c and c != "Unknown":
+            by_country.setdefault(c, []).append(pos)
+
+    def prep(mapping, kind):
+        out = []
+        for name, rows in mapping.items():
+            slug = slugify(name)
+            if not slug or len(rows) < FACET_MIN_POSITIONS:
+                continue
+            if kind == "area" and name in FACET_EXCLUDE_DISCIPLINES:
+                continue
+            out.append({
+                "kind": kind, "name": name, "slug": slug,
+                "rows": rows, "count": len(rows),
+                "url": f"{BASE_URL}{kind}/{slug}",
+                "href": f"/{kind}/{slug}",
+            })
+        return sorted(out, key=lambda f: -f["count"])
+
+    return prep(by_disc, "area"), prep(by_country, "country")
+
+
+def generate_facet_pages(disc_facets, country_facets, facet_nav):
+    """Write /area/<slug> and /country/<slug> hub pages."""
+    urls = []
+    for facets, subdir in ((disc_facets, "area"), (country_facets, "country")):
+        keep = set()
+        for f in facets:
+            rows = f["rows"][:FACET_MAX_ITEMS]
+            # h1/title carry a literal '&'; _listing_page escapes them once.
+            if f["kind"] == "area":
+                h1 = f"{f['name']} PhD & Postdoc Positions"
+                desc = (f"{f['count']} open {f['name']} PhD, postdoc and research positions "
+                        f"aggregated from Bluesky. Updated daily.")
+            else:
+                h1 = f"PhD & Postdoc Positions in {f['name']}"
+                desc = (f"{f['count']} open PhD, postdoc and research positions in "
+                        f"{f['name']}, aggregated from Bluesky. Updated daily.")
+            title = f"{h1} | PhD Sky"
+            lead = (f"{f['count']} position{'s' if f['count'] != 1 else ''} &middot; "
+                    f"showing the {len(rows)} most recent")
+            html = _listing_page(
+                title=title, description=desc, canonical=f["url"],
+                h1=h1, lead=lead,
+                articles="\n".join(_position_article(p) for p in rows),
+                jsonld=json_for_script(
+                    _collection_schema(title, desc, f["url"], rows), indent=2),
+                facet_nav=facet_nav,
+            )
+            fn = f"{f['slug']}.html"
+            _write_page(os.path.join(subdir, fn), html)
+            keep.add(fn)
+            urls.append(f["url"])
+        _clean_orphans(subdir, keep)
+    print(f"Generated facet hubs: {len(disc_facets)} area, {len(country_facets)} country")
+    return urls
+
+
+def generate_positions_html(positions):
+    """Paginated /positions covering the WHOLE corpus.
+
+    The old version listed only the newest 500, which left the rest of the
+    per-job pages reachable from the sitemap alone. Sitemaps drive discovery;
+    internal links drive crawl priority, so the tail was effectively orphaned.
+    """
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    total = len(positions)
+    pages = max(1, (total + POSITIONS_PER_PAGE - 1) // POSITIONS_PER_PAGE)
+
+    disc_facets, country_facets = build_facets(positions)
+    facet_nav = _facet_nav([
+        ("Browse by research area", [(f["name"], f["href"], f["count"]) for f in disc_facets]),
+        ("Browse by country", [(f["name"], f["href"], f["count"]) for f in country_facets]),
+    ])
+
+    def page_url(n):
+        return BASE_URL + "positions" if n == 1 else f"{BASE_URL}positions/{n}"
+
+    def page_href(n):
+        return "/positions" if n == 1 else f"/positions/{n}"
+
+    urls, keep = [], set()
+    for n in range(1, pages + 1):
+        rows = positions[(n - 1) * POSITIONS_PER_PAGE: n * POSITIONS_PER_PAGE]
+        canonical = page_url(n)
+        suffix = "" if n == 1 else f" &middot; page {n} of {pages}"
+        title = ("All PhD & Postdoc Positions | PhD Sky" if n == 1
+                 else f"All PhD & Postdoc Positions — page {n} of {pages} | PhD Sky")
+        desc = (f"Complete listing of {total} PhD, postdoc and research positions "
+                f"aggregated from Bluesky. Updated daily.")
+
+        nums = " ".join(
+            f'<span class="cur">{i}</span>' if i == n else f'<a href="{page_href(i)}">{i}</a>'
+            for i in range(1, pages + 1)
+        )
+        prev_html = f'<a href="{page_href(n - 1)}">&larr; Newer</a>' if n > 1 else "<span></span>"
+        next_html = f'<a href="{page_href(n + 1)}">Older &rarr;</a>' if n < pages else "<span></span>"
+        pager = (f'<nav class="pager"><div class="rel">{prev_html}{next_html}</div>'
+                 f'<div class="nums">{nums}</div></nav>')
+
+        html = _listing_page(
+            title=title, description=desc, canonical=canonical,
+            h1="PhD & Postdoc Positions",
+            lead=f"{total} positions{suffix} &middot; last updated {today}",
+            articles="\n".join(_position_article(p) for p in rows),
+            jsonld=json_for_script(_collection_schema(title, desc, canonical, rows), indent=2),
+            facet_nav=facet_nav,
+            pager=pager,
+            prev_url=page_url(n - 1) if n > 1 else None,
+            next_url=page_url(n + 1) if n < pages else None,
+        )
+        if n == 1:
+            _write_page("positions.html", html)
+        else:
+            _write_page(os.path.join("positions", f"{n}.html"), html)
+            keep.add(f"{n}.html")
+        urls.append(canonical)
+
+    _clean_orphans("positions", keep)
+    facet_urls = generate_facet_pages(disc_facets, country_facets, facet_nav)
+    print(f"Generated positions listing: {total} positions across {pages} pages")
+    return urls + facet_urls
 
 
 def render_position_page(pos, slug):
@@ -519,7 +737,7 @@ def render_position_page(pos, slug):
     if jp:
         jp_script = (
             '<script type="application/ld+json">'
-            + json.dumps(jp, separators=(",", ":"))
+            + json_for_script(jp, separators=(",", ":"))
             + "</script>"
         )
 
@@ -657,7 +875,13 @@ def generate_position_pages(positions):
     return slug_to_lastmod
 
 
-def generate_sitemap(slug_to_lastmod=None):
+def generate_sitemap(slug_to_lastmod=None, listing_urls=None):
+    """Sitemap: static pages + paginated /positions + facet hubs + per-job pages.
+
+    `listing_urls` are the listing/hub URLs returned by generate_positions_html.
+    Page 1 of /positions is emitted from the static block, so it is filtered out
+    of `listing_urls` to avoid a duplicate <loc>.
+    """
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     parts = [
         '<?xml version="1.0" encoding="UTF-8"?>',
@@ -671,6 +895,16 @@ def generate_sitemap(slug_to_lastmod=None):
         f"  <url><loc>{BASE_URL}privacy</loc><lastmod>{today}</lastmod>"
         f"<changefreq>yearly</changefreq><priority>0.3</priority></url>",
     ]
+
+    listing = [u for u in (listing_urls or []) if u != f"{BASE_URL}positions"]
+    for url in listing:
+        # Facet hubs outrank paginated pages: they're the real ranking targets.
+        priority = "0.7" if ("/area/" in url or "/country/" in url) else "0.5"
+        parts.append(
+            f"  <url><loc>{url}</loc><lastmod>{today}</lastmod>"
+            f"<changefreq>daily</changefreq><priority>{priority}</priority></url>"
+        )
+
     for slug in sorted(slug_to_lastmod or {}):
         lastmod = (slug_to_lastmod or {}).get(slug) or today
         parts.append(
@@ -684,7 +918,7 @@ def generate_sitemap(slug_to_lastmod=None):
     with open(path, "w", encoding="utf-8") as f:
         f.write(xml)
     extra = len(slug_to_lastmod or {})
-    print(f"Generated sitemap.xml: 2 + {extra} per-job URLs")
+    print(f"Generated sitemap.xml: 4 static + {len(listing)} listing/hub + {extra} per-job URLs")
 
 
 def generate_positions_json(positions, duplicates):
@@ -750,9 +984,11 @@ def main():
     print(f"Snapshot: {len(all_positions)} canonical, {len(all_duplicates)} duplicates")
 
     update_index_html(positions, total_count)
-    generate_positions_html(positions)
+    # The listing runs over the FULL corpus, not the newest 500 — pagination is
+    # what gives every per-job page an internal link.
+    listing_urls = generate_positions_html(all_positions)
     slug_to_lastmod = generate_position_pages(all_positions)
-    generate_sitemap(slug_to_lastmod)
+    generate_sitemap(slug_to_lastmod, listing_urls)
     generate_positions_json(all_positions, all_duplicates)
 
     print("SEO generation complete!")

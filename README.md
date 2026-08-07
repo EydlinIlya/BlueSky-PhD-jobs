@@ -271,6 +271,22 @@ deduplication (dedup strips the `[Bio: ...]` prefix before TF-IDF comparison).
   Override with the `SITE_BASE_URL` env var if you ever need to regenerate
   for a different domain.
 
+### Static pages for search engines
+
+The interactive board is a JS app, so the crawlable surface is generated
+alongside it by `scripts/generate_seo_pages.py`:
+
+| URL | What it is |
+| --- | --- |
+| `/p/<slug>` | One page per position. Carries the `JobPosting` structured data that makes the site eligible for Google Jobs. |
+| `/positions`, `/positions/<n>` | Paginated listing of every position. This is what gives each `/p/` page an internal link — a sitemap entry alone is not enough. |
+| `/area/<slug>` | Per-discipline hub, e.g. `/area/biology`. |
+| `/country/<slug>` | Per-country hub, e.g. `/country/germany`. |
+
+Listing and hub pages use `CollectionPage` + `ItemList` structured data and link
+to the `/p/` pages. Hubs are skipped for buckets below `FACET_MIN_POSITIONS`, and
+for catch-all discipline labels, so they don't become thin pages.
+
 ## Dependencies
 
 - [atproto](https://atproto.blue/) - AT Protocol SDK for Bluesky
