@@ -60,3 +60,38 @@ def test_format_digest_html_includes_count_and_link():
     assert "2 new positions" in body
     assert "https://bsky.app/x" in body
     assert "Biology" in body
+
+
+# ── Overflow disclosure + watermark semantics ───────────────────────────────
+
+def test_digest_discloses_matches_beyond_the_display_cap():
+    """The cap used to drop matches silently while the watermark advanced past
+    them, so they were never emailed again. Now the overflow is stated."""
+    n = digest.MAX_POSITIONS_PER_DIGEST + 12
+    positions = [pos(uri=f"at://x{i}") for i in range(n)]
+    body = digest.format_digest_html({"disciplines": ["Biology"]}, positions)
+
+    assert f"{n} new positions" in body
+    assert f"Showing the {digest.MAX_POSITIONS_PER_DIGEST} most recent" in body
+    assert "Browse the other 12 on PhD Sky" in body
+    # Only the capped number of entries are actually rendered.
+    assert body.count("View position →") == digest.MAX_POSITIONS_PER_DIGEST
+
+
+def test_no_overflow_note_when_everything_fits():
+    body = digest.format_digest_html({}, [pos(), pos(uri="at://y")])
+    assert "Showing the" not in body
+    assert "Browse the other" not in body
+    assert body.count("View position →") == 2
+
+
+def test_watermark_falls_back_to_created_at():
+    """A never-notified subscription reports positions since it was created,
+    not the entire archive."""
+    assert digest.subscription_watermark(
+        {"last_notified_at": "2026-07-01T00:00:00+00:00",
+         "created_at": "2026-01-01T00:00:00+00:00"}) == "2026-07-01T00:00:00+00:00"
+    assert digest.subscription_watermark(
+        {"last_notified_at": None,
+         "created_at": "2026-01-01T00:00:00+00:00"}) == "2026-01-01T00:00:00+00:00"
+    assert digest.subscription_watermark({}) is None

@@ -113,7 +113,12 @@ def format_digest_html(
     site_url: str = SITE_URL,
     unsub_url: str | None = None,
 ) -> str:
-    """Render the digest email body (simple, email-client-safe inline styles)."""
+    """Render the digest email body (simple, email-client-safe inline styles).
+
+    Only the newest MAX_POSITIONS_PER_DIGEST are listed. The overflow is stated
+    explicitly rather than dropped silently — the watermark advances past every
+    match, so anything not named here is never emailed again.
+    """
     label = html.escape(subscription_label(sub))
     unsub_url = unsub_url or unsubscribe_url(sub, site_url)
     rows = []
@@ -133,11 +138,19 @@ def format_digest_html(
             f'</div>'
         )
     n = len(positions)
+    overflow = max(0, n - MAX_POSITIONS_PER_DIGEST)
+    shown_note = (
+        f'<div style="font:13px sans-serif;color:#a8b8c8;margin:4px 0 18px">'
+        f'Showing the {MAX_POSITIONS_PER_DIGEST} most recent. '
+        f'<a href="{html.escape(site_url)}positions" style="color:#3b82f6">'
+        f'Browse the other {overflow} on PhD Sky →</a></div>'
+    ) if overflow else ""
     return (
         f'<div style="max-width:640px;margin:0 auto;background:#0f172a;padding:24px;border-radius:10px">'
         f'<div style="font:700 18px monospace;color:#e2e8f0">&gt; PhD_Positions</div>'
         f'<div style="font:13px sans-serif;color:#a8b8c8;margin:8px 0 18px">'
         f'{n} new position{"s" if n != 1 else ""} matching <b style="color:#e2e8f0">{label}</b></div>'
+        f'{shown_note}'
         f'{"".join(rows)}'
         f'<div style="font:12px sans-serif;color:#64748b;margin-top:20px;line-height:1.6">'
         f'You receive this because you created this saved search on '
@@ -186,26 +199,55 @@ def user_email(client, user_id: str) -> str | None:
     return (rows[0].get("email") if rows else None)
 
 
+def subscription_watermark(sub: dict) -> str | None:
+    """The 'new since' point for a subscription.
+
+    Falls back to the row's creation time when ``last_notified_at`` is unset, so
+    a never-notified subscription reports positions indexed since it was created
+    rather than the entire archive.
+    """
+    return sub.get("last_notified_at") or sub.get("created_at")
+
+
+def fetch_due_subscriptions(client, cadence: str) -> list[dict]:
+    """All email subscriptions in this cadence bucket (paginated).
+
+    PostgREST caps an unbounded select at 1000 rows, which would silently skip
+    subscribers past that point.
+    """
+    PAGE = 1000
+    out, frm = [], 0
+    while True:
+        data = (client.table("subscriptions")
+                .select("*")
+                .eq("cadence", cadence)
+                .eq("deliver_email", True)
+                .order("created_at")
+                .range(frm, frm + PAGE - 1)
+                .execute().data or [])
+        out += data
+        if len(data) < PAGE:
+            break
+        frm += PAGE
+    return out
+
+
 def run(cadence: str) -> int:
     client = get_client()
-    subs = (client.table("subscriptions")
-            .select("*")
-            .eq("cadence", cadence)
-            .eq("deliver_email", True)
-            .execute().data or [])
+    subs = fetch_due_subscriptions(client, cadence)
     if not subs:
         print(f"No '{cadence}' email subscriptions due.")
         return 0
 
     # Fetch once across all subs using the oldest watermark, then filter per-sub.
-    watermarks = [s.get("last_notified_at") for s in subs if s.get("last_notified_at")]
-    oldest = min(watermarks) if len(watermarks) == len(subs) and watermarks else None
+    watermarks = [w for w in (subscription_watermark(s) for s in subs) if w]
+    oldest = min(watermarks) if len(watermarks) == len(subs) else None
     candidates = fetch_candidate_positions(client, oldest)
     print(f"{len(subs)} subscription(s), {len(candidates)} candidate position(s)")
 
     sent = 0
     for sub in subs:
-        wm = sub.get("last_notified_at")
+        wm = subscription_watermark(sub)
         pool = [p for p in candidates if (not wm or p["created_at"] > wm)]
         matches = [p for p in pool if position_matches(sub, p)]
         if not matches:
@@ -223,11 +265,15 @@ def run(cadence: str) -> int:
             "List-Unsubscribe": f"<{unsub}>, <mailto:{UNSUB_MAILTO}?subject=unsubscribe>",
         }
         if send_email(email, subject, body, headers=unsub_headers):
+            # Advances past every match, including any beyond the display cap —
+            # those are disclosed in the email body with a link to the site.
             newest = max(p["created_at"] for p in matches)
             client.table("subscriptions").update(
                 {"last_notified_at": newest}).eq("id", sub["id"]).execute()
             sent += 1
-            print(f"  sub {sub['id']}: emailed {len(matches)} to {email}")
+            capped = len(matches) - MAX_POSITIONS_PER_DIGEST
+            note = f" ({capped} over the display cap, linked not listed)" if capped > 0 else ""
+            print(f"  sub {sub['id']}: emailed {len(matches)} to {email}{note}")
         else:
             print(f"  sub {sub['id']}: send failed, watermark unchanged (will retry)")
     print(f"Done. Sent {sent} digest(s).")

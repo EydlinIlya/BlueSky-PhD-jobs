@@ -14,6 +14,7 @@ body { padding-bottom: 34px; }
   --rail-w: 288px;
   --activity-w: 296px;
   --topbar-h: 60px;
+  --mobilenav-h: 56px;   /* fixed bottom nav; sheets must pad clear of it */
 }
 
 /* ════════════════════════════════════════════════
@@ -89,18 +90,27 @@ body { padding-bottom: 34px; }
 @media (max-width: 820px) {
   body { padding-bottom: 60px; }   /* room for the fixed bottom nav */
 
-  /* Left rail becomes a slide-up bottom sheet that shows ONLY the filters */
+  /* Left rail becomes a slide-up bottom sheet: filters + subscriptions.
+     The sheet scrolls, and its bottom padding clears the fixed bottom nav —
+     without that the last filter row sits underneath the nav (which stacks
+     above the sheet) and is unreachable no matter how far you scroll. */
   .left-rail {
     position: fixed; left: 0; right: 0; bottom: 0; top: auto; order: 0; z-index: 205;
-    max-height: 80vh; overflow-y: auto; overflow-x: visible;
-    margin: 0; padding: 0 16px 24px; gap: 14px;
+    max-height: 85vh;
+    max-height: 85dvh;              /* dvh accounts for mobile browser chrome */
+    overflow-y: auto; overflow-x: visible; -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;   /* don't scroll the feed behind the sheet */
+    margin: 0; gap: 14px;
+    padding: 0 16px calc(var(--mobilenav-h) + 24px);
     background: var(--bg-card); border-top: 1px solid var(--border);
     border-radius: 16px 16px 0 0; box-shadow: 0 -8px 28px rgba(0,0,0,.55);
     transform: translateY(100%); transition: transform .25s ease;
   }
   .left-rail.open { transform: translateY(0); }
-  .left-rail .rail-section { display: none; }     /* hide stream + subscriptions in sheet */
-  .left-rail .rail-filters { display: flex; }      /* keep filters */
+  .left-rail .rail-section { display: none; }      /* hide the stream list in the sheet */
+  .left-rail .rail-filters,
+  .left-rail #rail-subs-section { display: flex; } /* keep filters + subscriptions */
+  .left-rail #rail-subs-section { flex-direction: column; }
   .left-rail .sheet-header {
     display: flex; align-items: center; justify-content: space-between;
     position: sticky; top: 0; z-index: 1; background: var(--bg-card);
@@ -193,11 +203,13 @@ body { padding-bottom: 34px; }
 .chip.chip-more:hover { color: var(--primary); border-color: var(--primary); }
 /* full-list filter dropdown (overlay, doesn't grow the rail) */
 .f-row { position: relative; }
-.chip-dropdown { display: none; position: fixed; width: 240px; max-width: calc(100vw - 24px); z-index: 130; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-lg); padding: 8px; flex-direction: column; gap: 6px; }
+/* z-index must clear the mobile filter sheet (205) and bottom nav (206) —
+   below those the dropdown opens *behind* the sheet it was triggered from. */
+.chip-dropdown { display: none; position: fixed; width: 240px; max-width: calc(100vw - 24px); z-index: 220; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-lg); padding: 8px; flex-direction: column; gap: 6px; }
 .chip-dropdown.open { display: flex; }
 .dd-search { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; color: var(--fg); font-family: var(--font-mono); font-size: 12px; outline: none; }
 .dd-search:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99,102,241,.15); }
-.dd-list { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; gap: 1px; }
+.dd-list { display: flex; flex-direction: column; max-height: 240px; max-height: min(240px, 45dvh); overflow-y: auto; overscroll-behavior: contain; gap: 1px; }
 .dd-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; font-family: var(--font-mono); font-size: 12px; color: var(--fg-muted); cursor: pointer; }
 .dd-item:hover { background: var(--bg-elevated); color: var(--fg); }
 .dd-item .dd-check { width: 12px; text-align: center; opacity: 0; color: var(--primary); font-size: 11px; flex-shrink: 0; }

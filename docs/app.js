@@ -513,11 +513,29 @@ function bindChips() {
         dd.classList.toggle('open', opening);
         if (opening) {
             const r = c.getBoundingClientRect();
-            // Clamp into the viewport so it never opens off-screen (esp. mobile).
-            dd.style.top = Math.round(Math.max(8, Math.min(r.bottom + 6, window.innerHeight - 280))) + 'px';
-            dd.style.left = Math.round(Math.max(8, Math.min(r.left, window.innerWidth - 252))) + 'px';
+            // The mobile filter sheet animates with translateY, and a transformed
+            // ancestor becomes the containing block for position:fixed children —
+            // so viewport-space coordinates land offset by the sheet's origin.
+            // Probe where 0,0 actually renders and rebase against it. With no
+            // transformed ancestor the probe reads 0 and this is a no-op.
+            dd.style.top = '0px';
+            dd.style.left = '0px';
+            const origin = dd.getBoundingClientRect();
+            // Measure the real box now that it's displayed — the old code clamped
+            // against a hard-coded 280px, which pushed the list off short viewports.
+            const h = dd.offsetHeight || 280;
+            const w = dd.offsetWidth || 240;
+            // Prefer below the trigger; flip above when there isn't room.
+            const below = r.bottom + 6;
+            const vTop = (below + h + 8 <= window.innerHeight) ? below
+                       : Math.max(8, Math.min(r.top - h - 6, window.innerHeight - h - 8));
+            const vLeft = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+            dd.style.top = Math.round(vTop - origin.top) + 'px';
+            dd.style.left = Math.round(vLeft - origin.left) + 'px';
+            // Autofocus pops the soft keyboard on mobile and shrinks the viewport
+            // under the sheet, so only do it where there's a pointer.
             const s = dd.querySelector('.dd-search');
-            if (s) s.focus();
+            if (s && window.matchMedia('(hover: hover)').matches) s.focus();
         }
     });
     // dropdown checklist items
