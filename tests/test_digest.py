@@ -85,6 +85,104 @@ def test_no_overflow_note_when_everything_fits():
     assert body.count("View position →") == 2
 
 
+class _FakeTable:
+    """Records writes so a test can assert none happened."""
+
+    def __init__(self, rows, journal):
+        self._rows, self._journal = rows, journal
+
+    def select(self, *a, **k): return self
+    def eq(self, *a, **k): return self
+    def is_(self, *a, **k): return self
+    def gt(self, *a, **k): return self
+    def order(self, *a, **k): return self
+    def limit(self, *a, **k): return self
+    def range(self, *a, **k): return self
+    def execute(self): return type("R", (), {"data": self._rows})()
+
+    def update(self, payload):          # any write is a failure in test mode
+        self._journal.append(payload)
+        return self
+
+
+class _FakeClient:
+    def __init__(self, rows_by_table):
+        self.rows, self.writes = rows_by_table, []
+
+    def table(self, name):
+        return _FakeTable(self.rows.get(name, []), self.writes)
+
+
+def _fake_send(captured):
+    def send(to, subject, html, headers=None):
+        captured.append({"to": to, "subject": subject, "html": html, "headers": headers})
+        return True
+    return send
+
+
+def test_test_send_never_mails_subscribers_or_writes(monkeypatch):
+    """run_test must be inert: one email to the given address, no DB writes."""
+    client = _FakeClient({
+        "subscriptions": [{
+            "id": "sub-1", "user_id": "user-1", "disciplines": ["Biology"],
+            "countries": [], "position_types": [], "query_text": None,
+            "hide_aggregators": False, "unsubscribe_token": "tok-123",
+            "last_notified_at": "2020-01-01T00:00:00+00:00",
+            "created_at": "2020-01-01T00:00:00+00:00",
+        }],
+        "phd_positions": [pos(), pos(uri="at://y")],
+        "profiles": [{"email": "realsubscriber@example.com"}],
+    })
+    monkeypatch.setattr(digest, "get_client", lambda: client)
+    captured = []
+    monkeypatch.setattr(digest, "send_email", _fake_send(captured))
+
+    assert digest.run_test("tester@example.com", "weekly") == 1
+
+    assert len(captured) == 1, "test mode must send exactly one email"
+    assert captured[0]["to"] == "tester@example.com"
+    assert "realsubscriber@example.com" not in str(captured)
+    assert client.writes == [], "test mode must not advance any watermark"
+    assert "TEST SEND" in captured[0]["html"]
+    assert captured[0]["subject"].startswith("[TEST]")
+
+
+def test_test_send_still_sends_with_no_matches(monkeypatch):
+    """'Send even if there are no new jobs' — the empty case must still arrive."""
+    client = _FakeClient({"subscriptions": [], "phd_positions": []})
+    monkeypatch.setattr(digest, "get_client", lambda: client)
+    captured = []
+    monkeypatch.setattr(digest, "send_email", _fake_send(captured))
+
+    assert digest.run_test("tester@example.com") == 1
+    assert len(captured) == 1
+    assert "0 new positions" in captured[0]["html"]
+    assert client.writes == []
+
+
+def test_real_send_aborts_without_unsubscribe_token(monkeypatch, capsys):
+    """Never mail without a working unsubscribe link (CAN-SPAM / bulk-sender
+    rules). A missing token means migration 007 hasn't been applied."""
+    client = _FakeClient({
+        "subscriptions": [{
+            "id": "sub-1", "user_id": "user-1", "disciplines": [], "countries": [],
+            "position_types": [], "query_text": None, "hide_aggregators": False,
+            "last_notified_at": None, "created_at": "2020-01-01T00:00:00+00:00",
+            # note: no unsubscribe_token
+        }],
+        "phd_positions": [pos()],
+        "profiles": [{"email": "someone@example.com"}],
+    })
+    monkeypatch.setattr(digest, "get_client", lambda: client)
+    captured = []
+    monkeypatch.setattr(digest, "send_email", _fake_send(captured))
+
+    assert digest.run("weekly") == 0
+    assert captured == [], "must not send without an unsubscribe token"
+    assert client.writes == []
+    assert "007_unsubscribe_token" in capsys.readouterr().err
+
+
 def test_watermark_falls_back_to_created_at():
     """A never-notified subscription reports positions since it was created,
     not the entire archive."""

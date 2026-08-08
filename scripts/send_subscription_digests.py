@@ -245,8 +245,21 @@ def run(cadence: str) -> int:
     candidates = fetch_candidate_positions(client, oldest)
     print(f"{len(subs)} subscription(s), {len(candidates)} candidate position(s)")
 
+    # Refuse to send without a working unsubscribe link. Commercial email needs
+    # one (CAN-SPAM / ePrivacy), and Gmail + Yahoo bulk-sender rules require
+    # one-click List-Unsubscribe or they start binning the mail. A missing token
+    # means migrations/007_unsubscribe_token.sql hasn't been applied.
+    if not any(s.get("unsubscribe_token") for s in subs):
+        print("ABORT: no subscription has an unsubscribe_token — apply "
+              "migrations/007_unsubscribe_token.sql in the Supabase SQL editor. "
+              "Refusing to send mail with a dead unsubscribe link.", file=sys.stderr)
+        return 0
+
     sent = 0
     for sub in subs:
+        if not sub.get("unsubscribe_token"):
+            print(f"  sub {sub['id']}: no unsubscribe_token, skipping")
+            continue
         wm = subscription_watermark(sub)
         pool = [p for p in candidates if (not wm or p["created_at"] > wm)]
         matches = [p for p in pool if position_matches(sub, p)]
@@ -280,11 +293,85 @@ def run(cadence: str) -> int:
     return sent
 
 
+# ── Test send ───────────────────────────────────────────────────────────────
+# Deliberately a separate function rather than a flag threaded through run().
+# There is no code path here that can reach a real subscriber's address or write
+# to the database, so a mistyped argument cannot mail your users or burn their
+# watermarks.
+
+TEST_BANNER = (
+    '<div style="max-width:640px;margin:0 auto 10px;padding:10px 14px;'
+    'background:#422006;border:1px solid #a16207;border-radius:8px;'
+    'font:12px sans-serif;color:#fde68a">'
+    '<b>TEST SEND</b> — delivery/formatting check. Not sent to any subscriber, '
+    'and no subscription watermark was changed.</div>'
+)
+
+
+def fetch_recent_positions(client, limit: int = 200) -> list[dict]:
+    """Most recent verified canonical positions, ignoring any watermark."""
+    return (client.table("phd_positions")
+            .select("uri, created_at, disciplines, country, position_type, user_handle, message, url")
+            .eq("is_verified_job", True)
+            .is_("duplicate_of", "null")
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute().data or [])
+
+
+def run_test(to: str, cadence: str = "weekly") -> int:
+    """Send exactly one digest to ``to`` so delivery can be validated.
+
+    Always sends, even when nothing new matches — that empty case is itself
+    worth seeing. Uses a real subscription's filters when one exists (so the
+    label and layout match production), otherwise a synthetic "all positions"
+    one. Reads only; never updates last_notified_at.
+    """
+    client = get_client()
+    print(f"TEST MODE — one email to {to}. No subscriber is mailed, nothing is written.")
+
+    subs = fetch_due_subscriptions(client, cadence)
+    if subs:
+        sub = dict(subs[0])
+        print(f"  using subscription {sub.get('id')} ({subscription_label(sub)})")
+    else:
+        sub = {"disciplines": [], "countries": [], "position_types": [],
+               "query_text": None, "hide_aggregators": False}
+        print("  no subscriptions found — using a synthetic 'all positions' filter")
+
+    # Ignore the watermark so the sample has content to render.
+    recent = fetch_recent_positions(client)
+    matches = [p for p in recent if position_matches(sub, p)]
+    print(f"  {len(recent)} recent position(s), {len(matches)} matching")
+
+    if not sub.get("unsubscribe_token"):
+        print("  WARNING: no unsubscribe_token — the unsubscribe link in this "
+              "email will be dead. Apply migrations/007_unsubscribe_token.sql. "
+              "(Real digests refuse to send in this state; test sends do not.)")
+
+    subject = f"[TEST] {len(matches)} new: {subscription_label(sub)}"[:120]
+    unsub = unsubscribe_url(sub)
+    body = TEST_BANNER + format_digest_html(sub, matches, unsub_url=unsub)
+    headers = {"List-Unsubscribe": f"<{unsub}>, <mailto:{UNSUB_MAILTO}?subject=unsubscribe>"}
+
+    if send_email(to, subject, body, headers=headers):
+        print(f"Sent test digest to {to}.")
+        return 1
+    print("Test send FAILED — check RESEND_API_KEY / EMAIL_FROM and the log above.",
+          file=sys.stderr)
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="Send subscription email digests")
     ap.add_argument("--cadence", default="daily", choices=["instant", "daily", "weekly"],
                     help="which cadence bucket to send (default: daily)")
+    ap.add_argument("--test-to", metavar="EMAIL",
+                    help="TEST MODE: send one sample digest to EMAIL and exit. "
+                         "Mails nobody else and writes nothing to the database.")
     args = ap.parse_args()
+    if args.test_to:
+        sys.exit(0 if run_test(args.test_to, args.cadence) else 1)
     run(args.cadence)
 
 

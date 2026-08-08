@@ -1,0 +1,64 @@
+name: Test Digest Email
+
+# Manual delivery/formatting check for the subscription digest.
+#
+# Sends exactly ONE email, to the address given below, and always sends — even
+# when nothing new matches, since the empty case is worth seeing too. It reads
+# from Supabase but never writes: no subscriber is mailed and no subscription
+# watermark moves, so running this can never consume a real user's pending
+# positions.
+#
+# workflow_dispatch only. Never add a schedule or a push trigger here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      to:
+        description: "Recipient for the test email"
+        required: true
+        default: ilyabeydlin@gmail.com
+        type: string
+      cadence:
+        description: "Which cadence bucket to borrow a subscription's filters from"
+        required: true
+        default: weekly
+        type: choice
+        options: [weekly, daily, instant]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-digest
+  cancel-in-progress: false
+
+jobs:
+  test-send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Send test digest
+        run: |
+          python scripts/send_subscription_digests.py \
+            --cadence "${{ inputs.cadence }}" \
+            --test-to "${{ inputs.to }}"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          # Read-only here, but the digest tables are behind owner-only RLS, so
+          # an anon key would silently see zero subscriptions.
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_PROVIDER: resend
+          MAILING_ADDRESS: ${{ secrets.MAILING_ADDRESS }}
