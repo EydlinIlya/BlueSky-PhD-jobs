@@ -308,6 +308,42 @@ TEST_BANNER = (
 )
 
 
+def check_email_config() -> tuple[list[str], list[str]]:
+    """Inspect the email env. Returns (blocking, warnings).
+
+    In GitHub Actions, Secrets and Variables are separate stores — ``secrets.X``
+    resolves to an empty string when X was added under the Variables tab, which
+    surfaces only as "not set". Naming the missing value beats a generic failure.
+    """
+    provider = (os.environ.get("EMAIL_PROVIDER") or "resend").lower()
+    blocking, warnings = [], []
+    if provider == "resend" and not os.environ.get("RESEND_API_KEY"):
+        blocking.append("RESEND_API_KEY is empty — nothing can be sent")
+    if not os.environ.get("EMAIL_FROM"):
+        warnings.append("EMAIL_FROM is empty — falling back to Resend's shared "
+                        "test domain, which is not your verified sender")
+    if not os.environ.get("MAILING_ADDRESS"):
+        warnings.append("MAILING_ADDRESS is empty — the CAN-SPAM footer will "
+                        "render a literal placeholder")
+    return blocking, warnings
+
+
+def report_email_config() -> bool:
+    """Print config problems. False when sending cannot proceed."""
+    blocking, warnings = check_email_config()
+    for w in warnings:
+        print(f"  WARNING: {w}")
+    for b in blocking:
+        print(f"  ERROR: {b}", file=sys.stderr)
+    if blocking:
+        print("  Set these as repository Secrets (Settings -> Secrets and "
+              "variables -> Actions -> Secrets). A value added under the "
+              "Variables tab is NOT visible to secrets.* in a workflow.",
+              file=sys.stderr)
+        return False
+    return True
+
+
 def fetch_recent_positions(client, limit: int = 200) -> list[dict]:
     """Most recent verified canonical positions, ignoring any watermark."""
     return (client.table("phd_positions")
@@ -327,8 +363,10 @@ def run_test(to: str, cadence: str = "weekly") -> int:
     label and layout match production), otherwise a synthetic "all positions"
     one. Reads only; never updates last_notified_at.
     """
-    client = get_client()
     print(f"TEST MODE — one email to {to}. No subscriber is mailed, nothing is written.")
+    if not report_email_config():
+        return 0
+    client = get_client()
 
     subs = fetch_due_subscriptions(client, cadence)
     if subs:
@@ -357,8 +395,9 @@ def run_test(to: str, cadence: str = "weekly") -> int:
     if send_email(to, subject, body, headers=headers):
         print(f"Sent test digest to {to}.")
         return 1
-    print("Test send FAILED — check RESEND_API_KEY / EMAIL_FROM and the log above.",
-          file=sys.stderr)
+    print("Test send FAILED — the provider rejected it. Config looked complete, "
+          "so check the provider response logged above (bad key, or EMAIL_FROM "
+          "using a domain not verified in Resend).", file=sys.stderr)
     return 0
 
 

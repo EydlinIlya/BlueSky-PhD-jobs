@@ -58,10 +58,14 @@ jobs:
           # if set, else reuse the existing privileged SUPABASE_KEY (the script falls
           # back to SUPABASE_KEY). Do NOT use the publishable key here — RLS would
           # hide other users' subscriptions.
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
-          EMAIL_PROVIDER: resend
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || vars.SUPABASE_SERVICE_KEY }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || vars.SUPABASE_KEY }}
+          # Secrets and Variables are separate stores: `secrets.X` is empty when
+          # X was added under the Variables tab. Accept either so a misplaced
+          # entry doesn't silently disable sending. Keys belong in Secrets — a
+          # Variable is stored and displayed in plaintext.
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY || vars.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM || vars.EMAIL_FROM }}
+          EMAIL_PROVIDER: ${{ secrets.EMAIL_PROVIDER || vars.EMAIL_PROVIDER || 'resend' }}
           # Physical postal address shown in the email footer (CAN-SPAM).
-          MAILING_ADDRESS: ${{ secrets.MAILING_ADDRESS }}
+          MAILING_ADDRESS: ${{ secrets.MAILING_ADDRESS || vars.MAILING_ADDRESS }}
