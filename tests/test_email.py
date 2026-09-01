@@ -10,17 +10,18 @@ class MockProvider(EmailProvider):
         self.succeed = succeed
         self.sent = []
 
-    def send(self, to, subject, html, headers=None):
-        self.sent.append({"to": to, "subject": subject, "html": html, "headers": headers})
+    def send(self, to, subject, html, headers=None, text=None):
+        self.sent.append({"to": to, "subject": subject, "html": html, "headers": headers, "text": text})
         return self.succeed
 
 
 def test_send_email_dispatches_to_provider():
     mock = MockProvider()
-    ok = send_email("a@b.com", "Hi", "<p>x</p>", provider=mock)
+    ok = send_email("a@b.com", "Hi", "<p>x</p>", text="x", provider=mock)
     assert ok is True
     assert len(mock.sent) == 1
     assert mock.sent[0]["to"] == "a@b.com"
+    assert mock.sent[0]["text"] == "x"
 
 
 def test_send_email_reports_failure():

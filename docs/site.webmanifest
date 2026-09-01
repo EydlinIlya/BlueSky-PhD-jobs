@@ -1,0 +1,13 @@
+{
+  "name": "PhD Sky",
+  "short_name": "PhD Sky",
+  "description": "A free research-library view of academic positions shared online.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F3F5F2",
+  "theme_color": "#18594A",
+  "icons": [
+    { "src": "/favicon-32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}
