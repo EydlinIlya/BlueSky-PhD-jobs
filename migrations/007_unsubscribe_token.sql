@@ -1,8 +1,7 @@
--- Migration 007: One-click email unsubscribe
--- Adds a secret per-subscription token so a digest email can carry a working
--- unsubscribe link (CAN-SPAM / ePrivacy) that an *unauthenticated* click can
--- act on. The RPC is SECURITY DEFINER (bypasses RLS) but only ever disables the
--- single row whose secret token matches, so it can't touch other users' data.
+-- Migration 007: unsubscribe-token foundation (superseded by migration 008).
+-- Adds a secret per-subscription token for unauthenticated preference changes.
+-- Migration 008 removes this first-generation RPC and replaces it with
+-- scanner-safe HTTP POST flows for one alert or all weekly alerts.
 -- Requires migration 004 (subscriptions).
 
 -- 1. Secret token column (unguessable; distinct from the row's primary key).

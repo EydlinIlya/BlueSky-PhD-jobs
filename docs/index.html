@@ -1,39 +1,20 @@
 <!DOCTYPE html>
-<html lang="en" class="cc--darkmode">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <!-- Vercel Web Analytics -->
-    <script>
-      window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
-    </script>
-    <script defer src="/_vercel/insights/script.js"></script>
-
-    <!-- Google Analytics 4 with Consent Mode v2 (default-deny; opt-in via cookie banner) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-B81CELELQD"></script>
-    <script>
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('consent', 'default', {
-            'ad_storage': 'denied',
-            'ad_user_data': 'denied',
-            'ad_personalization': 'denied',
-            'analytics_storage': 'denied',
-            'wait_for_update': 500
-        });
-        gtag('js', new Date());
-        gtag('config', 'G-B81CELELQD');
-        if (localStorage.getItem('cookieConsent') === 'accepted') {
-            gtag('consent', 'update', { analytics_storage: 'granted' });
-        }
-    </script>
     <title>PhD &amp; Postdoc Positions from Bluesky | Academic Job Board</title>
-    <meta name="description" content="Browse PhD, postdoc, and research positions aggregated from Bluesky social network. AI-powered filtering updated daily. Find academic jobs in STEM, humanities, and social sciences worldwide.">
-    <meta name="author" content="PhD Sky">
+    <meta name="description" content="Browse PhD, postdoc, and research positions collected from public sources. A free, independent service operated by Eli Eydlin in Israel.">
+    <meta name="author" content="Eli Eydlin">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="https://phdsky.org/">
-    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#18594A">
 
     <!-- Open Graph -->
     <meta property="og:title" content="PhD &amp; Postdoc Positions from Bluesky | Academic Job Board">
@@ -71,36 +52,30 @@
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
-        "@type": "Dataset",
+        "@type": "CollectionPage",
         "name": "PhD & Postdoc Positions from Bluesky",
         "description": "Daily-updated dataset of academic job postings aggregated from Bluesky social network, filtered by AI. Covers PhD studentships, postdoctoral fellowships, research assistant roles, and faculty positions worldwide.",
         "url": "https://phdsky.org/",
         "creator": {
-            "@type": "Organization",
-            "name": "BlueSky PhD Jobs",
+            "@type": "Person",
+            "name": "Eli Eydlin",
             "url": "https://phdsky.org/"
         },
         "keywords": ["PhD positions", "postdoc jobs", "academic jobs", "research positions", "Bluesky", "university jobs", "doctoral research", "STEM careers"],
-        "isAccessibleForFree": true,
-        "license": "https://creativecommons.org/publicdomain/zero/1.0/",
-        "distribution": [{
-            "@type": "DataDownload",
-            "encodingFormat": "text/html",
-            "contentUrl": "https://phdsky.org/positions"
-        }]
+        "isAccessibleForFree": true
     }
     </script>
 
     <!-- Supabase JS -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/vendor/supabase-2.57.4.js"></script>
 
     <!-- Design system tokens (PhD Sky) — must load before styles.css -->
     <link rel="stylesheet" href="colors_and_type.css">
     <link rel="stylesheet" href="styles.css">
 
     <!-- Cookie consent (vanilla-cookieconsent by orestbida — MIT, ~30KB) -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orestbida/cookieconsent@v3.1.0/dist/cookieconsent.css">
-    <script defer src="https://cdn.jsdelivr.net/gh/orestbida/cookieconsent@v3.1.0/dist/cookieconsent.umd.js"></script>
+    <link rel="stylesheet" href="/vendor/cookieconsent-3.1.0.css">
+    <script defer src="/vendor/cookieconsent-3.1.0.js"></script>
 </head>
 <body>
 <a href="#view-feed" class="skip-link">Skip to content</a>
@@ -108,10 +83,11 @@
 <!-- ========== TOP BAR ========== -->
 <header class="topbar">
   <div class="topbar-inner">
-    <div class="mark" id="mark"><span class="gt">&gt;</span> PhD_Positions</div>
+    <a class="mark" id="mark" href="/#feed" aria-label="PhD Sky home">PhD Sky</a>
     <div class="command-bar">
-      <span class="cmd-prefix">_</span>
-      <input id="cmd-input" class="cmd-input" placeholder="search positions by keyword, author, discipline, country…" autocomplete="off">
+      <span class="cmd-prefix" aria-hidden="true">Search</span>
+      <label class="sr-only" for="cmd-input">Search positions</label>
+      <input id="cmd-input" class="cmd-input" placeholder="Search by keyword, author, discipline, or country" autocomplete="off">
       <span class="cmd-kbd">⌘K</span>
     </div>
     <div class="top-actions" id="top-account">
@@ -131,14 +107,14 @@
     </div>
     <div class="rail-section">
       <div class="rail-title">Stream</div>
-      <div class="rail-link active" data-stream="all" id="nav-all">
+      <button type="button" class="rail-link active" data-stream="all" id="nav-all" aria-pressed="true">
         <svg class="svg ic" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v2H2zm0 4h12v2H2zm0 4h12v2H2z"/></svg>
         <span class="lab">All positions</span>
-      </div>
-      <div class="rail-link" data-stream="followlist" id="nav-followlist">
+      </button>
+      <button type="button" class="rail-link" data-stream="followlist" id="nav-followlist" aria-pressed="false">
         <svg class="svg ic" viewBox="0 0 16 16" fill="currentColor"><path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm0 1c-4.42 0-8 1.79-8 4v1h16v-1c0-2.21-3.58-4-8-4z"/></svg>
         <span class="lab">Following</span>
-      </div>
+      </button>
     </div>
 
     <!-- subscriptions / nudge (auth-aware, rendered by app.js) -->
@@ -146,7 +122,7 @@
 
     <!-- filters -->
     <div class="rail-section rail-filters">
-      <div class="rail-title">Filters <span class="more" id="clear-filters">clear</span></div>
+      <div class="rail-title">Filters <button type="button" class="more text-button" id="clear-filters">Clear</button></div>
       <div class="filter-chips">
         <div class="f-row">
           <div class="f-row-label">Level</div>
@@ -163,7 +139,7 @@
         <div class="f-row">
           <div class="f-row-label">Source</div>
           <div class="f-row-chips">
-            <span class="chip" id="chip-hideaggr">Hide aggregator reposts</span>
+            <button type="button" class="chip" id="chip-hideaggr" aria-pressed="false">Hide aggregator reposts</button>
           </div>
         </div>
       </div>
@@ -171,7 +147,7 @@
   </aside>
 
   <!-- ── CENTER ── -->
-  <main style="min-width:0">
+  <main id="main-content" style="min-width:0" tabindex="-1">
     <!-- FEED VIEW -->
     <div class="river" id="view-feed">
       <div class="river-head">
@@ -179,7 +155,7 @@
           <button class="river-tab active" data-tab="latest">Latest <span class="ct" id="tab-latest-ct"></span></button>
           <button class="river-tab" data-tab="following">My feed <span class="ct" id="tab-following-ct"></span></button>
         </div>
-        <div class="river-meta"><span class="live-dot"></span> powered by Llama · updated daily</div>
+        <div class="river-meta"><span class="live-dot"></span> Public listings · updated daily</div>
       </div>
       <div id="feed-stream"></div>
       <div class="loader hidden" id="loader"><div class="spin"></div> loading more positions…</div>
@@ -187,6 +163,9 @@
 
     <!-- SUBSCRIPTIONS VIEW -->
     <div id="view-subs" class="hidden"></div>
+
+    <!-- ACCOUNT VIEW -->
+    <div id="view-account" class="hidden"></div>
 
     <!-- FOLLOWING (accounts) VIEW -->
     <div id="view-following" class="hidden"></div>
@@ -233,24 +212,29 @@
 </nav>
 
 <!-- ========== SHARED BACKDROP ========== -->
-<div class="backdrop" id="backdrop"></div>
+<button type="button" class="backdrop" id="backdrop" aria-label="Close dialog" tabindex="-1"></button>
 
 <!-- ========== POST DETAIL FLYOUT ========== -->
-<aside class="flyout" id="flyout">
+<aside class="flyout" id="flyout" role="dialog" aria-modal="true" aria-labelledby="flyout-title" aria-hidden="true" tabindex="-1">
   <div class="flyout-head">
-    <span class="flyout-title">_position</span>
+    <span class="flyout-title" id="flyout-title">Position details</span>
     <button class="btn-ghost" id="flyout-close" style="padding:5px 11px">esc</button>
   </div>
   <div class="flyout-body" id="flyout-body"></div>
 </aside>
 
 <!-- ========== AUTH MODAL (wired in a later branch) ========== -->
-<div class="modal" id="modal-auth">
+<div class="modal" id="modal-auth" role="dialog" aria-modal="true" aria-label="Account access" aria-hidden="true">
   <div class="modal-card" id="auth-card" style="position:relative"></div>
 </div>
 
+<!-- WEEKLY ALERT CONFIRMATION -->
+<div class="modal" id="modal-alert" role="dialog" aria-modal="true" aria-labelledby="alert-dialog-title" aria-hidden="true">
+  <div class="modal-card" id="alert-card" style="position:relative"></div>
+</div>
+
 <!-- ========== TOASTS ========== -->
-<div class="toast-wrap" id="toast-wrap"></div>
+<div class="toast-wrap" id="toast-wrap" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <!-- ========== FOOTER ========== -->
 <footer class="site-footer">
@@ -259,6 +243,7 @@
     <a href="/about">About</a> ·
     <a href="/privacy">Privacy</a> ·
     <a href="/terms">Terms</a> ·
+    <button type="button" class="cookie-settings" data-cookie-settings>Cookie settings</button> ·
     <a href="https://bsky.app" target="_blank" rel="noopener">Bluesky</a> ·
     <a href="https://github.com/EydlinIlya/BlueSky-PhD-jobs" target="_blank" rel="noopener">GitHub</a>
   </span>

@@ -1,8 +1,5 @@
 /* ============================================================
-   PhD Sky v3 — Feed + Accounts  ·  app logic (real data)
-   Twitter/Bluesky-style feed over the live phd_positions data.
-   Branch A: redesign only. Auth/subscriptions/follows surfaces are
-   present but routed to a "coming soon" nudge until later branches.
+   PhD Sky — Research Library feed, accounts, saved searches, and alerts.
    ============================================================ */
 'use strict';
 
@@ -32,14 +29,14 @@ function isAggregator(handle) { return !!handle && aggregatorHandles.has(handle)
 
 // Per-discipline badge colors (flat, no gradients)
 const DISCIPLINE_COLORS = {
-    'Biology': '#16a34a', 'Ecology': '#15803d', 'Computer Science': '#6d28d9',
-    'Physics': '#0284c7', 'Chemistry & Materials Science': '#0891b2', 'Medicine': '#dc2626',
-    'Mathematics': '#7c3aed', 'Economics': '#b45309', 'Sociology & Political Science': '#0369a1',
-    'Engineering': '#c2410c', 'Environmental Sciences': '#15803d', 'Psychology': '#be185d',
-    'Neuroscience': '#7c3aed', 'History': '#92400e', 'Arts & Humanities': '#a21caf',
-    'General call': '#475569',
+    'Biology': '#3F6B4F', 'Ecology': '#56703A', 'Computer Science': '#315F78',
+    'Physics': '#516C80', 'Chemistry & Materials Science': '#6B6252', 'Medicine': '#985244',
+    'Mathematics': '#625C82', 'Economics': '#866633', 'Sociology & Political Science': '#496C70',
+    'Engineering': '#8A5E42', 'Environmental Sciences': '#56703A', 'Psychology': '#815C6D',
+    'Neuroscience': '#625C82', 'History': '#765E49', 'Arts & Humanities': '#765E49',
+    'General call': '#68736E',
 };
-function getDisciplineColor(d) { return DISCIPLINE_COLORS[d] || '#3b82f6'; }
+function getDisciplineColor(d) { return DISCIPLINE_COLORS[d] || '#315F78'; }
 
 // Short display labels for compact badges/chips
 const DISCIPLINE_SHORT = {
@@ -63,6 +60,15 @@ const LEVEL_CHIPS = [
 
 const COUNTRY_NORMALIZE = { 'Czechia': 'Czech Republic', 'Europe': 'Unknown' };
 function normalizeCountry(c) { return c ? (COUNTRY_NORMALIZE[c] || c) : c; }
+function normalizePosition(position, index = 0) {
+    return {
+        ...position,
+        country: normalizeCountry(position.country),
+        // Production rows have an AT URI. Offline fixtures use the public URL
+        // as a stable key so explicit detail actions work in mock mode too.
+        uri: position.uri || position.url || `mock-position-${index}`,
+    };
+}
 
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
@@ -70,7 +76,7 @@ const $$ = s => document.querySelectorAll(s);
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text == null ? '' : text;
-    return div.innerHTML;
+    return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // Mirrors extract_slug() in scripts/generate_seo_pages.py — keep in sync.
@@ -92,7 +98,7 @@ const state = {
     all: [],                 // all positions (canonical, verified)
     duplicateMap: {},        // canonical uri -> [{uri, url, user_handle, created_at}]
     total: 0,                // total open positions
-    view: 'feed',            // 'feed' | 'subs'
+    view: 'feed',            // 'feed' | 'subs' | 'account' | 'followlist'
     stream: 'all',
     tab: 'latest',
     search: '',
@@ -104,7 +110,10 @@ const state = {
     follows: new Set(),      // followed Bluesky handles (account_follows)
     topics: new Set(),       // followed topic tokens — disciplines/countries (topic_follows)
     subs: [],                // this user's subscriptions (rows from `subscriptions`)
+    profile: null,
 };
+
+const EMAIL_CONSENT_VERSION = 'weekly-alert-v1';
 
 // Infinite scroll
 const BATCH_SIZE = 30;
@@ -126,7 +135,7 @@ async function fetchStaticSnapshot() {
         if (!r.ok) return null;
         const data = await r.json();
         if (!data || !Array.isArray(data.positions)) return null;
-        const positions = data.positions.map(p => ({ ...p, country: normalizeCountry(p.country) }));
+        const positions = data.positions.map(normalizePosition);
         const dupMap = buildDuplicateMap(data.duplicates || []);
         return { positions, duplicates: dupMap, total: data.total || positions.length };
     } catch (e) { console.warn('snapshot fetch failed', e); return null; }
@@ -155,7 +164,7 @@ async function fetchSupabasePositions() {
             .order('created_at', { ascending: false })
             .range(from, from + PAGE - 1);
         if (error) throw error;
-        all = all.concat(data.map(p => ({ ...p, country: normalizeCountry(p.country) })));
+        all = all.concat(data.map(normalizePosition));
         if (data.length < PAGE) break;
         from += PAGE;
     }
@@ -183,7 +192,7 @@ async function fetchDuplicates() {
 // Three-tier loader: static snapshot → live Supabase. Returns {positions, duplicates, total}.
 async function loadFullData() {
     if (USE_MOCK) {
-        const positions = await fetchMockPositions();
+        const positions = (await fetchMockPositions()).map(normalizePosition);
         return { positions, duplicates: {}, total: positions.length };
     }
     const snap = await fetchStaticSnapshot();
@@ -199,7 +208,7 @@ function loadStaticData() {
     try {
         const data = JSON.parse(el.textContent);
         if (data && Array.isArray(data.positions) && data.positions.length > 0) {
-            const positions = data.positions.map(p => ({ ...p, country: normalizeCountry(p.country) }));
+            const positions = data.positions.map(normalizePosition);
             return { positions, total: data.total || positions.length };
         }
     } catch (e) { console.warn('static parse failed', e); }
@@ -299,7 +308,7 @@ function postHTML(p) {
     const msg = p.message || '';
     const truncated = msg.length > MSG_LIMIT;
     const bodyText = truncated ? msg.slice(0, MSG_LIMIT).trimEnd() + '…' : msg;
-    const moreLink = truncated ? '<span class="more-link">show more</span>' : '';
+    const moreLink = truncated ? '<button type="button" class="more-link" data-detail="1">Show full text</button>' : '';
 
     const reposts = (p.uri && state.duplicateMap[p.uri]) || [];
     const rep = reposts.length;
@@ -336,13 +345,15 @@ function postHTML(p) {
         <a class="p-handle" href="${escapeHtml(profileUrl)}" target="_blank" rel="noopener" data-stop>@${escapeHtml(handle)}</a>
         ${aggr ? '<span class="p-aggr-tag">aggr</span>' : ''}
         ${timeHTML}
-        ${(() => { const on = state.follows.has(handle); return `<button class="p-follow ${on ? 'on' : ''}" data-follow="${escapeHtml(handle)}" title="${on ? 'Unfollow' : 'Follow'} @${escapeHtml(handle)}">${on ? 'following' : '+ follow'}</button>`; })()}
+        ${(() => { const on = state.follows.has(handle); return `<button type="button" class="p-follow ${on ? 'on' : ''}" data-follow="${escapeHtml(handle)}" aria-pressed="${on}" title="${on ? 'Unfollow' : 'Follow'} @${escapeHtml(handle)}">${on ? 'Following' : 'Follow'}</button>`; })()}
       </div>
       <div class="p-meta-strip">${discBadges}${typeBadges}${countryBadge}</div>
       <div class="p-body">${escapeHtml(bodyText)}${moreLink}</div>
       ${threadHTML}
       <div class="p-actions">
-        <a class="p-act" href="${escapeHtml(postUrl)}" target="_blank" rel="noopener" data-stop style="margin-left:auto;color:var(--primary)">view on Bluesky →</a>
+        <button type="button" class="p-act" data-detail="1">Details</button>
+        ${slug ? `<a class="p-act" href="/p/${slug}" data-stop>Permalink</a>` : ''}
+        <a class="p-act" href="${escapeHtml(postUrl)}" target="_blank" rel="noopener" data-stop style="margin-left:auto;color:var(--primary)">View source</a>
       </div>
     </article>`;
 }
@@ -427,7 +438,7 @@ const chipNames = { area: [], country: [] };   // full name lists by frequency (
 function renderFilterChips() {
     // Level — fixed set
     $('#chips-level').innerHTML = LEVEL_CHIPS.map(([val, lab]) =>
-        `<span class="chip" data-level="${escapeHtml(val)}">${escapeHtml(lab)}</span>`).join('');
+        `<button type="button" class="chip" data-level="${escapeHtml(val)}" aria-pressed="false">${escapeHtml(lab)}</button>`).join('');
     // Area + Country — top 5 chips (+ any selected off-list) inline; full alpha list in dropdown
     chipNames.area = countNames(p => p.disciplines || []);
     chipNames.country = countNames(p => (p.country && p.country !== 'Unknown') ? [p.country] : []);
@@ -448,9 +459,9 @@ function renderChipRow(kind, containerId) {
     const extra = [...state.filters[kind]].filter(v => !top.includes(v));
     const shown = [...top, ...extra];
     const label = n => kind === 'area' ? discShort(n) : n;
-    const chip = n => `<span class="chip" data-${kind}="${escapeHtml(n)}">${escapeHtml(label(n))}</span>`;
+    const chip = n => `<button type="button" class="chip" data-${kind}="${escapeHtml(n)}" aria-pressed="false">${escapeHtml(label(n))}</button>`;
     container.innerHTML = shown.map(chip).join('') +
-        (names.length > CHIP_TOP_N ? `<span class="chip chip-more" data-more="${kind}">all ${names.length}…</span>` : '');
+        (names.length > CHIP_TOP_N ? `<button type="button" class="chip chip-more" data-more="${kind}" aria-expanded="false">All ${names.length}</button>` : '');
 }
 
 // Full-list dropdown (overlay): optional search + scrollable, ALPHABETICAL checklist.
@@ -466,7 +477,7 @@ function buildChipDropdown(kind, containerId) {
         dd.innerHTML =
             (needSearch ? `<input class="dd-search" placeholder="Filter ${kind === 'area' ? 'areas' : 'countries'}…">` : '') +
             `<div class="dd-list">` +
-            sorted.map(n => `<div class="dd-item" data-${kind}="${escapeHtml(n)}"><span class="dd-check">✓</span><span class="dd-lab">${escapeHtml(label(n))}</span></div>`).join('') +
+            sorted.map(n => `<button type="button" class="dd-item" data-${kind}="${escapeHtml(n)}" aria-pressed="false"><span class="dd-check" aria-hidden="true">✓</span><span class="dd-lab">${escapeHtml(label(n))}</span></button>`).join('') +
             `</div>`;
     } else if (dd) { dd.remove(); }
 }
@@ -480,11 +491,11 @@ function setFilterValue(kind, val, on) {
     if (on) state.filters[kind].add(val); else state.filters[kind].delete(val);
     if (kind === 'level') {
         const chip = document.querySelector(`.chip[data-level="${CSS.escape(val)}"]`);
-        if (chip) chip.classList.toggle('on', on);
+        if (chip) { chip.classList.toggle('on', on); chip.setAttribute('aria-pressed', String(on)); }
     } else {
         renderChipRow(kind, 'chips-' + kind);            // show/hide off-list selected bubbles
         const it = document.querySelector(`.chip-dropdown .dd-item[data-${kind}="${CSS.escape(val)}"]`);
-        if (it) it.classList.toggle('on', on);
+        if (it) { it.classList.toggle('on', on); it.setAttribute('aria-pressed', String(on)); }
         bindChips();                                     // rebind the rebuilt chip row
     }
     renderFeedReset();
@@ -493,15 +504,18 @@ function setFilterValue(kind, val, on) {
 function bindChips() {
     $$('.chip[data-level]').forEach(c => {
         c.classList.toggle('on', state.filters.level.has(c.dataset.level));
+        c.setAttribute('aria-pressed', String(state.filters.level.has(c.dataset.level)));
         c.onclick = () => setFilterValue('level', c.dataset.level, !state.filters.level.has(c.dataset.level));
     });
     $$('.chip[data-country]').forEach(c => {
         c.classList.toggle('on', state.filters.country.has(c.dataset.country));
+        c.setAttribute('aria-pressed', String(state.filters.country.has(c.dataset.country)));
         c.onclick = () => setFilterValue('country', c.dataset.country, !state.filters.country.has(c.dataset.country));
     });
     $$('.chip[data-area]').forEach(c => {
         const sel = state.filters.area.has(c.dataset.area);
         c.classList.toggle('on', sel); applyAreaChipStyle(c, sel);
+        c.setAttribute('aria-pressed', String(sel));
         c.onclick = () => setFilterValue('area', c.dataset.area, !state.filters.area.has(c.dataset.area));
     });
     // "all N…" triggers open the fixed-position dropdown (closing any other)
@@ -511,6 +525,7 @@ function bindChips() {
         $$('.chip-dropdown.open').forEach(o => { if (o !== dd) o.classList.remove('open'); });
         const opening = !dd.classList.contains('open');
         dd.classList.toggle('open', opening);
+        c.setAttribute('aria-expanded', String(opening));
         if (opening) {
             const r = c.getBoundingClientRect();
             // The mobile filter sheet animates with translateY, and a transformed
@@ -543,6 +558,7 @@ function bindChips() {
         const kind = it.dataset.area !== undefined ? 'area' : 'country';
         const val = it.dataset[kind];
         it.classList.toggle('on', state.filters[kind].has(val));
+        it.setAttribute('aria-pressed', String(state.filters[kind].has(val)));
         it.onclick = () => setFilterValue(kind, val, !state.filters[kind].has(val));
     });
     // dropdown search box filters the visible list
@@ -559,6 +575,7 @@ function clearFilters() {
     state.hideAggr = false; state.search = '';
     $('#cmd-input').value = '';
     $('#chip-hideaggr').classList.remove('on');
+    $('#chip-hideaggr').setAttribute('aria-pressed', 'false');
     $$('.chip.on').forEach(c => { c.classList.remove('on'); c.style.background = ''; c.style.borderColor = ''; c.style.color = ''; });
     $$('.chip-dropdown .dd-item.on').forEach(it => it.classList.remove('on'));
     $$('.chip-dropdown.open').forEach(d => d.classList.remove('open'));
@@ -595,13 +612,14 @@ function renderTrendCard(sel, counts, kind) {
     let html = top.map(([name, n], i) => {
         const on = state.topics.has(name);
         const followBtn = state.user
-            ? `<span class="trend-follow ${on ? 'on' : ''}" data-topic="${escapeHtml(name)}" data-topic-kind="${topicKind}">${on ? 'following' : 'follow'}</span>`
+            ? `<button type="button" class="trend-follow ${on ? 'on' : ''}" data-topic="${escapeHtml(name)}" data-topic-kind="${topicKind}" aria-pressed="${on}">${on ? 'Following' : 'Follow'}</button>`
             : '';
-        return `<div class="trend-row" data-trend="${escapeHtml(name)}" data-trend-kind="${kind}">
+        return `<div class="trend-row">
+        <button type="button" class="trend-main" data-trend="${escapeHtml(name)}" data-trend-kind="${kind}" aria-label="Filter by ${escapeHtml(label(name))}">
         <span class="trend-rank">${i + 1}</span>
         <span class="trend-name">${escapeHtml(label(name))}</span>
         <span class="trend-bar"><span class="trend-fill" style="width:${Math.round(n / max * 100)}%;background:${colorFor(name)}"></span></span>
-        <span class="trend-ct">${n}</span>${followBtn}
+        <span class="trend-ct">${n}</span></button>${followBtn}
       </div>`;
     }).join('');
     if (otherSum > 0) {
@@ -616,6 +634,29 @@ function renderTrendCard(sel, counts, kind) {
 }
 
 /* ───────────────────────── POST FLYOUT ───────────────────────── */
+let activeDialog = null;
+let overlayReturnFocus = null;
+
+function setBackgroundInert(inert) {
+    ['.topbar', '.shell', '#mobile-nav', '.site-footer'].forEach(selector => {
+        const element = $(selector);
+        if (element) element.inert = inert;
+    });
+}
+
+function openDialog(element, initialSelector) {
+    overlayReturnFocus = document.activeElement;
+    activeDialog = element;
+    element.classList.add('open');
+    element.setAttribute('aria-hidden', 'false');
+    $('#backdrop').classList.add('open');
+    setBackgroundInert(true);
+    requestAnimationFrame(() => {
+        const first = initialSelector ? element.querySelector(initialSelector) : null;
+        (first || element.querySelector('button, a[href], input, [tabindex="0"]') || element).focus();
+    });
+}
+
 function openFlyout(uri) {
     const p = state.all.find(x => x.uri === uri); if (!p) return;
     const handle = p.user_handle || 'unknown';
@@ -652,15 +693,19 @@ function openFlyout(uri) {
       <div style="display:flex;gap:8px;margin-top:6px">
         <a class="btn-primary" href="${escapeHtml(postUrl)}" target="_blank" rel="noopener">View on Bluesky →</a>
       </div>`;
-    $('#flyout').classList.add('open');
-    $('#backdrop').classList.add('open');
+    openDialog($('#flyout'), '#flyout-close');
 }
 
 function closeOverlays() {
-    $$('.modal').forEach(m => m.classList.remove('open'));
+    $$('.modal').forEach(m => { m.classList.remove('open'); m.setAttribute('aria-hidden', 'true'); });
     $('#flyout').classList.remove('open');
+    $('#flyout').setAttribute('aria-hidden', 'true');
     const rail = $('#left-rail'); if (rail) rail.classList.remove('open');  // mobile filter sheet
     $('#backdrop').classList.remove('open');
+    setBackgroundInert(false);
+    activeDialog = null;
+    if (overlayReturnFocus && document.contains(overlayReturnFocus)) overlayReturnFocus.focus();
+    overlayReturnFocus = null;
 }
 
 // Sync active state across left rail, river tabs, and the mobile bottom nav.
@@ -669,8 +714,16 @@ function setActiveNav() {
     if (state.view === 'subs') railKey = 'saved';
     else if (state.view === 'followlist') railKey = 'followlist';
     else railKey = state.tab === 'latest' ? 'all' : '';   // My feed has no rail link
-    $$('.rail-link').forEach(x => x.classList.toggle('active', x.dataset.stream === railKey));
-    $$('.river-tab').forEach(x => x.classList.toggle('active', state.view === 'feed' && x.dataset.tab === state.tab));
+    $$('.rail-link').forEach(x => {
+        const active = x.dataset.stream === railKey;
+        x.classList.toggle('active', active);
+        x.setAttribute('aria-pressed', String(active));
+    });
+    $$('.river-tab').forEach(x => {
+        const active = state.view === 'feed' && x.dataset.tab === state.tab;
+        x.classList.toggle('active', active);
+        x.setAttribute('aria-pressed', String(active));
+    });
     const mnavKey = state.view === 'subs' ? 'saved'
         : state.view === 'followlist' ? ''
         : (state.tab === 'following' ? 'following' : 'all');
@@ -723,8 +776,7 @@ function openAuth(mode) {
     if (!authEnabled()) { toast('Sign-in is unavailable in this mode.'); return; }
     state.authMode = mode || 'signup';
     renderAuthModal();
-    $('#modal-auth').classList.add('open');
-    $('#backdrop').classList.add('open');
+    openDialog($('#modal-auth'), '#auth-email');
 }
 
 function renderAuthModal() {
@@ -732,7 +784,7 @@ function renderAuthModal() {
     $('#auth-card').innerHTML = `
       <button class="modal-close" data-close="1">${ICON_CLOSE}</button>
       <div class="modal-head">
-        <div class="auth-mark"><span class="gt">&gt;</span> PhD_Positions</div>
+        <div class="auth-mark">PhD Sky</div>
         <div class="auth-sub">${signup
             ? 'Create a free account to subscribe to filters and follow accounts.'
             : 'Welcome back. Sign in to manage your subscriptions.'}</div>
@@ -749,8 +801,8 @@ function renderAuthModal() {
             ${p.hint ? `<span class="pr">${p.hint}</span>` : ''}
           </button>`).join('')}
         <div class="auth-divider">or</div>
-        <div class="field"><label>Email</label><input type="email" id="auth-email" placeholder="you@university.edu" autocomplete="email"></div>
-        <div class="field"><label>Password</label><input type="password" id="auth-pass" placeholder="••••••••" autocomplete="${signup ? 'new-password' : 'current-password'}"></div>
+        <div class="field"><label for="auth-email">Email</label><input type="email" id="auth-email" placeholder="you@university.edu" autocomplete="email"></div>
+        <div class="field"><label for="auth-pass">Password</label><input type="password" id="auth-pass" placeholder="At least 8 characters" autocomplete="${signup ? 'new-password' : 'current-password'}"></div>
         <button class="btn-primary" id="auth-email-submit" style="margin-top:4px">${signup ? 'Create account' : 'Log in'} →</button>
         <div class="auth-foot">${signup
             ? 'Already have an account? <a data-mode="signin">Log in</a>'
@@ -818,29 +870,35 @@ function renderTopbar() {
     if (u) {
         wrap.innerHTML = `
           <div class="profile-wrap">
-            <div class="avatar" id="avatar-btn" title="${escapeHtml(userName(u))}">${escapeHtml(userInitials(u))}</div>
-            <div class="profile-menu" id="profile-menu">
+            <button type="button" class="avatar" id="avatar-btn" title="${escapeHtml(userName(u))}" aria-label="Open account menu" aria-expanded="false">${escapeHtml(userInitials(u))}</button>
+            <div class="profile-menu" id="profile-menu" role="menu">
               <div class="pm-header">
                 <div class="avatar sm">${escapeHtml(userInitials(u))}</div>
                 <div class="pm-id"><span class="pm-name">${escapeHtml(userName(u))}</span><span class="pm-handle">${escapeHtml(u.email || '')}</span></div>
               </div>
               <div class="pm-list">
-                <div class="pm-item" data-pm="feed">Feed</div>
-                <div class="pm-item" data-pm="subs">Subscriptions <span class="badge-ct">${state.subs.length}</span></div>
-                <div class="pm-item" data-pm="following">My feed</div>
+                <button type="button" class="pm-item" role="menuitem" data-pm="feed">Feed</button>
+                <button type="button" class="pm-item" role="menuitem" data-pm="subs">Saved searches <span class="badge-ct">${state.subs.length}</span></button>
+                <button type="button" class="pm-item" role="menuitem" data-pm="following">My feed</button>
+                <button type="button" class="pm-item" role="menuitem" data-pm="account">Account &amp; privacy</button>
                 <div class="pm-sep"></div>
-                <div class="pm-item danger" data-pm="logout">Sign out</div>
+                <button type="button" class="pm-item danger" role="menuitem" data-pm="logout">Sign out</button>
               </div>
             </div>
           </div>`;
         const av = $('#avatar-btn');
-        av.onclick = e => { e.stopPropagation(); $('#profile-menu').classList.toggle('open'); };
+        av.onclick = e => {
+            e.stopPropagation();
+            const open = $('#profile-menu').classList.toggle('open');
+            av.setAttribute('aria-expanded', String(open));
+        };
         wrap.querySelectorAll('[data-pm]').forEach(it => it.onclick = () => {
             const a = it.dataset.pm;
             $('#profile-menu').classList.remove('open');
             if (a === 'logout') signOut();
             else if (a === 'subs') selectStream('saved');
             else if (a === 'following') selectStream('following');
+            else if (a === 'account') setView('account');
             else if (a === 'feed') selectStream('all');
         });
     } else {
@@ -856,22 +914,24 @@ function renderRailSubs() {
     const sec = $('#rail-subs-section');
     if (u) {
         const list = state.subs.length ? state.subs.map(s => `
-          <div class="sub-row" data-open-subs="1">
-            <div class="ss-q"><span class="pre">_</span>${escapeHtml(subLabel(s))}</div>
-            <div class="ss-meta"><span class="cad">weekly</span></div>
-          </div>`).join('')
-          : `<div style="font-family:var(--font-mono);font-size:11px;color:var(--fg-subtle);padding:4px">No subscriptions yet.</div>`;
+          <button type="button" class="sub-row" data-open-subs="1">
+            <span class="ss-q">${escapeHtml(subLabel(s))}</span>
+            <span class="ss-meta"><span class="cad">${s.deliver_email && s.email_consent_at ? 'Weekly email on' : 'Saved only'}</span></span>
+          </button>`).join('')
+          : `<div class="saved-state">No saved searches yet.</div>`;
         sec.innerHTML = `
-          <div class="rail-title">Subscriptions <span class="more" data-open-subs="1">manage</span></div>
+          <div class="rail-title">Saved searches <button type="button" class="more text-button" data-open-subs="1">Manage</button></div>
           ${list}
-          <button class="btn-add-search" id="rail-add-sub">＋ save current search</button>`;
+          <button type="button" class="btn-add-search" id="rail-add-sub">Save current search</button>
+          <button type="button" class="btn-primary" id="rail-email-sub">Email me weekly</button>`;
         sec.querySelectorAll('[data-open-subs]').forEach(el => el.onclick = () => setView('subs'));
         $('#rail-add-sub').onclick = () => saveCurrentSearch();
+        $('#rail-email-sub').onclick = () => startWeeklyForCurrentSearch();
     } else {
         sec.innerHTML = `
           <div class="rail-nudge">
-            <div class="nh">＋ Create a free account</div>
-            <div class="nb">Save searches, follow accounts, and get new positions by alert.</div>
+            <div class="nh">Create a free account</div>
+            <div class="nb">Save research queries, follow sources, and optionally request one weekly email.</div>
             <button class="nbtn" data-auth="signup">Sign up</button>
           </div>`;
         sec.querySelectorAll('[data-auth]').forEach(b => b.onclick = () => openAuth(b.dataset.auth));
@@ -900,7 +960,7 @@ function renderFollowingPage() {
     el.innerHTML = `
       <div class="subs-page">
         <div class="subs-hero">
-          <div class="subs-h1"><span class="gt">&gt;</span> _following</div>
+          <h1 class="subs-h1">Following</h1>
           <div class="subs-lead">Accounts you follow — their new positions appear in <b>My feed</b>. Follow more with <b>+ follow</b> on any post.</div>
         </div>
         <div>
@@ -941,7 +1001,8 @@ async function toggleFollowAccount(handle) {
     // Update any visible follow buttons for this handle + the rail count.
     $$(`[data-follow="${CSS.escape(handle)}"]`).forEach(b => {
         b.classList.toggle('on', adding);
-        b.textContent = adding ? 'following' : '+ follow';
+        b.setAttribute('aria-pressed', String(adding));
+        b.textContent = adding ? 'Following' : 'Follow';
     });
     updateCounts();
     if (state.view === 'followlist') renderFollowingPage();
@@ -969,8 +1030,6 @@ async function toggleFollowTopic(token, kind) {
 }
 
 /* ───────────────────────── SUBSCRIPTIONS ───────────────────────── */
-const CADENCES = [['instant', 'Instant'], ['daily', 'Daily digest'], ['weekly', 'Weekly digest'], ['off', 'Muted']];
-
 function subLabel(s) {
     const parts = [
         ...(s.disciplines || []).map(discShort),
@@ -984,9 +1043,9 @@ function subLabel(s) {
 function currentFilterPayload() {
     return {
         query_text: state.search.trim() || null,
-        disciplines: [...state.filters.area],
-        countries: [...state.filters.country],
-        position_types: [...state.filters.level],
+        disciplines: [...state.filters.area].sort(),
+        countries: [...state.filters.country].sort(),
+        position_types: [...state.filters.level].sort(),
         hide_aggregators: state.hideAggr,
     };
 }
@@ -997,32 +1056,108 @@ async function loadSubs() {
         .from('subscriptions').select('*').order('created_at', { ascending: false });
     if (error) { console.warn('loadSubs failed', error); return; }
     state.subs = data || [];
-    // The product is weekly-only now; normalize any legacy daily/instant/off rows.
-    const legacy = state.subs.filter(s => s.cadence !== 'weekly');
-    if (legacy.length) {
-        await Promise.all(legacy.map(s =>
-            supabaseClient.from('subscriptions').update({ cadence: 'weekly' }).eq('id', s.id)));
-        legacy.forEach(s => { s.cadence = 'weekly'; });
+}
+
+function sameFilter(subscription, payload) {
+    const normalized = values => [...(values || [])].sort().join('\u0000');
+    return (subscription.query_text || '').trim().toLowerCase() === (payload.query_text || '').trim().toLowerCase()
+        && normalized(subscription.disciplines) === normalized(payload.disciplines)
+        && normalized(subscription.countries) === normalized(payload.countries)
+        && normalized(subscription.position_types) === normalized(payload.position_types)
+        && Boolean(subscription.hide_aggregators) === Boolean(payload.hide_aggregators);
+}
+
+async function ensureCurrentSearchSaved() {
+    const payload = currentFilterPayload();
+    const existing = state.subs.find(subscription => sameFilter(subscription, payload));
+    if (existing) return { subscription: existing, created: false };
+    const row = {
+        user_id: state.user.id,
+        ...payload,
+        cadence: 'weekly',
+        deliver_email: false,
+        deliver_rss: false,
+    };
+    const { data, error } = await supabaseClient.from('subscriptions').insert(row).select('*').single();
+    if (error) {
+        if (error.code === '23505') {
+            await loadSubs();
+            return { subscription: state.subs.find(subscription => sameFilter(subscription, payload)), created: false };
+        }
+        throw error;
     }
+    state.subs.unshift(data);
+    return { subscription: data, created: true };
 }
 
 async function saveCurrentSearch() {
     if (!state.user) { openAuth('signup'); return; }
-    const payload = currentFilterPayload();
-    const row = {
-        user_id: state.user.id,
-        ...payload,
-        cadence: 'weekly',          // weekly digest only (no per-sub cadence choice)
-        deliver_email: true,
-        deliver_rss: false,
-        last_notified_at: new Date().toISOString(),  // only alert on positions after now
-    };
-    const { error } = await supabaseClient.from('subscriptions').insert(row);
-    if (error) { toast(`Could not save: ${error.message}`); return; }
-    await loadSubs();
+    let result;
+    try { result = await ensureCurrentSearchSaved(); }
+    catch (error) { toast(`Could not save: ${error.message}`); return; }
     renderRailSubs();
     if (state.view === 'subs') renderSubsPage();
-    toast('Subscription saved · weekly email digest', true);
+    toast(result.created ? 'Search saved. Email remains off.' : 'This search is already saved.', true);
+}
+
+async function startWeeklyForCurrentSearch() {
+    if (!state.user) { openAuth('signup'); return; }
+    try {
+        const { subscription } = await ensureCurrentSearchSaved();
+        renderRailSubs();
+        openWeeklyAlertDialog(subscription);
+    } catch (error) { toast(`Could not prepare alert: ${error.message}`); }
+}
+
+function openWeeklyAlertDialog(subscription) {
+    const card = $('#alert-card');
+    card.innerHTML = `
+      <button type="button" class="modal-close" data-close="1" aria-label="Close">${ICON_CLOSE}</button>
+      <div class="modal-head">
+        <h2 id="alert-dialog-title" class="page-heading">Start weekly emails?</h2>
+        <p class="auth-sub">This is separate from saving the search. No email will be sent until you confirm.</p>
+      </div>
+      <div class="auth-body">
+        <dl class="alert-summary">
+          <dt>Filters</dt><dd>${escapeHtml(subLabel(subscription))}</dd>
+          <dt>Recipient</dt><dd>${escapeHtml(state.user.email || '')}</dd>
+          <dt>Frequency</dt><dd>Once a week, on Monday</dd>
+        </dl>
+        <p class="field-help">These are user-requested service messages. You can stop one alert or all weekly emails at any time.</p>
+        <button type="button" class="btn-primary" id="confirm-weekly-alert">Start weekly emails</button>
+        <button type="button" class="btn-ghost" data-close="1">Keep saved without email</button>
+      </div>`;
+    card.querySelectorAll('[data-close]').forEach(button => button.onclick = closeOverlays);
+    $('#confirm-weekly-alert').onclick = () => confirmWeeklyAlert(subscription.id);
+    openDialog($('#modal-alert'), '#confirm-weekly-alert');
+}
+
+async function confirmWeeklyAlert(id) {
+    const now = new Date().toISOString();
+    const button = $('#confirm-weekly-alert');
+    if (button) button.disabled = true;
+    const fields = {
+        deliver_email: true,
+        cadence: 'weekly',
+        email_consent_at: now,
+        email_consent_version: EMAIL_CONSENT_VERSION,
+        unsubscribed_at: null,
+        last_processed_at: now,
+        last_notified_at: now,
+    };
+    const { error } = await supabaseClient.from('subscriptions').update(fields).eq('id', id);
+    if (error) { if (button) button.disabled = false; toast(`Could not start emails: ${error.message}`); return; }
+    const subscription = state.subs.find(item => item.id === id);
+    if (subscription) Object.assign(subscription, fields);
+    closeOverlays();
+    renderRailSubs();
+    if (state.view === 'subs') renderSubsPage();
+    toast('Weekly emails started.', true);
+}
+
+async function pauseWeeklyAlert(id) {
+    await updateSub(id, { deliver_email: false, unsubscribed_at: new Date().toISOString() });
+    toast('Weekly emails stopped. The search is still saved.', true);
 }
 
 async function updateSub(id, fields) {
@@ -1047,10 +1182,14 @@ function setView(v) {
     state.view = v;
     $('#view-feed').classList.toggle('hidden', v !== 'feed');
     $('#view-subs').classList.toggle('hidden', v !== 'subs');
+    $('#view-account').classList.toggle('hidden', v !== 'account');
     $('#view-following').classList.toggle('hidden', v !== 'followlist');
     if (v === 'subs') renderSubsPage();
+    if (v === 'account') renderAccountPage();
     if (v === 'followlist') renderFollowingPage();
     setActiveNav();
+    const route = v === 'subs' ? 'subscriptions' : v === 'account' ? 'account' : v === 'followlist' ? 'following' : 'feed';
+    if (window.location.hash !== `#${route}`) history.replaceState(null, '', `#${route}`);
     window.scrollTo({ top: 0 });
 }
 
@@ -1064,53 +1203,230 @@ function renderSubsPage() {
             ...(s.position_types || []).map(t => `<span class="b b-pos">${escapeHtml(t)}</span>`),
             ...(s.countries || []).map(c => `<span class="b b-country">${escapeHtml(c)}</span>`),
         ].join('') || '<span class="b b-disc-General">all positions</span>';
+        const emailOn = Boolean(s.deliver_email && s.email_consent_at);
         return `<div class="sub-card" data-sub="${escapeHtml(s.id)}">
           <div class="sub-card-head">
-            <div class="sub-card-q"><span class="pre">_</span>${escapeHtml(subLabel(s))}</div>
+            <div class="sub-card-q">${escapeHtml(subLabel(s))}</div>
           </div>
           <div class="sub-card-tags">${tags}</div>
           <div class="sub-delivery">
-            <span class="del-static">Weekly email digest → <span class="em">${escapeHtml(u.email || '')}</span></span>
-            <button class="sub-delete" data-del-sub="${escapeHtml(s.id)}">delete</button>
+            <span class="del-static">${emailOn ? `Weekly email → <span class="em">${escapeHtml(u.email || '')}</span>` : 'Saved search · email off'}</span>
+            ${emailOn
+                ? `<button type="button" class="btn-ghost" data-pause-sub="${escapeHtml(s.id)}">Stop weekly emails</button>`
+                : `<button type="button" class="btn-primary" data-start-sub="${escapeHtml(s.id)}">Email me weekly</button>`}
+            <button type="button" class="sub-delete" data-del-sub="${escapeHtml(s.id)}">Delete search</button>
           </div>
         </div>`;
     }).join('') : `
       <div class="subs-empty">
-        <div class="ee">No subscriptions yet.</div>
-        <button class="btn-primary" id="subs-empty-add">＋ Save your current search</button>
+        <div class="ee">No saved searches yet.</div>
+        <button type="button" class="btn-primary" id="subs-empty-add">Save your current search</button>
       </div>`;
 
     el.innerHTML = `
       <div class="subs-page">
         <div class="subs-hero">
-          <div class="subs-h1"><span class="gt">&gt;</span> _subscriptions</div>
-          <div class="subs-lead">Saved searches re-run as new positions are indexed. New matches are delivered to your inbox as a <b>weekly email digest</b>.</div>
+          <h1 class="subs-h1">Saved searches</h1>
+          <div class="subs-lead">Saving a search does not subscribe you. Weekly email is optional and starts only after a separate confirmation.</div>
         </div>
         <div>
-          <div class="subs-block-title"><span>Saved searches · ${state.subs.length}</span><span class="more" id="subs-add" style="color:var(--primary);cursor:pointer">＋ save current search</span></div>
+          <div class="subs-block-title"><span>Saved searches · ${state.subs.length}</span><button type="button" class="more text-button" id="subs-add">Save current search</button></div>
           ${cards}
         </div>
       </div>`;
 }
 
 /* ───────────────────────── COOKIE BANNER ───────────────────────── */
+async function loadProfile() {
+    if (!state.user) { state.profile = null; return; }
+    const { data, error } = await supabaseClient.from('profiles').select('*').eq('id', state.user.id).maybeSingle();
+    if (error) console.warn('loadProfile failed', error);
+    state.profile = data || { id: state.user.id, email: state.user.email || '', display_name: '', handle: '' };
+}
+
+function renderAccountPage() {
+    const element = $('#view-account');
+    if (!state.user) { element.innerHTML = ''; return; }
+    const profile = state.profile || {};
+    element.innerHTML = `
+      <div class="account-page">
+        <header>
+          <h1 class="page-heading">Account &amp; privacy</h1>
+          <p class="page-lead">Correct your profile, export your data, change optional analytics, or permanently delete the account.</p>
+        </header>
+        <section class="settings-card" aria-labelledby="profile-heading">
+          <h2 id="profile-heading">Profile details</h2>
+          <div class="field"><label for="account-name">Display name</label><input id="account-name" value="${escapeHtml(profile.display_name || '')}" autocomplete="name"></div>
+          <div class="field"><label for="account-handle">Academic handle</label><input id="account-handle" value="${escapeHtml(profile.handle || '')}" autocomplete="username"></div>
+          <div class="field"><label for="account-email">Email</label><input id="account-email" type="email" value="${escapeHtml(state.user.email || profile.email || '')}" autocomplete="email"></div>
+          <p class="field-help">Changing email may require confirmation at both the old and new addresses.</p>
+          <div class="settings-actions"><button type="button" class="btn-primary" id="save-profile">Save corrections</button></div>
+          <p class="form-status" id="profile-status" aria-live="polite"></p>
+        </section>
+        <section class="settings-card" aria-labelledby="data-heading">
+          <h2 id="data-heading">Your data</h2>
+          <p>Download a JSON copy of your profile, follows, topics, and saved searches. PhD Sky does not sell this data or use it to train AI models.</p>
+          <div class="settings-actions">
+            <button type="button" class="btn-ghost" id="export-account">Download JSON export</button>
+            <button type="button" class="btn-ghost" data-cookie-settings>Cookie settings</button>
+          </div>
+        </section>
+        <section class="settings-card danger-card" aria-labelledby="delete-heading">
+          <h2 id="delete-heading">Delete account</h2>
+          <p>This permanently deletes the Auth account and cascades to your profile, follows, topics, and saved searches.</p>
+          <div class="field"><label for="delete-confirm">Type DELETE to confirm</label><input id="delete-confirm" autocomplete="off" spellcheck="false"></div>
+          <div class="settings-actions"><button type="button" class="btn-primary" id="delete-account" disabled>Delete my account permanently</button></div>
+          <p class="form-status" id="delete-status" aria-live="polite"></p>
+        </section>
+      </div>`;
+    $('#save-profile').onclick = saveProfile;
+    $('#export-account').onclick = exportAccountData;
+    const confirmation = $('#delete-confirm');
+    confirmation.oninput = () => { $('#delete-account').disabled = confirmation.value !== 'DELETE'; };
+    $('#delete-account').onclick = deleteOwnAccount;
+    bindCookieSettingsButtons(element);
+}
+
+async function saveProfile() {
+    const button = $('#save-profile');
+    const status = $('#profile-status');
+    button.disabled = true;
+    status.textContent = 'Saving…';
+    const displayName = $('#account-name').value.trim();
+    const handle = $('#account-handle').value.trim();
+    const email = $('#account-email').value.trim();
+    const emailChanged = email && email !== state.user.email;
+    try {
+        const { error: profileError } = await supabaseClient.from('profiles').update({
+            display_name: displayName || null,
+            handle: handle || null,
+        }).eq('id', state.user.id);
+        if (profileError) throw profileError;
+        const authChanges = { data: { ...(state.user.user_metadata || {}), full_name: displayName || null } };
+        if (emailChanged) authChanges.email = email;
+        const { data, error: authError } = await supabaseClient.auth.updateUser(authChanges);
+        if (authError) throw authError;
+        if (data.user) state.user = data.user;
+        await loadProfile();
+        renderTopbar();
+        status.textContent = emailChanged ? 'Saved. Check your email to confirm the address change.' : 'Profile updated.';
+    } catch (error) { status.textContent = `Could not save: ${error.message}`; }
+    finally { button.disabled = false; }
+}
+
+function exportAccountData() {
+    const exportData = {
+        exported_at: new Date().toISOString(),
+        account: { id: state.user.id, email: state.user.email, created_at: state.user.created_at },
+        profile: state.profile,
+        saved_searches: state.subs,
+        followed_accounts: [...state.follows],
+        followed_topics: [...state.topics],
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `phd-sky-account-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    toast('Account export downloaded.', true);
+}
+
+async function deleteOwnAccount() {
+    if ($('#delete-confirm').value !== 'DELETE') return;
+    const button = $('#delete-account');
+    const status = $('#delete-status');
+    button.disabled = true;
+    status.textContent = 'Deleting account…';
+    const { error } = await supabaseClient.rpc('delete_own_account');
+    if (error) {
+        status.textContent = `Could not delete account: ${error.message}`;
+        button.disabled = false;
+        return;
+    }
+    await supabaseClient.auth.signOut({ scope: 'local' });
+    state.user = null; state.profile = null; state.subs = [];
+    state.follows = new Set(); state.topics = new Set();
+    selectStream('all');
+    renderTopbar(); renderRailSubs();
+    toast('Your account and saved data were deleted.', true);
+}
+
+let analyticsLoaded = false;
+
+function loadOptionalAnalytics() {
+    if (analyticsLoaded) return;
+    analyticsLoaded = true;
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+    window.gtag('consent', 'default', {
+        ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied', analytics_storage: 'granted',
+    });
+    window.gtag('js', new Date());
+    window.gtag('config', 'G-B81CELELQD', { anonymize_ip: true });
+    const google = document.createElement('script');
+    google.async = true;
+    google.src = 'https://www.googletagmanager.com/gtag/js?id=G-B81CELELQD';
+    google.dataset.optionalAnalytics = 'google';
+    document.head.appendChild(google);
+
+    window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+    const vercel = document.createElement('script');
+    vercel.defer = true;
+    vercel.src = '/_vercel/insights/script.js';
+    vercel.dataset.optionalAnalytics = 'vercel';
+    document.head.appendChild(vercel);
+}
+
+function withdrawOptionalAnalytics() {
+    if (typeof window.gtag === 'function') window.gtag('consent', 'update', { analytics_storage: 'denied' });
+    document.cookie.split(';').map(value => value.split('=')[0].trim()).filter(name => name.startsWith('_ga')).forEach(name => {
+        document.cookie = `${name}=; Max-Age=0; path=/; SameSite=Lax`;
+        document.cookie = `${name}=; Max-Age=0; path=/; domain=.phdsky.org; SameSite=Lax`;
+    });
+}
+
+function bindCookieSettingsButtons(root = document) {
+    root.querySelectorAll('[data-cookie-settings]').forEach(button => {
+        button.onclick = () => {
+            if (window.CookieConsent) window.CookieConsent.showPreferences();
+        };
+    });
+}
+
 function setupCookieBanner() {
     if (typeof window.CookieConsent === 'undefined') return;
-    const grant = () => { if (typeof window.gtag === 'function') window.gtag('consent', 'update', { analytics_storage: 'granted' }); };
     window.CookieConsent.run({
-        guiOptions: { consentModal: { layout: 'bar', position: 'bottom', equalWeightButtons: false } },
+        cookie: { name: 'phdsky_consent', expiresAfterDays: 182, sameSite: 'Lax' },
+        guiOptions: { consentModal: { layout: 'bar', position: 'bottom', equalWeightButtons: true } },
         categories: { necessary: { enabled: true, readOnly: true }, analytics: {} },
         language: {
             default: 'en',
-            translations: { en: { consentModal: {
-                title: '> Cookies',
-                description: 'We use Google Analytics for visitor stats. No ads, no profiling. <a href="/privacy">Privacy policy</a>.',
-                acceptAllBtn: 'Accept', acceptNecessaryBtn: 'Decline', showPreferencesBtn: ''
-            } } }
+            translations: { en: {
+                consentModal: {
+                    title: 'Optional visitor statistics',
+                    description: 'With your permission, PhD Sky loads Google Analytics and Vercel Analytics to understand aggregate use. There are no ads or profiling. <a href="/privacy">Privacy notice</a>.',
+                    acceptAllBtn: 'Allow analytics', acceptNecessaryBtn: 'Necessary only', showPreferencesBtn: 'Choose settings'
+                },
+                preferencesModal: {
+                    title: 'Cookie settings', acceptAllBtn: 'Allow analytics', acceptNecessaryBtn: 'Necessary only', savePreferencesBtn: 'Save settings', closeIconLabel: 'Close',
+                    sections: [
+                        { title: 'Necessary storage', description: 'Authentication and the phdsky_consent choice are needed for requested features.', linkedCategory: 'necessary' },
+                        { title: 'Optional analytics', description: 'Loads Google Analytics and Vercel Analytics only after consent. You can withdraw consent here at any time.', linkedCategory: 'analytics' },
+                    ],
+                },
+            } }
         },
-        onConsent: ({ cookie }) => { if (cookie.categories.includes('analytics')) grant(); },
-        onChange: ({ cookie }) => { if (cookie.categories.includes('analytics')) grant(); },
+        onConsent: () => window.CookieConsent.acceptedCategory('analytics') ? loadOptionalAnalytics() : withdrawOptionalAnalytics(),
+        onChange: () => window.CookieConsent.acceptedCategory('analytics') ? loadOptionalAnalytics() : withdrawOptionalAnalytics(),
     });
+    bindCookieSettingsButtons();
+    if (new URLSearchParams(window.location.search).get('cookie-settings') === '1') {
+        setTimeout(() => window.CookieConsent.showPreferences(), 0);
+    }
 }
 
 /* ───────────────────────── EVENT WIRING ───────────────────────── */
@@ -1120,9 +1436,11 @@ function selectTab(tab) {                          // 'latest' | 'following' (My
     state.view = 'feed';
     $('#view-feed').classList.remove('hidden');
     $('#view-subs').classList.add('hidden');
+    $('#view-account').classList.add('hidden');
     $('#view-following').classList.add('hidden');
     setActiveNav();
     renderFeedReset();
+    if (window.location.hash !== '#feed') history.replaceState(null, '', '#feed');
     window.scrollTo({ top: 0 });
 }
 function selectStream(stream) {                     // rail / bottom-nav / profile entry
@@ -1139,10 +1457,23 @@ function selectStream(stream) {                     // rail / bottom-nav / profi
     selectTab(stream === 'following' ? 'following' : 'latest');
 }
 
+function routeFromHash() {
+    const route = window.location.hash.replace(/^#/, '');
+    if (route === 'subscriptions') {
+        if (state.user) setView('subs'); else openAuth('signin');
+    } else if (route === 'account') {
+        if (state.user) setView('account'); else openAuth('signin');
+    } else if (route === 'following') {
+        if (state.user) setView('followlist'); else openAuth('signin');
+    } else if (route === 'feed') {
+        selectStream('all');
+    }
+}
+
 function wireEvents() {
     $('#backdrop').onclick = closeOverlays;
     $('#flyout-close').onclick = closeOverlays;
-    $('#mark').onclick = () => { state.search = ''; $('#cmd-input').value = ''; selectStream('all'); window.scrollTo({ top: 0 }); };
+    $('#mark').onclick = event => { event.preventDefault(); state.search = ''; $('#cmd-input').value = ''; selectStream('all'); window.scrollTo({ top: 0 }); };
     $('#clear-filters').onclick = clearFilters;
 
     // command bar / search
@@ -1153,13 +1484,19 @@ function wireEvents() {
         if (e.key === 'Escape') { cmd.value = ''; state.search = ''; renderFeedReset(); cmd.blur(); }
         if (e.key === 'Enter') {
             state.search = cmd.value;
-            if (state.user) saveCurrentSearch();
-            else if (cmd.value.trim()) openAuth('signup');
+            if (state.view !== 'feed') selectStream('all');
+            else renderFeedReset();
+            toast('Search applied. It has not been saved or subscribed.', true);
         }
     });
 
     // hide-aggregator chip
-    $('#chip-hideaggr').onclick = e => { state.hideAggr = !state.hideAggr; e.currentTarget.classList.toggle('on', state.hideAggr); renderFeedReset(); };
+    $('#chip-hideaggr').onclick = e => {
+        state.hideAggr = !state.hideAggr;
+        e.currentTarget.classList.toggle('on', state.hideAggr);
+        e.currentTarget.setAttribute('aria-pressed', String(state.hideAggr));
+        renderFeedReset();
+    };
 
     // close fixed filter dropdowns on scroll (page or rail) so they don't drift
     const closeDropdowns = () => $$('.chip-dropdown.open').forEach(d => d.classList.remove('open'));
@@ -1214,15 +1551,19 @@ function wireEvents() {
             if (el) el.classList.toggle('open');
             return;
         }
+        const detail = e.target.closest('[data-detail]');
         const post = e.target.closest('.post');
-        if (post) openFlyout(post.dataset.id);
+        if (detail && post) openFlyout(post.dataset.id);
     });
 
     // delegated: empty-state clear + close profile menu / filter dropdowns on outside click
     document.addEventListener('click', e => {
         if (e.target.closest('#empty-clear')) { clearFilters(); return; }
         const pm = $('#profile-menu');
-        if (pm && pm.classList.contains('open') && !e.target.closest('.profile-wrap')) pm.classList.remove('open');
+        if (pm && pm.classList.contains('open') && !e.target.closest('.profile-wrap')) {
+            pm.classList.remove('open');
+            const avatar = $('#avatar-btn'); if (avatar) avatar.setAttribute('aria-expanded', 'false');
+        }
         const ddOpen = $$('.chip-dropdown.open');
         if (ddOpen.length && !e.target.closest('.chip-dropdown') && !e.target.closest('.chip-more')) {
             ddOpen.forEach(d => d.classList.remove('open'));
@@ -1232,15 +1573,29 @@ function wireEvents() {
     // subscriptions page interactions (delegated)
     $('#view-subs').addEventListener('click', e => {
         if (e.target.closest('#subs-add') || e.target.closest('#subs-empty-add')) { saveCurrentSearch(); return; }
+        const start = e.target.closest('[data-start-sub]');
+        if (start) { const subscription = state.subs.find(item => item.id === start.dataset.startSub); if (subscription) openWeeklyAlertDialog(subscription); return; }
+        const pause = e.target.closest('[data-pause-sub]');
+        if (pause) { pauseWeeklyAlert(pause.dataset.pauseSub); return; }
         const dsub = e.target.closest('[data-del-sub]');
         if (dsub) { deleteSub(dsub.dataset.delSub); return; }
     });
 
     // keyboard
     document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') closeOverlays();
+        if (e.key === 'Escape') { closeOverlays(); return; }
+        if (e.key === 'Tab' && activeDialog) {
+            const focusable = [...activeDialog.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]')]
+                .filter(element => element.offsetParent !== null);
+            if (!focusable.length) { e.preventDefault(); activeDialog.focus(); return; }
+            const first = focusable[0], last = focusable[focusable.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
         if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); $('#cmd-input').focus(); }
     });
+
+    window.addEventListener('hashchange', routeFromHash);
 }
 
 /* ───────────────────────── INIT ───────────────────────── */
@@ -1258,22 +1613,24 @@ async function setupAuth() {
     try {
         const { data } = await supabaseClient.auth.getSession();
         state.user = data.session ? data.session.user : null;
-        if (state.user) { await loadFollows(); await loadSubs(); }
+        if (state.user) { await Promise.all([loadFollows(), loadSubs(), loadProfile()]); }
     } catch (e) { console.warn('auth session load failed', e); }
     renderTopbar();
     renderRailSubs();
     refreshFollowUI();
+    routeFromHash();
     supabaseClient.auth.onAuthStateChange(async (_event, session) => {
         const wasUser = !!state.user;
         state.user = session ? session.user : null;
-        if (state.user) { await loadFollows(); await loadSubs(); }
+        if (state.user) { await Promise.all([loadFollows(), loadSubs(), loadProfile()]); }
         else {
-            state.follows = new Set(); state.topics = new Set(); state.subs = [];
+            state.follows = new Set(); state.topics = new Set(); state.subs = []; state.profile = null;
             if (wasUser) selectStream('all');   // following/subs need auth → back to Latest
         }
         renderTopbar();
         renderRailSubs();
         refreshFollowUI();
+        if (state.user) routeFromHash();
     });
 }
 
@@ -1287,7 +1644,8 @@ function refreshFollowUI() {
         $$('[data-follow]').forEach(b => {
             const on = state.follows.has(b.dataset.follow);
             b.classList.toggle('on', on);
-            b.textContent = on ? 'following' : '+ follow';
+            b.setAttribute('aria-pressed', String(on));
+            b.textContent = on ? 'Following' : 'Follow';
         });
     }
 }

@@ -19,6 +19,8 @@ Aggregate PhD and academic position announcements from multiple sources into a u
 - **4-stage persistent pipeline** - Supabase runs use checkpointed stages (fetch → filter → dedup → publish); a crash mid-filter resumes from the last unprocessed post on the next run
 - **Telegram channel** - Auto-posts Biology + CS positions (bioinformatics)
 - **Bluesky repost bot** - Quote-posts non-aggregator positions from a dedicated account, tagged with level, country, and subjects
+- **Accounts and saved searches** - Supabase-authenticated profiles, follows, exports, correction, and account deletion
+- **Explicit weekly alerts** - Saving a search never starts email; each weekly alert requires a separate confirmation
 - **GitHub Actions** - Automated daily updates
 
 ## Setup
@@ -47,6 +49,13 @@ MISTRAL_API_KEY=your-mistral-api-key
 # Optional - Supabase storage
 SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_KEY=your-anon-key
+
+# Weekly saved-search email service (server/Actions only)
+SUPABASE_SERVICE_KEY=your-service-role-key
+RESEND_API_KEY=your-resend-key
+EMAIL_FROM=PhD Sky <alerts@phdsky.org>
+# Vercel unsubscribe function (the anon key is public, never use the service key here)
+SUPABASE_ANON_KEY=your-anon-key
 
 # Optional - Telegram channel
 TELEGRAM_BOT_TOKEN=your-bot-token
@@ -197,7 +206,7 @@ UPDATE phd_positions SET reposted_to_bluesky_at = NOW() WHERE reposted_to_bluesk
 
 ## GitHub Actions
 
-Two workflows run on cron:
+Four workflows run on cron:
 
 - **`scheduled-search.yml`** — ingests new Bluesky posts and regenerates the
   static frontend snapshot. Runs **4×/day** (07:00, 13:00, 19:00, 01:00 UTC)
@@ -210,6 +219,8 @@ Two workflows run on cron:
   `reposted_to_bluesky_at IS NULL` from a dedicated account, tagged with level,
   country, and subjects. Runs **every 6h**. Uses the same `BLUESKY_HANDLE`/
   `BLUESKY_PASSWORD` account as search (which excludes its own reposts).
+- **`subscription-digests.yml`** — sends explicitly confirmed saved-search
+  alerts every Monday at 09:00 UTC. It has no instant or daily mode.
 
 To enable:
 
@@ -218,7 +229,9 @@ To enable:
 3. Add secrets: `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`, `NVIDIA_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`
 4. (Optional) Add `MISTRAL_API_KEY` for LLM fallback when NVIDIA is rate limited
 5. (Optional) Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHANNEL_ID` for Telegram posting
-6. The workflows run automatically or can be triggered manually from the Actions tab
+6. For weekly alerts, add `SUPABASE_SERVICE_KEY`, `RESEND_API_KEY`, and a verified
+   `EMAIL_FROM` as GitHub Actions secrets. Do not place privileged keys in Variables.
+7. The workflows run automatically or can be triggered manually from the Actions tab
 
 ## Telegram Channel
 
@@ -262,12 +275,18 @@ The browse-positions site is at **<https://phdsky.org/>** (Vercel, served from
 (`eydlinilya.github.io/BlueSky-PhD-jobs/`) now serves a 0-second redirect to
 `phdsky.org` from the `gh-pages` branch.
 
-The UI is a Twitter/Bluesky-style **feed**: a chronological river of positions
-with day separators and infinite scroll, a left rail of filter chips
+The UI uses a light **Research Library** identity: a chronological river of positions
+with editorial source rules, day separators and infinite scroll, a left rail of filter chips
 (Level / Country / Area + "Hide aggregator reposts"), a command/search bar, and a
-post-detail flyout. Plain HTML + CSS + vanilla JS, no build step. Data loads from
+post-detail flyout. Literata, Atkinson Hyperlegible, IBM Plex Mono, Supabase JS,
+and CookieConsent are served locally. Plain HTML + CSS + vanilla JS, no build step. Data loads from
 an embedded snapshot → `positions.json` → live Supabase. Open it locally with
 `python -m http.server --directory docs` (add `?mock` to use bundled sample data).
+
+Accounts expose profile correction, JSON export, cookie settings, subscriptions,
+and typed-confirmation deletion at `/#account`. Optional GA4 and Vercel Analytics
+scripts are inserted only after affirmative analytics consent stored in
+`phdsky_consent`; consent can be withdrawn from the persistent Cookie settings control.
 
 ### Setup
 
@@ -278,6 +297,19 @@ an embedded snapshot → `positions.json` → live Supabase. Open it locally wit
    ```
 
 2. **Update `docs/app.js`** with your Supabase anon key.
+
+3. **For accounts and weekly alerts**, apply the SQL files in `migrations/` in
+   numeric order. The current schema provides weekly-only explicit consent,
+   token-scoped unsubscribe, and self-service account deletion.
+
+4. **Configure unsubscribe on Vercel** with `SUPABASE_URL` and
+   `SUPABASE_ANON_KEY`. `GET /api/unsubscribe` is inert; RFC 8058 one-click
+   requests use `POST`. The human `/unsubscribe?token=…` page requires an
+   explicit choice before changing either one alert or all weekly email.
+
+5. **Configure email** with `SUPABASE_SERVICE_KEY`, `RESEND_API_KEY`, and a
+   verified `EMAIL_FROM`. Test SPF, DKIM, DMARC, HTML/plain-text bodies, and both
+   unsubscribe scopes before enabling the weekly workflow.
 
 ## Maintenance
 

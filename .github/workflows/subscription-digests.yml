@@ -1,23 +1,11 @@
-name: Subscription Digests
+name: Weekly Subscription Digests
 
-# Emails saved-search subscription digests. Per-user, decoupled from ingest.
-# Daily digests in the morning, weekly on Monday, and an hourly "instant" batch.
-# Idempotent: advances each subscription's last_notified_at only after a
-# successful send (see scripts/send_subscription_digests.py).
-
+# Explicitly requested saved-search alerts. A failed send advances neither the
+# processing nor notification watermark, so it is safe to retry next week.
 on:
   workflow_dispatch:
-    inputs:
-      cadence:
-        description: "Cadence bucket to send"
-        required: true
-        default: daily
-        type: choice
-        options: [instant, daily, weekly]
   schedule:
-    - cron: "0 6 * * *"   # 08:00 UTC — daily digest
-    - cron: "0 7 * * 1"   # Monday 09:00 UTC — weekly digest
-    - cron: "5 * * * *"   # hourly — "instant" batch
+    - cron: "0 9 * * 1" # Monday 09:00 UTC
 
 permissions:
   contents: read
@@ -32,40 +20,16 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: pip install -e .
 
-      - name: Determine cadence
-        id: cadence
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "value=${{ github.event.inputs.cadence }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event.schedule }}" = "0 7 * * 1" ]; then
-            echo "value=weekly" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event.schedule }}" = "5 * * * *" ]; then
-            echo "value=instant" >> "$GITHUB_OUTPUT"
-          else
-            echo "value=daily" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Send subscription digests
-        run: python scripts/send_subscription_digests.py --cadence "${{ steps.cadence.outputs.value }}"
+      - name: Send weekly subscription digests
+        run: python scripts/send_subscription_digests.py
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          # Digest needs an RLS-bypassing key. Prefer a dedicated SUPABASE_SERVICE_KEY
-          # if set, else reuse the existing privileged SUPABASE_KEY (the script falls
-          # back to SUPABASE_KEY). Do NOT use the publishable key here — RLS would
-          # hide other users' subscriptions.
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || vars.SUPABASE_SERVICE_KEY }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || vars.SUPABASE_KEY }}
-          # Secrets and Variables are separate stores: `secrets.X` is empty when
-          # X was added under the Variables tab. Accept either so a misplaced
-          # entry doesn't silently disable sending. Keys belong in Secrets — a
-          # Variable is stored and displayed in plaintext.
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY || vars.RESEND_API_KEY }}
-          EMAIL_FROM: ${{ secrets.EMAIL_FROM || vars.EMAIL_FROM }}
-          EMAIL_PROVIDER: ${{ secrets.EMAIL_PROVIDER || vars.EMAIL_PROVIDER || 'resend' }}
-          # Physical postal address shown in the email footer (CAN-SPAM).
-          MAILING_ADDRESS: ${{ secrets.MAILING_ADDRESS || vars.MAILING_ADDRESS }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          EMAIL_PROVIDER: resend
