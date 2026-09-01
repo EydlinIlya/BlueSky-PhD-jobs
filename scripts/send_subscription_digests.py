@@ -1,8 +1,20 @@
-"""Send explicitly requested weekly saved-search alerts.
+"""Send saved-search subscription digests by email.
 
-The job reads only subscriptions with current email consent. Successful scans
-advance ``last_processed_at`` even when there are no matches. Failed sends
-advance neither processing nor notification watermarks.
+Standalone cron job (mirrors scripts/post_to_telegram.py). For each due
+subscription it finds newly-indexed positions matching the saved filter, emails
+the user a digest, and advances the subscription's ``last_notified_at`` watermark
+so the same position is never emailed twice. Idempotent on failure: if the email
+send fails, the watermark is not advanced and the next run retries.
+
+Usage:
+    python scripts/send_subscription_digests.py --cadence daily
+    python scripts/send_subscription_digests.py --cadence weekly
+    python scripts/send_subscription_digests.py --cadence instant   # hourly batch
+
+Required env:
+    SUPABASE_URL
+    SUPABASE_SERVICE_KEY   service-role key (bypasses RLS to read all users' subs)
+    RESEND_API_KEY, EMAIL_FROM   (see src/email/resend_provider.py)
 """
 
 from __future__ import annotations
@@ -12,8 +24,8 @@ import html
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlencode
 
 from dotenv import load_dotenv
 from supabase import create_client
@@ -23,26 +35,19 @@ from src.email import send_email  # noqa: E402
 
 load_dotenv()
 
-SITE_URL = os.environ.get("SITE_BASE_URL", "https://phdsky.org/").rstrip("/") + "/"
+SITE_URL = os.environ.get("SITE_BASE_URL", "https://phdsky.org/")
 MAX_POSITIONS_PER_DIGEST = 40
-EMAIL_CONSENT_VERSION = "weekly-alert-v1"
-OPERATOR_LINE = "PhD Sky · operated by Eli Eydlin in Israel"
-CONTACT_EMAIL = "eli.eydlin@gmail.com"
+
+# CAN-SPAM requires a valid physical postal address in every digest. Set the
+# real address via env in production; the placeholder makes the gap obvious.
+POSTAL_ADDRESS = os.environ.get("MAILING_ADDRESS", "[Your mailing address — set MAILING_ADDRESS]")
+# mailto fallback for List-Unsubscribe (works even if the URL flow is down).
+UNSUB_MAILTO = os.environ.get("UNSUB_MAILTO", "eli.eydlin@gmail.com")
 
 
-def human_unsubscribe_url(sub: dict, site_url: str = SITE_URL) -> str:
-    token = str(sub.get("unsubscribe_token") or "")
-    return f"{site_url.rstrip('/')}/unsubscribe?{urlencode({'token': token})}"
-
-
-def machine_unsubscribe_url(sub: dict, site_url: str = SITE_URL) -> str:
-    token = str(sub.get("unsubscribe_token") or "")
-    return f"{site_url.rstrip('/')}/api/unsubscribe?{urlencode({'token': token})}"
-
-
-# Backward-compatible name used by older tests and integrations: this is the
-# human confirmation page, never the mutating endpoint.
-unsubscribe_url = human_unsubscribe_url
+def unsubscribe_url(sub: dict, site_url: str = SITE_URL) -> str:
+    """One-click unsubscribe link carrying the subscription's secret token."""
+    return f"{site_url}unsubscribe?token={sub.get('unsubscribe_token', '')}"
 
 _AGGREGATORS_FILE = Path(__file__).resolve().parent.parent / "docs" / "aggregators.json"
 try:
@@ -51,51 +56,55 @@ except (FileNotFoundError, json.JSONDecodeError):
     AGGREGATORS = set()
 
 
+# ── Pure helpers (unit-tested in tests/test_digest.py) ──────────────────────
+
 def position_matches(sub: dict, pos: dict) -> bool:
-    """Return whether a position matches an AND-across/OR-within saved filter."""
+    """True if a position matches a subscription's saved filter.
+
+    Array filters (disciplines/countries/position_types) are OR-within and
+    AND-across; an empty array means "no constraint". ``query_text`` is a
+    case-insensitive substring over message/handle/country/disciplines/types.
+    """
     if sub.get("hide_aggregators") and pos.get("user_handle") in AGGREGATORS:
         return False
 
-    disciplines = set(pos.get("disciplines") or [])
-    position_types = set(pos.get("position_type") or [])
+    discs = set(pos.get("disciplines") or [])
+    types = set(pos.get("position_type") or [])
     country = pos.get("country")
-    wanted_disciplines = set(sub.get("disciplines") or [])
-    wanted_countries = set(sub.get("countries") or [])
-    wanted_types = set(sub.get("position_types") or [])
 
-    if wanted_disciplines and not wanted_disciplines.intersection(disciplines):
+    want_disc = set(sub.get("disciplines") or [])
+    if want_disc and not (want_disc & discs):
         return False
-    if wanted_countries and country not in wanted_countries:
+    want_country = set(sub.get("countries") or [])
+    if want_country and country not in want_country:
         return False
-    if wanted_types and not wanted_types.intersection(position_types):
+    want_type = set(sub.get("position_types") or [])
+    if want_type and not (want_type & types):
         return False
 
-    query = (sub.get("query_text") or "").strip().casefold()
-    if query:
-        haystack = " ".join([
+    q = (sub.get("query_text") or "").strip().lower()
+    if q:
+        hay = " ".join([
             pos.get("message") or "",
             pos.get("user_handle") or "",
             country or "",
             " ".join(pos.get("disciplines") or []),
             " ".join(pos.get("position_type") or []),
-        ]).casefold()
-        if query not in haystack:
+        ]).lower()
+        if q not in hay:
             return False
     return True
 
 
 def subscription_label(sub: dict) -> str:
+    """Human-readable summary of a subscription's filter, for subject lines."""
     parts = []
-    parts.extend(sub.get("disciplines") or [])
-    parts.extend(sub.get("position_types") or [])
-    parts.extend(sub.get("countries") or [])
+    parts += list(sub.get("disciplines") or [])
+    parts += list(sub.get("position_types") or [])
+    parts += list(sub.get("countries") or [])
     if sub.get("query_text"):
-        parts.append(f'“{sub["query_text"]}”')
-    return " · ".join(str(part) for part in parts) if parts else "all positions"
-
-
-def _display_rows(positions: list[dict]) -> list[dict]:
-    return positions[:MAX_POSITIONS_PER_DIGEST]
+        parts.append(f'"{sub["query_text"]}"')
+    return " · ".join(parts) if parts else "all positions"
 
 
 def format_digest_html(
@@ -104,258 +113,239 @@ def format_digest_html(
     site_url: str = SITE_URL,
     unsub_url: str | None = None,
 ) -> str:
-    """Render a light, email-client-safe HTML alternative with escaped data."""
+    """Render the digest email body (simple, email-client-safe inline styles).
+
+    Only the newest MAX_POSITIONS_PER_DIGEST are listed. The overflow is stated
+    explicitly rather than dropped silently — the watermark advances past every
+    match, so anything not named here is never emailed again.
+    """
     label = html.escape(subscription_label(sub))
-    unsub_url = unsub_url or human_unsubscribe_url(sub, site_url)
-    manage_url = f"{site_url.rstrip('/')}/#subscriptions"
-    browse_url = f"{site_url.rstrip('/')}/positions"
+    unsub_url = unsub_url or unsubscribe_url(sub, site_url)
     rows = []
-    for position in _display_rows(positions):
-        title = " / ".join(str(v) for v in (position.get("position_type") or [])) or "PhD position"
-        disciplines = ", ".join(str(v) for v in (position.get("disciplines") or []))
-        country = str(position.get("country") or "")
-        metadata = " · ".join(v for v in (disciplines, country) if v and v != "Unknown")
-        message = str(position.get("message") or "")[:280]
-        url = str(position.get("url") or site_url)
+    for p in positions[:MAX_POSITIONS_PER_DIGEST]:
+        title = " / ".join(p.get("position_type") or []) or "Position"
+        disc = ", ".join(p.get("disciplines") or [])
+        country = p.get("country") or ""
+        meta = " · ".join([x for x in (disc, country) if x and x != "Unknown"])
+        msg = (p.get("message") or "")[:280]
+        url = p.get("url") or site_url
         rows.append(
-            '<div style="padding:18px 0;border-top:2px solid #18594A">'
-            f'<div style="font:700 16px Georgia,serif;color:#18201D">{html.escape(title)}</div>'
-            f'<div style="font:12px ui-monospace,monospace;color:#55625C;margin:5px 0 9px">{html.escape(metadata)}</div>'
-            f'<div style="font:15px Arial,sans-serif;color:#18201D;line-height:1.55;margin-bottom:9px">{html.escape(message)}</div>'
-            f'<a href="{html.escape(url, quote=True)}" style="font:700 14px Arial,sans-serif;color:#18594A">View source</a>'
-            '</div>'
+            f'<div style="padding:14px 0;border-bottom:1px solid #334155">'
+            f'<div style="font:600 14px sans-serif;color:#e2e8f0">{html.escape(title)}'
+            f'{(" — " + html.escape(meta)) if meta else ""}</div>'
+            f'<div style="font:13px sans-serif;color:#a8b8c8;margin:6px 0;line-height:1.5">{html.escape(msg)}</div>'
+            f'<a href="{html.escape(url)}" style="font:12px sans-serif;color:#3b82f6">View position →</a>'
+            f'</div>'
         )
-
-    count = len(positions)
-    overflow = max(0, count - MAX_POSITIONS_PER_DIGEST)
-    overflow_note = ""
-    if overflow:
-        overflow_note = (
-            '<p style="font:14px Arial,sans-serif;color:#55625C">'
-            f'Showing the {MAX_POSITIONS_PER_DIGEST} newest matches. '
-            f'<a href="{html.escape(browse_url, quote=True)}" style="color:#18594A">Browse {overflow} more on PhD Sky</a>.</p>'
-        )
-
+    n = len(positions)
+    overflow = max(0, n - MAX_POSITIONS_PER_DIGEST)
+    shown_note = (
+        f'<div style="font:13px sans-serif;color:#a8b8c8;margin:4px 0 18px">'
+        f'Showing the {MAX_POSITIONS_PER_DIGEST} most recent. '
+        f'<a href="{html.escape(site_url)}positions" style="color:#3b82f6">'
+        f'Browse the other {overflow} on PhD Sky →</a></div>'
+    ) if overflow else ""
     return (
-        '<div style="margin:0;background:#F3F5F2;padding:28px 14px">'
-        '<div style="max-width:640px;margin:0 auto;background:#FFFFFF;border:1px solid #C8D0CB;padding:28px">'
-        '<div style="font:700 24px Georgia,serif;color:#18201D">PhD Sky</div>'
-        '<div style="width:54px;border-top:4px solid #B54632;margin:10px 0 20px"></div>'
-        f'<p style="font:16px Arial,sans-serif;color:#18201D;line-height:1.5">{count} new position{"s" if count != 1 else ""} matching <strong>{label}</strong>.</p>'
-        f'{overflow_note}{"".join(rows)}'
-        '<div style="border-top:1px solid #C8D0CB;margin-top:18px;padding-top:18px;font:13px Arial,sans-serif;color:#55625C;line-height:1.6">'
-        'You are receiving this non-promotional service message because you explicitly requested a weekly alert. '
-        f'<a href="{html.escape(unsub_url, quote=True)}" style="color:#18594A">Unsubscribe this alert</a> or '
-        f'<a href="{html.escape(manage_url, quote=True)}" style="color:#18594A">manage weekly alerts</a>.'
-        f'<br>{OPERATOR_LINE}<br><a href="mailto:{CONTACT_EMAIL}" style="color:#18594A">{CONTACT_EMAIL}</a>'
-        '</div></div></div>'
+        f'<div style="max-width:640px;margin:0 auto;background:#0f172a;padding:24px;border-radius:10px">'
+        f'<div style="font:700 18px monospace;color:#e2e8f0">&gt; PhD_Positions</div>'
+        f'<div style="font:13px sans-serif;color:#a8b8c8;margin:8px 0 18px">'
+        f'{n} new position{"s" if n != 1 else ""} matching <b style="color:#e2e8f0">{label}</b></div>'
+        f'{shown_note}'
+        f'{"".join(rows)}'
+        f'<div style="font:12px sans-serif;color:#64748b;margin-top:20px;line-height:1.6">'
+        f'You receive this because you created this saved search on '
+        f'<a href="{html.escape(site_url)}" style="color:#3b82f6">PhD Sky</a>. '
+        f'<a href="{html.escape(unsub_url)}" style="color:#3b82f6">Unsubscribe</a> from these emails, '
+        f'or <a href="{html.escape(site_url)}account" style="color:#3b82f6">manage your subscriptions</a>.'
+        f'<br>PhD Sky · {html.escape(POSTAL_ADDRESS)}'
+        f'</div>'
+        f'</div>'
     )
 
 
-def format_digest_text(
-    sub: dict,
-    positions: list[dict],
-    site_url: str = SITE_URL,
-    unsub_url: str | None = None,
-) -> str:
-    """Render the same digest as a readable plain-text alternative."""
-    unsub_url = unsub_url or human_unsubscribe_url(sub, site_url)
-    lines = [
-        "PhD Sky",
-        "=======",
-        f"{len(positions)} new position{'s' if len(positions) != 1 else ''} matching {subscription_label(sub)}.",
-        "",
-    ]
-    for position in _display_rows(positions):
-        title = " / ".join(str(v) for v in (position.get("position_type") or [])) or "PhD position"
-        metadata = " · ".join(v for v in [
-            ", ".join(str(d) for d in (position.get("disciplines") or [])),
-            str(position.get("country") or ""),
-        ] if v and v != "Unknown")
-        lines.extend([
-            title,
-            metadata,
-            str(position.get("message") or "")[:280],
-            str(position.get("url") or site_url),
-            "",
-        ])
-    overflow = len(positions) - MAX_POSITIONS_PER_DIGEST
-    if overflow > 0:
-        lines.extend([f"Browse {overflow} more: {site_url.rstrip('/')}/positions", ""])
-    lines.extend([
-        "You requested this weekly, non-promotional saved-search alert.",
-        f"Unsubscribe this alert: {unsub_url}",
-        f"Manage weekly alerts: {site_url.rstrip('/')}/#subscriptions",
-        "",
-        OPERATOR_LINE,
-        CONTACT_EMAIL,
-    ])
-    return "\n".join(lines)
-
+# ── DB / orchestration ──────────────────────────────────────────────────────
 
 def get_client():
     url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_KEY")
+    key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")
     if not url or not key:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_KEY are required")
+        print("Missing SUPABASE_URL / SUPABASE_SERVICE_KEY", file=sys.stderr)
+        sys.exit(1)
     return create_client(url, key)
 
 
 def fetch_candidate_positions(client, since: str | None) -> list[dict]:
-    page_size = 1000
-    output, start = [], 0
+    """Verified canonical positions newer than ``since`` (paginated)."""
+    PAGE = 1000
+    out, frm = [], 0
     while True:
-        query = (client.table("phd_positions")
-                 .select("uri, created_at, disciplines, country, position_type, user_handle, message, url")
-                 .eq("is_verified_job", True)
-                 .is_("duplicate_of", "null")
-                 .order("created_at", desc=True))
+        q = (client.table("phd_positions")
+             .select("uri, created_at, disciplines, country, position_type, user_handle, message, url")
+             .eq("is_verified_job", True)
+             .is_("duplicate_of", "null")
+             .order("created_at", desc=True))
         if since:
-            query = query.gt("created_at", since)
-        page = query.range(start, start + page_size - 1).execute().data or []
-        output.extend(page)
-        if len(page) < page_size:
+            q = q.gt("created_at", since)
+        data = q.range(frm, frm + PAGE - 1).execute().data or []
+        out += data
+        if len(data) < PAGE:
             break
-        start += page_size
-    return output
+        frm += PAGE
+    return out
 
 
 def user_email(client, user_id: str) -> str | None:
-    rows = client.table("profiles").select("email").eq("id", user_id).limit(1).execute().data or []
-    return rows[0].get("email") if rows else None
+    rows = client.table("profiles").select("email").eq("id", user_id).limit(1).execute().data
+    return (rows[0].get("email") if rows else None)
 
 
 def subscription_watermark(sub: dict) -> str | None:
-    return sub.get("last_processed_at") or sub.get("created_at")
+    """The 'new since' point for a subscription.
+
+    Falls back to the row's creation time when ``last_notified_at`` is unset, so
+    a never-notified subscription reports positions indexed since it was created
+    rather than the entire archive.
+    """
+    return sub.get("last_notified_at") or sub.get("created_at")
 
 
-def fetch_due_subscriptions(client, cadence: str = "weekly") -> list[dict]:
-    if cadence != "weekly":
-        return []
-    page_size = 1000
-    output, start = [], 0
+def fetch_due_subscriptions(client, cadence: str) -> list[dict]:
+    """All email subscriptions in this cadence bucket (paginated).
+
+    PostgREST caps an unbounded select at 1000 rows, which would silently skip
+    subscribers past that point.
+    """
+    PAGE = 1000
+    out, frm = [], 0
     while True:
-        page = (client.table("subscriptions")
+        data = (client.table("subscriptions")
                 .select("*")
-                .eq("cadence", "weekly")
+                .eq("cadence", cadence)
                 .eq("deliver_email", True)
                 .order("created_at")
-                .range(start, start + page_size - 1)
+                .range(frm, frm + PAGE - 1)
                 .execute().data or [])
-        output.extend(sub for sub in page if sub.get("email_consent_at"))
-        if len(page) < page_size:
+        out += data
+        if len(data) < PAGE:
             break
-        start += page_size
-    return output
+        frm += PAGE
+    return out
 
 
-def _unsubscribe_headers(sub: dict) -> dict[str, str]:
-    machine_url = machine_unsubscribe_url(sub)
-    return {
-        "List-Unsubscribe": f"<{machine_url}>",
-        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-    }
-
-
-def run(cadence: str = "weekly") -> int:
-    if cadence != "weekly":
-        raise ValueError("Weekly is the only supported email cadence")
-    blocking, _ = check_email_config()
-    if blocking:
-        for problem in blocking:
-            print(f"ERROR: {problem}", file=sys.stderr)
-        return 0
-
+def run(cadence: str) -> int:
     client = get_client()
-    subscriptions = fetch_due_subscriptions(client)
-    if not subscriptions:
-        print("No consented weekly email subscriptions due.")
-        return 0
-    if any(not sub.get("unsubscribe_token") for sub in subscriptions):
-        print("ABORT: migration 008 is required before sending weekly alerts.", file=sys.stderr)
+    subs = fetch_due_subscriptions(client, cadence)
+    if not subs:
+        print(f"No '{cadence}' email subscriptions due.")
         return 0
 
-    watermarks = [subscription_watermark(sub) for sub in subscriptions]
-    oldest = min(watermarks) if all(watermarks) else None
+    # Fetch once across all subs using the oldest watermark, then filter per-sub.
+    watermarks = [w for w in (subscription_watermark(s) for s in subs) if w]
+    oldest = min(watermarks) if len(watermarks) == len(subs) else None
     candidates = fetch_candidate_positions(client, oldest)
-    print(f"{len(subscriptions)} subscription(s), {len(candidates)} candidate position(s)")
+    print(f"{len(subs)} subscription(s), {len(candidates)} candidate position(s)")
+
+    # Refuse to send without a working unsubscribe link. Commercial email needs
+    # one (CAN-SPAM / ePrivacy), and Gmail + Yahoo bulk-sender rules require
+    # one-click List-Unsubscribe or they start binning the mail. A missing token
+    # means migrations/007_unsubscribe_token.sql hasn't been applied.
+    if not any(s.get("unsubscribe_token") for s in subs):
+        print("ABORT: no subscription has an unsubscribe_token — apply "
+              "migrations/007_unsubscribe_token.sql in the Supabase SQL editor. "
+              "Refusing to send mail with a dead unsubscribe link.", file=sys.stderr)
+        return 0
 
     sent = 0
-    for sub in subscriptions:
-        watermark = subscription_watermark(sub)
-        pool = [position for position in candidates if not watermark or position["created_at"] > watermark]
-        if not pool:
+    for sub in subs:
+        if not sub.get("unsubscribe_token"):
+            print(f"  sub {sub['id']}: no unsubscribe_token, skipping")
             continue
-        newest_processed = max(position["created_at"] for position in pool)
-        matches = [position for position in pool if position_matches(sub, position)]
+        wm = subscription_watermark(sub)
+        pool = [p for p in candidates if (not wm or p["created_at"] > wm)]
+        matches = [p for p in pool if position_matches(sub, p)]
         if not matches:
-            client.table("subscriptions").update(
-                {"last_processed_at": newest_processed}
-            ).eq("id", sub["id"]).execute()
-            print(f"  sub {sub['id']}: no matches; processing watermark advanced")
             continue
-
-        recipient = user_email(client, sub["user_id"])
-        if not recipient:
-            print(f"  sub {sub['id']}: no current account email; retrying next week")
+        email = user_email(client, sub["user_id"])
+        if not email:
+            print(f"  sub {sub['id']}: no email on profile, skipping")
             continue
         subject = f"{len(matches)} new: {subscription_label(sub)}"[:120]
-        human_url = human_unsubscribe_url(sub)
-        html_body = format_digest_html(sub, matches, unsub_url=human_url)
-        text_body = format_digest_text(sub, matches, unsub_url=human_url)
-        if send_email(
-            recipient,
-            subject,
-            html_body,
-            text=text_body,
-            headers=_unsubscribe_headers(sub),
-        ):
-            newest_notified = max(position["created_at"] for position in matches)
-            client.table("subscriptions").update({
-                "last_processed_at": newest_processed,
-                "last_notified_at": newest_notified,
-            }).eq("id", sub["id"]).execute()
+        unsub = unsubscribe_url(sub)
+        body = format_digest_html(sub, matches, unsub_url=unsub)
+        # List-Unsubscribe lets mail clients surface a native unsubscribe button.
+        # (URL flow + mailto fallback; the URL is handled by docs/unsubscribe.html.)
+        unsub_headers = {
+            "List-Unsubscribe": f"<{unsub}>, <mailto:{UNSUB_MAILTO}?subject=unsubscribe>",
+        }
+        if send_email(email, subject, body, headers=unsub_headers):
+            # Advances past every match, including any beyond the display cap —
+            # those are disclosed in the email body with a link to the site.
+            newest = max(p["created_at"] for p in matches)
+            client.table("subscriptions").update(
+                {"last_notified_at": newest}).eq("id", sub["id"]).execute()
             sent += 1
-            print(f"  sub {sub['id']}: emailed {len(matches)} to {recipient}")
+            capped = len(matches) - MAX_POSITIONS_PER_DIGEST
+            note = f" ({capped} over the display cap, linked not listed)" if capped > 0 else ""
+            print(f"  sub {sub['id']}: emailed {len(matches)} to {email}{note}")
         else:
-            print(f"  sub {sub['id']}: send failed; watermarks unchanged")
+            print(f"  sub {sub['id']}: send failed, watermark unchanged (will retry)")
     print(f"Done. Sent {sent} digest(s).")
     return sent
 
 
+# ── Test send ───────────────────────────────────────────────────────────────
+# Deliberately a separate function rather than a flag threaded through run().
+# There is no code path here that can reach a real subscriber's address or write
+# to the database, so a mistyped argument cannot mail your users or burn their
+# watermarks.
+
 TEST_BANNER = (
     '<div style="max-width:640px;margin:0 auto 10px;padding:10px 14px;'
-    'background:#FFF7E8;border:1px solid #B54632;font:13px Arial,sans-serif;color:#18201D">'
-    '<strong>TEST SEND</strong> — no subscriber was contacted and no watermark was changed.</div>'
+    'background:#422006;border:1px solid #a16207;border-radius:8px;'
+    'font:12px sans-serif;color:#fde68a">'
+    '<b>TEST SEND</b> — delivery/formatting check. Not sent to any subscriber, '
+    'and no subscription watermark was changed.</div>'
 )
 
 
 def check_email_config() -> tuple[list[str], list[str]]:
-    blocking = []
-    if not os.environ.get("SUPABASE_URL"):
-        blocking.append("SUPABASE_URL is required")
-    if not os.environ.get("SUPABASE_SERVICE_KEY"):
-        blocking.append("SUPABASE_SERVICE_KEY is required; no public-key fallback is allowed")
-    if not os.environ.get("RESEND_API_KEY"):
-        blocking.append("RESEND_API_KEY is required")
-    sender = os.environ.get("EMAIL_FROM") or ""
-    if not sender:
-        blocking.append("EMAIL_FROM is required and must use a verified sending domain")
-    elif "onboarding@resend.dev" in sender.casefold():
-        blocking.append("EMAIL_FROM must use the verified PhD Sky sending domain")
-    return blocking, []
+    """Inspect the email env. Returns (blocking, warnings).
+
+    In GitHub Actions, Secrets and Variables are separate stores — ``secrets.X``
+    resolves to an empty string when X was added under the Variables tab, which
+    surfaces only as "not set". Naming the missing value beats a generic failure.
+    """
+    provider = (os.environ.get("EMAIL_PROVIDER") or "resend").lower()
+    blocking, warnings = [], []
+    if provider == "resend" and not os.environ.get("RESEND_API_KEY"):
+        blocking.append("RESEND_API_KEY is empty — nothing can be sent")
+    if not os.environ.get("EMAIL_FROM"):
+        warnings.append("EMAIL_FROM is empty — falling back to Resend's shared "
+                        "test domain, which is not your verified sender")
+    if not os.environ.get("MAILING_ADDRESS"):
+        warnings.append("MAILING_ADDRESS is empty — the CAN-SPAM footer will "
+                        "render a literal placeholder")
+    return blocking, warnings
 
 
 def report_email_config() -> bool:
+    """Print config problems. False when sending cannot proceed."""
     blocking, warnings = check_email_config()
-    for warning in warnings:
-        print(f"WARNING: {warning}")
-    for problem in blocking:
-        print(f"ERROR: {problem}", file=sys.stderr)
-    return not blocking
+    for w in warnings:
+        print(f"  WARNING: {w}")
+    for b in blocking:
+        print(f"  ERROR: {b}", file=sys.stderr)
+    if blocking:
+        print("  Set these as repository Secrets (Settings -> Secrets and "
+              "variables -> Actions -> Secrets). A value added under the "
+              "Variables tab is NOT visible to secrets.* in a workflow.",
+              file=sys.stderr)
+        return False
+    return True
 
 
 def fetch_recent_positions(client, limit: int = 200) -> list[dict]:
+    """Most recent verified canonical positions, ignoring any watermark."""
     return (client.table("phd_positions")
             .select("uri, created_at, disciplines, country, position_type, user_handle, message, url")
             .eq("is_verified_job", True)
@@ -366,40 +356,62 @@ def fetch_recent_positions(client, limit: int = 200) -> list[dict]:
 
 
 def run_test(to: str, cadence: str = "weekly") -> int:
-    if cadence != "weekly":
-        raise ValueError("Weekly is the only supported email cadence")
-    print(f"TEST MODE — one email to {to}. No subscriber is mailed and nothing is written.")
+    """Send exactly one digest to ``to`` so delivery can be validated.
+
+    Always sends, even when nothing new matches — that empty case is itself
+    worth seeing. Uses a real subscription's filters when one exists (so the
+    label and layout match production), otherwise a synthetic "all positions"
+    one. Reads only; never updates last_notified_at.
+    """
+    print(f"TEST MODE — one email to {to}. No subscriber is mailed, nothing is written.")
     if not report_email_config():
         return 0
     client = get_client()
-    subscriptions = fetch_due_subscriptions(client)
-    sub = dict(subscriptions[0]) if subscriptions else {
-        "disciplines": [], "countries": [], "position_types": [],
-        "query_text": None, "hide_aggregators": False,
-    }
+
+    subs = fetch_due_subscriptions(client, cadence)
+    if subs:
+        sub = dict(subs[0])
+        print(f"  using subscription {sub.get('id')} ({subscription_label(sub)})")
+    else:
+        sub = {"disciplines": [], "countries": [], "position_types": [],
+               "query_text": None, "hide_aggregators": False}
+        print("  no subscriptions found — using a synthetic 'all positions' filter")
+
+    # Ignore the watermark so the sample has content to render.
     recent = fetch_recent_positions(client)
-    matches = [position for position in recent if position_matches(sub, position)]
+    matches = [p for p in recent if position_matches(sub, p)]
+    print(f"  {len(recent)} recent position(s), {len(matches)} matching")
+
+    if not sub.get("unsubscribe_token"):
+        print("  WARNING: no unsubscribe_token — the unsubscribe link in this "
+              "email will be dead. Apply migrations/007_unsubscribe_token.sql. "
+              "(Real digests refuse to send in this state; test sends do not.)")
+
     subject = f"[TEST] {len(matches)} new: {subscription_label(sub)}"[:120]
-    human_url = human_unsubscribe_url(sub)
-    html_body = TEST_BANNER + format_digest_html(sub, matches, unsub_url=human_url)
-    text_body = format_digest_text(sub, matches, unsub_url=human_url)
-    if send_email(to, subject, html_body, text=text_body, headers=_unsubscribe_headers(sub)):
+    unsub = unsubscribe_url(sub)
+    body = TEST_BANNER + format_digest_html(sub, matches, unsub_url=unsub)
+    headers = {"List-Unsubscribe": f"<{unsub}>, <mailto:{UNSUB_MAILTO}?subject=unsubscribe>"}
+
+    if send_email(to, subject, body, headers=headers):
         print(f"Sent test digest to {to}.")
         return 1
-    print("Test send failed; check the provider response.", file=sys.stderr)
+    print("Test send FAILED — the provider rejected it. Config looked complete, "
+          "so check the provider response logged above (bad key, or EMAIL_FROM "
+          "using a domain not verified in Resend).", file=sys.stderr)
     return 0
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Send weekly saved-search alerts")
-    parser.add_argument("--cadence", default="weekly", choices=["weekly"],
-                        help="retained for automation compatibility; only weekly is supported")
-    parser.add_argument("--test-to", metavar="EMAIL",
-                        help="send one sample without contacting subscribers or writing watermarks")
-    args = parser.parse_args()
-    result = run_test(args.test_to) if args.test_to else run()
+def main():
+    ap = argparse.ArgumentParser(description="Send subscription email digests")
+    ap.add_argument("--cadence", default="daily", choices=["instant", "daily", "weekly"],
+                    help="which cadence bucket to send (default: daily)")
+    ap.add_argument("--test-to", metavar="EMAIL",
+                    help="TEST MODE: send one sample digest to EMAIL and exit. "
+                         "Mails nobody else and writes nothing to the database.")
+    args = ap.parse_args()
     if args.test_to:
-        raise SystemExit(0 if result else 1)
+        sys.exit(0 if run_test(args.test_to, args.cadence) else 1)
+    run(args.cadence)
 
 
 if __name__ == "__main__":

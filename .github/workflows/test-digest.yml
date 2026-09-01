@@ -18,6 +18,12 @@ on:
         required: true
         default: ilyabeydlin@gmail.com
         type: string
+      cadence:
+        description: "Which cadence bucket to borrow a subscription's filters from"
+        required: true
+        default: weekly
+        type: choice
+        options: [weekly, daily, instant]
 
 permissions:
   contents: read
@@ -44,10 +50,19 @@ jobs:
       - name: Send test digest
         run: |
           python scripts/send_subscription_digests.py \
+            --cadence "${{ inputs.cadence }}" \
             --test-to "${{ inputs.to }}"
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
-          EMAIL_PROVIDER: resend
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL }}
+          # Read-only here, but the digest tables are behind owner-only RLS, so
+          # an anon key would silently see zero subscriptions.
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || vars.SUPABASE_SERVICE_KEY }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY || vars.SUPABASE_KEY }}
+          # Secrets and Variables are separate stores: `secrets.X` is empty when
+          # X was added under the Variables tab, which fails as "not set" with no
+          # hint as to why. Accept either. Keys still belong in Secrets — a
+          # Variable is stored and displayed in plaintext.
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY || vars.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM || vars.EMAIL_FROM }}
+          EMAIL_PROVIDER: ${{ secrets.EMAIL_PROVIDER || vars.EMAIL_PROVIDER || 'resend' }}
+          MAILING_ADDRESS: ${{ secrets.MAILING_ADDRESS || vars.MAILING_ADDRESS }}

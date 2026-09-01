@@ -3,78 +3,88 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Manage weekly email | PhD Sky</title>
-<meta name="description" content="Confirm an unsubscribe choice for a PhD Sky weekly alert.">
+<title>Unsubscribe | PhD Sky</title>
+<meta name="description" content="Unsubscribe from PhD Sky email digests.">
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<meta name="theme-color" content="#18594A">
 <link rel="stylesheet" href="/design-tokens.css">
-<link rel="stylesheet" href="/legal.css">
+<style>
+  body { margin: 0; padding: 0; }
+  .page { max-width: 620px; margin: 0 auto; padding: 48px 16px 64px; }
+  .crumb { font-size: 13px; margin-bottom: 24px; font-family: var(--font-mono); }
+  .crumb a { color: var(--primary); text-decoration: none; }
+  .crumb a:hover { color: var(--accent); }
+  h1 {
+    font-family: var(--font-mono); font-size: 26px; font-weight: 700;
+    letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 20px; color: var(--fg);
+  }
+  p { line-height: 1.65; font-size: 15px; color: var(--fg); margin: 0 0 14px; }
+  .card {
+    background: var(--bg-elevated); border: 1px solid var(--border);
+    border-radius: 10px; padding: 24px;
+  }
+  .ok { color: var(--primary); }
+  .err { color: #ef4444; }
+  b { color: var(--fg); }
+  a { color: var(--primary); }
+  a:hover { color: var(--accent); }
+  footer {
+    margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border);
+    font-size: 13px; color: var(--fg-subtle); font-family: var(--font-mono);
+  }
+  footer a { color: var(--primary); }
+</style>
 </head>
 <body>
-<main class="page" id="main">
-  <nav class="crumb" aria-label="Breadcrumb"><a href="/">&larr; PhD Sky</a></nav>
-  <h1>Manage weekly email</h1>
+<div class="page">
+  <nav class="crumb"><a href="/">&larr; PhD Sky</a></nav>
+  <h1><span style="color:var(--primary)">&gt;</span> Unsubscribe</h1>
   <div class="card">
-    <p id="intro">Opening this page has not changed your email settings. Choose what you want to stop.</p>
-    <div class="actions" id="unsubscribe-actions">
-      <button type="button" class="button" data-scope="current">Unsubscribe this alert</button>
-      <button type="button" class="button secondary" data-scope="all">Stop all weekly emails</button>
-    </div>
-    <p class="status" id="status" role="status" aria-live="polite"></p>
+    <p id="status">Processing your request…</p>
   </div>
-  <p>You can re-enable an alert only through an explicit confirmation in <a href="/#subscriptions">Saved searches</a>.</p>
-  <footer>PhD Sky · operated by Eli Eydlin in Israel<br><a href="/">Home</a> · <a href="/#subscriptions">Saved searches</a> · <a href="/privacy">Privacy</a> · <a href="mailto:eli.eydlin@gmail.com">Contact</a></footer>
-</main>
+  <footer>
+    <a href="/">Home</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a>
+  </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-(() => {
-  'use strict';
-  const token = new URLSearchParams(location.search).get('token') || '';
-  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  const status = document.getElementById('status');
-  const actions = document.getElementById('unsubscribe-actions');
-  const buttons = [...actions.querySelectorAll('button')];
+  const SUPABASE_URL = 'https://qenpxgztlptegosdhhhi.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_149HAw6pWDQTRPF_NLISmA_oSCU7q3_';
+  const statusEl = document.getElementById('status');
 
-  function show(message, type) {
-    status.textContent = message;
-    status.className = `status ${type || ''}`;
+  function show(html, cls) {
+    statusEl.className = cls || '';
+    statusEl.innerHTML = html;
   }
 
-  if (!uuid.test(token)) {
-    actions.hidden = true;
-    show('This unsubscribe link is incomplete or invalid. No settings were changed. Contact eli.eydlin@gmail.com if you need help.', 'err');
-    return;
-  }
-
-  buttons.forEach(button => button.addEventListener('click', async () => {
-    buttons.forEach(item => { item.disabled = true; });
-    show('Saving your choice…');
-    try {
-      const response = await fetch(`/api/unsubscribe?token=${encodeURIComponent(token)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scope: button.dataset.scope }),
-      });
-      const result = await response.json();
-      if (!response.ok || result.state === 'error') throw new Error('service unavailable');
-      if (result.state === 'not-found') {
-        actions.hidden = true;
-        show('This link is invalid or the saved search no longer exists. No additional action is needed.', 'err');
-      } else if (result.state === 'already-unsubscribed') {
-        actions.hidden = true;
-        show(button.dataset.scope === 'all' ? 'All weekly emails were already stopped.' : 'This weekly alert was already stopped.', 'ok');
-      } else {
-        actions.hidden = true;
-        show(button.dataset.scope === 'all' ? 'All weekly emails are now stopped.' : 'This weekly alert is now stopped.', 'ok');
-      }
-    } catch (error) {
-      buttons.forEach(item => { item.disabled = false; });
-      show('We could not save the change. Try again, or email eli.eydlin@gmail.com for help.', 'err');
+  (async () => {
+    const token = new URLSearchParams(location.search).get('token');
+    if (!token) {
+      show('This link is missing its unsubscribe token. If you keep getting emails, '
+        + 'reply to any digest or email <a href="mailto:eli.eydlin@gmail.com">eli.eydlin@gmail.com</a>.', 'err');
+      return;
     }
-  }));
-})();
+    try {
+      const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      const { data, error } = await client.rpc('unsubscribe_by_token', { p_token: token });
+      if (error) throw error;
+      if (data === null) {
+        show('You&rsquo;re already unsubscribed, or this link has already been used. '
+          + 'No further emails will be sent for it.', 'ok');
+      } else {
+        show('<b class="ok">You&rsquo;re unsubscribed.</b><br><br>'
+          + 'We&rsquo;ve turned off email for your saved search '
+          + '(<b>' + String(data).replace(/</g, '&lt;') + '</b>). '
+          + 'You can re-enable it any time from your '
+          + '<a href="/account">account</a>.', 'ok');
+      }
+    } catch (e) {
+      show('Something went wrong unsubscribing. Please try again, or email '
+        + '<a href="mailto:eli.eydlin@gmail.com">eli.eydlin@gmail.com</a> and we&rsquo;ll remove you manually.', 'err');
+      console.error(e);
+    }
+  })();
 </script>
 </body>
 </html>

@@ -1,8 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="PhD Sky open book and star">
-  <rect width="64" height="64" rx="8" fill="#F3F5F2"/>
-  <path d="M8 18c8-2 16 0 24 6v29C24 47 16 45 8 47V18Z" fill="#18594A"/>
-  <path d="M56 18c-8-2-16 0-24 6v29c8-6 16-8 24-6V18Z" fill="#18594A"/>
-  <path d="M32 24v29" stroke="#F3F5F2" stroke-width="3"/>
-  <path d="M32 24V12" stroke="#18594A" stroke-width="3" stroke-linecap="round"/>
-  <path d="m45 7 2.2 5.8L53 15l-5.8 2.2L45 23l-2.2-5.8L37 15l5.8-2.2L45 7Z" fill="#B54632"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="10" fill="#0f172a"/>
+  <text x="32" y="44" text-anchor="middle"
+        font-family="'Fira Code', ui-monospace, monospace"
+        font-size="34" font-weight="700" fill="#3b82f6">&gt;_</text>
 </svg>

@@ -1,9 +1,7 @@
-"""Subscription digest consent, matching, formatting, and watermark tests."""
+"""Tests for subscription digest matching + formatting (pure helpers)."""
 
 import sys
 from pathlib import Path
-
-import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import send_subscription_digests as digest  # noqa: E402
@@ -15,225 +13,183 @@ def pos(**kw):
         "disciplines": ["Biology"], "country": "Germany",
         "position_type": ["PhD Student"], "user_handle": "alice.bsky.social",
         "message": "Fully funded PhD in plant genomics", "url": "https://bsky.app/x",
-        "is_verified_job": True, "duplicate_of": None,
     }
     base.update(kw)
     return base
 
 
-def sub(**kw):
-    base = {
-        "id": "sub-1", "user_id": "user-1", "disciplines": ["Biology"],
-        "countries": [], "position_types": [], "query_text": None,
-        "hide_aggregators": False, "unsubscribe_token": "9ce173c1-0f68-4f8a-a742-bcbb5a434d18",
-        "cadence": "weekly", "deliver_email": True,
-        "email_consent_at": "2026-05-01T00:00:00+00:00",
-        "created_at": "2026-05-01T00:00:00+00:00", "last_processed_at": None,
-        "last_notified_at": None,
-    }
-    base.update(kw)
-    return base
+def test_empty_subscription_matches_anything():
+    sub = {"disciplines": [], "countries": [], "position_types": []}
+    assert digest.position_matches(sub, pos()) is True
 
 
-def test_matching_filters_and_query():
-    assert digest.position_matches({}, pos()) is True
-    assert digest.position_matches({"disciplines": ["Computer Science", "Biology"]}, pos()) is True
-    assert digest.position_matches({"disciplines": ["Physics"]}, pos()) is False
-    assert digest.position_matches({"countries": ["Germany"], "position_types": ["Postdoc"]}, pos(position_type=["Postdoc"])) is True
-    assert digest.position_matches({"query_text": "genomics"}, pos()) is True
-    assert digest.position_matches({"query_text": "quantum"}, pos()) is False
+def test_discipline_filter_or_within():
+    sub = {"disciplines": ["Computer Science", "Biology"]}
+    assert digest.position_matches(sub, pos(disciplines=["Biology"])) is True
+    assert digest.position_matches(sub, pos(disciplines=["Physics"])) is False
+
+
+def test_country_and_type_and_across():
+    sub = {"countries": ["Germany"], "position_types": ["Postdoc"]}
+    assert digest.position_matches(sub, pos(country="Germany", position_type=["Postdoc"])) is True
+    # country matches but type doesn't -> AND across fails
+    assert digest.position_matches(sub, pos(country="Germany", position_type=["PhD Student"])) is False
+
+
+def test_query_text_substring():
+    sub = {"query_text": "genomics"}
+    assert digest.position_matches(sub, pos()) is True
+    assert digest.position_matches(sub, pos(message="quantum optics role")) is False
 
 
 def test_hide_aggregators(monkeypatch):
     monkeypatch.setattr(digest, "AGGREGATORS", {"bot.bsky.social"})
-    assert digest.position_matches({"hide_aggregators": True}, pos(user_handle="bot.bsky.social")) is False
+    sub = {"hide_aggregators": True}
+    assert digest.position_matches(sub, pos(user_handle="bot.bsky.social")) is False
+    assert digest.position_matches(sub, pos(user_handle="alice.bsky.social")) is True
 
 
-def test_subscription_label_and_urls():
-    row = sub(disciplines=["Biology"], countries=["Germany"])
-    assert digest.subscription_label(row) == "Biology · Germany"
+def test_subscription_label():
+    assert digest.subscription_label({"disciplines": ["Biology"], "countries": ["Germany"]}) == "Biology · Germany"
     assert digest.subscription_label({}) == "all positions"
-    assert "/unsubscribe?token=" in digest.human_unsubscribe_url(row)
-    assert "/api/unsubscribe?token=" in digest.machine_unsubscribe_url(row)
 
 
-def test_digest_has_light_palette_plain_text_and_management_link():
-    row = sub()
-    positions = [pos(), pos(uri="at://y")]
-    body = digest.format_digest_html(row, positions)
-    text = digest.format_digest_text(row, positions)
-    assert "#F3F5F2" in body and "#18594A" in body
+def test_format_digest_html_includes_count_and_link():
+    sub = {"disciplines": ["Biology"]}
+    body = digest.format_digest_html(sub, [pos(), pos(uri="at://y")])
     assert "2 new positions" in body
-    assert "/#subscriptions" in body
-    assert "operated by Eli Eydlin in Israel" in body
-    assert "2 new positions" in text
-    assert "Manage weekly alerts:" in text
+    assert "https://bsky.app/x" in body
+    assert "Biology" in body
 
 
-def test_digest_escapes_every_listing_field():
-    malicious = pos(
-        message='<img src=x onerror="alert(1)">',
-        position_type=['<script>bad()</script>'],
-        country='"><svg/onload=alert(1)>',
-        url='https://example.test/" onclick="alert(1)',
-    )
-    body = digest.format_digest_html(sub(), [malicious])
-    assert "<script>bad()" not in body
-    assert "<img src=x" not in body
-    assert "&lt;script&gt;" in body
-    assert "&quot; onclick=&quot;" in body
+# ── Overflow disclosure + watermark semantics ───────────────────────────────
+
+def test_digest_discloses_matches_beyond_the_display_cap():
+    """The cap used to drop matches silently while the watermark advanced past
+    them, so they were never emailed again. Now the overflow is stated."""
+    n = digest.MAX_POSITIONS_PER_DIGEST + 12
+    positions = [pos(uri=f"at://x{i}") for i in range(n)]
+    body = digest.format_digest_html({"disciplines": ["Biology"]}, positions)
+
+    assert f"{n} new positions" in body
+    assert f"Showing the {digest.MAX_POSITIONS_PER_DIGEST} most recent" in body
+    assert "Browse the other 12 on PhD Sky" in body
+    # Only the capped number of entries are actually rendered.
+    assert body.count("View position →") == digest.MAX_POSITIONS_PER_DIGEST
 
 
-def test_digest_discloses_overflow():
-    count = digest.MAX_POSITIONS_PER_DIGEST + 12
-    body = digest.format_digest_html(sub(), [pos(uri=f"at://x{i}") for i in range(count)])
-    assert f"{count} new positions" in body
-    assert f"Showing the {digest.MAX_POSITIONS_PER_DIGEST} newest matches" in body
-    assert "Browse 12 more on PhD Sky" in body
-    assert body.count("View source") == digest.MAX_POSITIONS_PER_DIGEST
+def test_no_overflow_note_when_everything_fits():
+    body = digest.format_digest_html({}, [pos(), pos(uri="at://y")])
+    assert "Showing the" not in body
+    assert "Browse the other" not in body
+    assert body.count("View position →") == 2
 
 
-class FakeQuery:
-    def __init__(self, client, table):
-        self.client, self.table = client, table
-        self.filters = []
-        self.start, self.end = None, None
-        self.payload = None
+class _FakeTable:
+    """Records writes so a test can assert none happened."""
 
-    def select(self, *args, **kwargs): return self
-    def order(self, *args, **kwargs): return self
-    def limit(self, count): self.start, self.end = 0, count - 1; return self
-    def range(self, start, end): self.start, self.end = start, end; return self
-    def eq(self, key, value): self.filters.append(("eq", key, value)); return self
-    def is_(self, key, value): self.filters.append(("is", key, value)); return self
-    def gt(self, key, value): self.filters.append(("gt", key, value)); return self
-    def update(self, payload): self.payload = payload; return self
+    def __init__(self, rows, journal):
+        self._rows, self._journal = rows, journal
 
-    def execute(self):
-        rows = self.client.rows.setdefault(self.table, [])
-        def matches(row):
-            for operation, key, value in self.filters:
-                current = row.get(key)
-                if operation == "eq" and current != value: return False
-                if operation == "is" and value == "null" and current is not None: return False
-                if operation == "gt" and not (current and current > value): return False
-            return True
-        matching = [row for row in rows if matches(row)]
-        if self.payload is not None:
-            for row in matching: row.update(self.payload)
-            self.client.writes.append({"table": self.table, "payload": self.payload, "count": len(matching)})
-            return type("Result", (), {"data": matching})()
-        if self.start is not None: matching = matching[self.start:self.end + 1]
-        return type("Result", (), {"data": matching})()
+    def select(self, *a, **k): return self
+    def eq(self, *a, **k): return self
+    def is_(self, *a, **k): return self
+    def gt(self, *a, **k): return self
+    def order(self, *a, **k): return self
+    def limit(self, *a, **k): return self
+    def range(self, *a, **k): return self
+    def execute(self): return type("R", (), {"data": self._rows})()
+
+    def update(self, payload):          # any write is a failure in test mode
+        self._journal.append(payload)
+        return self
 
 
-class FakeClient:
-    def __init__(self, rows):
-        self.rows, self.writes = rows, []
-    def table(self, name): return FakeQuery(self, name)
+class _FakeClient:
+    def __init__(self, rows_by_table):
+        self.rows, self.writes = rows_by_table, []
+
+    def table(self, name):
+        return _FakeTable(self.rows.get(name, []), self.writes)
 
 
-def fake_send(captured, succeed=True):
-    def send(to, subject, html, headers=None, text=None):
-        captured.append({"to": to, "subject": subject, "html": html, "headers": headers, "text": text})
-        return succeed
+def _fake_send(captured):
+    def send(to, subject, html, headers=None):
+        captured.append({"to": to, "subject": subject, "html": html, "headers": headers})
+        return True
     return send
 
 
-def enable_test_config(monkeypatch):
-    monkeypatch.setattr(digest, "check_email_config", lambda: ([], []))
-    monkeypatch.setattr(digest, "report_email_config", lambda: True)
-
-
-def test_only_explicitly_consented_subscriptions_are_due():
-    client = FakeClient({"subscriptions": [
-        sub(id="yes"),
-        sub(id="legacy", email_consent_at=None),
-        sub(id="paused", deliver_email=False),
-        sub(id="daily", cadence="daily"),
-    ]})
-    assert [row["id"] for row in digest.fetch_due_subscriptions(client)] == ["yes"]
-
-
-def test_no_match_advances_processing_not_notification(monkeypatch):
-    enable_test_config(monkeypatch)
-    client = FakeClient({
-        "subscriptions": [sub()],
-        "phd_positions": [pos(disciplines=["Physics"])],
-        "profiles": [{"id": "user-1", "email": "current@example.com"}],
-    })
-    monkeypatch.setattr(digest, "get_client", lambda: client)
-    monkeypatch.setattr(digest, "send_email", pytest.fail)
-    assert digest.run() == 0
-    payload = client.writes[-1]["payload"]
-    assert payload == {"last_processed_at": "2026-06-01T00:00:00+00:00"}
-    assert client.rows["subscriptions"][0]["last_notified_at"] is None
-
-
-def test_failed_send_advances_neither_watermark(monkeypatch):
-    enable_test_config(monkeypatch)
-    client = FakeClient({
-        "subscriptions": [sub()], "phd_positions": [pos()],
-        "profiles": [{"id": "user-1", "email": "current@example.com"}],
-    })
-    monkeypatch.setattr(digest, "get_client", lambda: client)
-    monkeypatch.setattr(digest, "send_email", fake_send([], succeed=False))
-    assert digest.run() == 0
-    assert client.writes == []
-
-
-def test_success_uses_current_profile_email_text_and_exact_headers(monkeypatch):
-    enable_test_config(monkeypatch)
-    client = FakeClient({
-        "subscriptions": [sub()], "phd_positions": [pos()],
-        "profiles": [{"id": "user-1", "email": "current@example.com"}],
+def test_test_send_never_mails_subscribers_or_writes(monkeypatch):
+    """run_test must be inert: one email to the given address, no DB writes."""
+    client = _FakeClient({
+        "subscriptions": [{
+            "id": "sub-1", "user_id": "user-1", "disciplines": ["Biology"],
+            "countries": [], "position_types": [], "query_text": None,
+            "hide_aggregators": False, "unsubscribe_token": "tok-123",
+            "last_notified_at": "2020-01-01T00:00:00+00:00",
+            "created_at": "2020-01-01T00:00:00+00:00",
+        }],
+        "phd_positions": [pos(), pos(uri="at://y")],
+        "profiles": [{"email": "realsubscriber@example.com"}],
     })
     monkeypatch.setattr(digest, "get_client", lambda: client)
     captured = []
-    monkeypatch.setattr(digest, "send_email", fake_send(captured))
-    assert digest.run() == 1
-    sent = captured[0]
-    machine = digest.machine_unsubscribe_url(sub())
-    assert sent["to"] == "current@example.com"
-    assert sent["text"] and "PhD Sky" in sent["text"]
-    assert sent["headers"] == {
-        "List-Unsubscribe": f"<{machine}>",
-        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-    }
-    payload = client.writes[-1]["payload"]
-    assert payload["last_processed_at"] == "2026-06-01T00:00:00+00:00"
-    assert payload["last_notified_at"] == "2026-06-01T00:00:00+00:00"
+    monkeypatch.setattr(digest, "send_email", _fake_send(captured))
 
+    assert digest.run_test("tester@example.com", "weekly") == 1
 
-def test_test_send_is_inert(monkeypatch):
-    enable_test_config(monkeypatch)
-    client = FakeClient({
-        "subscriptions": [sub()], "phd_positions": [pos()],
-        "profiles": [{"id": "user-1", "email": "subscriber@example.com"}],
-    })
-    monkeypatch.setattr(digest, "get_client", lambda: client)
-    captured = []
-    monkeypatch.setattr(digest, "send_email", fake_send(captured))
-    assert digest.run_test("tester@example.com") == 1
+    assert len(captured) == 1, "test mode must send exactly one email"
     assert captured[0]["to"] == "tester@example.com"
-    assert "subscriber@example.com" not in str(captured)
+    assert "realsubscriber@example.com" not in str(captured)
+    assert client.writes == [], "test mode must not advance any watermark"
+    assert "TEST SEND" in captured[0]["html"]
+    assert captured[0]["subject"].startswith("[TEST]")
+
+
+def test_test_send_still_sends_with_no_matches(monkeypatch):
+    """'Send even if there are no new jobs' — the empty case must still arrive."""
+    client = _FakeClient({"subscriptions": [], "phd_positions": []})
+    monkeypatch.setattr(digest, "get_client", lambda: client)
+    captured = []
+    monkeypatch.setattr(digest, "send_email", _fake_send(captured))
+
+    assert digest.run_test("tester@example.com") == 1
+    assert len(captured) == 1
+    assert "0 new positions" in captured[0]["html"]
     assert client.writes == []
 
 
-def test_watermark_prefers_last_processed():
-    assert digest.subscription_watermark({
-        "last_processed_at": "2026-07-01T00:00:00+00:00",
-        "last_notified_at": "2026-06-01T00:00:00+00:00",
-        "created_at": "2026-01-01T00:00:00+00:00",
-    }) == "2026-07-01T00:00:00+00:00"
-    assert digest.subscription_watermark({"created_at": "2026-01-01T00:00:00+00:00"}) == "2026-01-01T00:00:00+00:00"
+def test_real_send_aborts_without_unsubscribe_token(monkeypatch, capsys):
+    """Never mail without a working unsubscribe link (CAN-SPAM / bulk-sender
+    rules). A missing token means migration 007 hasn't been applied."""
+    client = _FakeClient({
+        "subscriptions": [{
+            "id": "sub-1", "user_id": "user-1", "disciplines": [], "countries": [],
+            "position_types": [], "query_text": None, "hide_aggregators": False,
+            "last_notified_at": None, "created_at": "2020-01-01T00:00:00+00:00",
+            # note: no unsubscribe_token
+        }],
+        "phd_positions": [pos()],
+        "profiles": [{"email": "someone@example.com"}],
+    })
+    monkeypatch.setattr(digest, "get_client", lambda: client)
+    captured = []
+    monkeypatch.setattr(digest, "send_email", _fake_send(captured))
+
+    assert digest.run("weekly") == 0
+    assert captured == [], "must not send without an unsubscribe token"
+    assert client.writes == []
+    assert "007_unsubscribe_token" in capsys.readouterr().err
 
 
-def test_config_requires_service_key_verified_sender_and_no_fallback(monkeypatch):
-    for key in ("SUPABASE_URL", "SUPABASE_SERVICE_KEY", "RESEND_API_KEY", "EMAIL_FROM"):
-        monkeypatch.delenv(key, raising=False)
-    blocking, _ = digest.check_email_config()
-    assert any("SUPABASE_SERVICE_KEY" in item for item in blocking)
-    assert any("EMAIL_FROM" in item for item in blocking)
-    monkeypatch.setenv("EMAIL_FROM", "PhD Sky <onboarding@resend.dev>")
-    assert any("verified" in item for item in digest.check_email_config()[0])
+def test_watermark_falls_back_to_created_at():
+    """A never-notified subscription reports positions since it was created,
+    not the entire archive."""
+    assert digest.subscription_watermark(
+        {"last_notified_at": "2026-07-01T00:00:00+00:00",
+         "created_at": "2026-01-01T00:00:00+00:00"}) == "2026-07-01T00:00:00+00:00"
+    assert digest.subscription_watermark(
+        {"last_notified_at": None,
+         "created_at": "2026-01-01T00:00:00+00:00"}) == "2026-01-01T00:00:00+00:00"
+    assert digest.subscription_watermark({}) is None

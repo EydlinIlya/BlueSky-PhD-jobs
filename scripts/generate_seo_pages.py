@@ -370,7 +370,7 @@ def update_index_html(positions, total_count):
             f"    {noscript_block}\n\n    <!-- App script -->",
         )
 
-    with open(index_path, "w", encoding="utf-8", newline="\n") as f:
+    with open(index_path, "w", encoding="utf-8") as f:
         f.write(html)
 
     print(f"Updated index.html: {len(static_positions)} embedded positions, total={total_count}")
@@ -417,31 +417,31 @@ def _collection_schema(name, description, canonical, positions):
 
 
 _LISTING_CSS = """
+:root{--bg:#0f172a;--card:#1e293b;--bd:#334155;--fg:#e2e8f0;--mut:#94a3b8;--pri:#6366f1;--acc:#10b981}
 *{box-sizing:border-box}
-body{font-family:var(--font-body);background:var(--paper);color:var(--ink);margin:0;padding:2rem 1rem;line-height:1.6}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--fg);margin:0;padding:2rem 1rem;line-height:1.55}
 .container{max-width:820px;margin:0 auto}
-h1{font-family:var(--font-display);font-size:2rem;margin:0 0 .4rem}
-.subtitle{color:var(--muted);font-size:1rem;margin:0 0 1.5rem}
-a{color:var(--archival-blue)}a:hover{color:var(--library-green)}
+h1{font-size:1.6rem;margin:0 0 .4rem}
+.subtitle{color:var(--mut);font-size:.9rem;margin:0 0 1.5rem}
+a{color:var(--pri)}a:hover{color:var(--acc)}
 .back-link{display:inline-block;margin-bottom:1.25rem;font-size:.9rem}
-.facets{background:var(--surface);border:1px solid var(--rule);border-top:3px solid var(--library-green);padding:1rem 1.25rem;margin-bottom:1.5rem}
-.facets h2{font-family:var(--font-display);font-size:1rem;color:var(--ink);margin:0 0 .5rem}
+.facets{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.5rem}
+.facets h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:0 0 .5rem}
 .facets ul{list-style:none;margin:0 0 1rem;padding:0;display:flex;flex-wrap:wrap;gap:.35rem .8rem}
 .facets ul:last-child{margin-bottom:0}
-.facets li{font-size:.95rem}
-article{background:var(--surface);border-top:2px solid var(--library-green);padding:1.25rem 0;margin-bottom:1rem}
-article h3{font-family:var(--font-display);font-size:1.1rem;margin:0 0 .4rem}
-article h3 a{color:var(--ink);text-decoration:none}
-article h3 a:hover{color:var(--library-green)}
-.meta{font-family:var(--font-mono);font-size:.78rem;color:var(--muted);margin:0 0 .6rem}
-.msg{font-size:1rem;margin:0 0 .6rem;white-space:pre-wrap}
+.facets li{font-size:.85rem}
+article{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:1.25rem;margin-bottom:1rem}
+article h3{font-size:1rem;margin:0 0 .4rem}
+article h3 a{color:var(--fg);text-decoration:none}
+article h3 a:hover{color:var(--pri)}
+.meta{font-size:.82rem;color:var(--mut);margin:0 0 .6rem}
+.msg{font-size:.94rem;margin:0 0 .6rem;white-space:pre-wrap}
 .cta{font-size:.85rem;margin:0}
 nav.pager{margin:2rem 0 1rem;font-size:.9rem}
 nav.pager .rel{display:flex;justify-content:space-between;gap:1rem;margin-bottom:.75rem}
-nav.pager .nums{display:flex;flex-wrap:wrap;gap:.3rem .6rem;color:var(--muted);font-size:.85rem}
-nav.pager .nums .cur{color:var(--ink);font-weight:600}
-footer{margin-top:2rem;padding-top:1.25rem;border-top:1px solid var(--rule);font-size:.85rem;color:var(--muted)}
-:where(a,button):focus-visible{outline:3px solid var(--archival-blue);outline-offset:3px}
+nav.pager .nums{display:flex;flex-wrap:wrap;gap:.3rem .6rem;color:var(--mut);font-size:.85rem}
+nav.pager .nums .cur{color:var(--fg);font-weight:600}
+footer{margin-top:2rem;padding-top:1.25rem;border-top:1px solid var(--bd);font-size:.85rem;color:var(--mut)}
 """
 
 
@@ -488,7 +488,7 @@ def _facet_nav(facets):
         if not entries:
             continue
         lis = "".join(
-            f'<li><a href="{href}">{escape_html(name)}</a> <span style="color:var(--muted)">{n}</span></li>'
+            f'<li><a href="{href}">{escape_html(name)}</a> <span style="color:var(--mut)">{n}</span></li>'
             for name, href, n in entries
         )
         blocks.append(f"<h2>{escape_html(label)}</h2>\n<ul>{lis}</ul>")
@@ -510,6 +510,12 @@ def _listing_page(*, title, description, canonical, h1, lead, articles, jsonld,
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+    <!-- Vercel Web Analytics -->
+    <script>
+      window.va = window.va || function () {{ (window.vaq = window.vaq || []).push(arguments); }};
+    </script>
+    <script defer src="/_vercel/insights/script.js"></script>
+
     <title>{escape_html(title)}</title>
     <meta name="description" content="{escape_html(description)}">
     <meta name="robots" content="{robots}">
@@ -525,11 +531,6 @@ def _listing_page(*, title, description, canonical, h1, lead, articles, jsonld,
     <meta name="twitter:description" content="{escape_html(description)}">
     <meta name="twitter:image" content="{BASE_URL}assets/og-image.png">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-    <link rel="manifest" href="/site.webmanifest">
-    <meta name="theme-color" content="#18594A">
-    <link rel="stylesheet" href="/design-tokens.css">
     <script type="application/ld+json">
 {jsonld}
     </script>
@@ -546,10 +547,7 @@ def _listing_page(*, title, description, canonical, h1, lead, articles, jsonld,
     <footer>
         <a href="/">Browse all PhD &amp; Postdoc positions</a> &middot;
         <a href="/positions">All positions</a> &middot;
-        <a href="/about">About</a> &middot;
-        <a href="/privacy">Privacy</a> &middot;
-        <a href="/terms">Terms</a> &middot;
-        <a href="/?cookie-settings=1">Cookie settings</a>
+        <a href="/about">About</a>
     </footer>
 </div>
 </body>
@@ -559,7 +557,7 @@ def _listing_page(*, title, description, canonical, h1, lead, articles, jsonld,
 def _write_page(rel_path, html):
     path = os.path.join(DOCS_DIR, rel_path)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(html)
 
 
@@ -769,6 +767,12 @@ def render_position_page(pos, slug):
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+<!-- Vercel Web Analytics -->
+<script>
+  window.va = window.va || function () {{ (window.vaq = window.vaq || []).push(arguments); }};
+</script>
+<script defer src="/_vercel/insights/script.js"></script>
+
 <title>{escape_html(title)} | PhD Sky</title>
 <meta name="description" content="{escape_html(desc)}">
 <meta name="robots" content="index, follow">
@@ -784,10 +788,6 @@ def render_position_page(pos, slug):
 <meta name="twitter:description" content="{escape_html(desc)}">
 <meta name="twitter:image" content="{BASE_URL}assets/og-image.png">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<link rel="manifest" href="/site.webmanifest">
-<meta name="theme-color" content="#18594A">
 <link rel="stylesheet" href="/design-tokens.css">
 {jp_script}
 <style>
@@ -796,29 +796,29 @@ def render_position_page(pos, slug):
   .crumb {{ font-size: 13px; margin-bottom: 24px; font-family: var(--font-mono); }}
   .crumb a {{ color: var(--primary); text-decoration: none; }}
   .crumb a:hover {{ color: var(--accent); }}
-  h1 {{ font-family: var(--font-display); font-size: 32px; font-weight: 700;
+  h1 {{ font-family: var(--font-mono); font-size: 28px; font-weight: 700;
         letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 12px; color: var(--fg); }}
   .meta {{ color: var(--fg-subtle); font-family: var(--font-mono);
            font-size: 13px; margin: 0 0 16px; }}
   .meta a {{ color: var(--primary); }}
   .tags {{ display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; }}
-  .tag {{ display: inline-block; padding: 3px 10px; border-radius: 2px;
+  .tag {{ display: inline-block; padding: 3px 10px; border-radius: 4px;
           font-size: 12px; font-weight: 500; line-height: 1.5; color: white; }}
   .tag-pos {{ background: var(--pos-type-bg); }}
   .tag-country {{ background: var(--country-bg); }}
   .tag-disc {{ background: var(--bg-elevated); color: var(--fg-muted);
                border: 1px solid var(--border); }}
-  .message {{ white-space: pre-wrap; line-height: 1.65; font-size: 16px;
+  .message {{ white-space: pre-wrap; line-height: 1.65; font-size: 15px;
               background: var(--bg-card); border: 1px solid var(--border);
-              border-top: 3px solid var(--library-green); border-radius: 0; padding: 20px; margin: 0 0 24px;
+              border-radius: var(--r-lg); padding: 20px; margin: 0 0 24px;
               word-wrap: break-word; overflow-wrap: anywhere; }}
   .cta {{ display: inline-flex; align-items: center; gap: 8px;
           padding: 12px 20px; background: var(--primary); color: white;
-          text-decoration: none; border-radius: 3px; font-weight: 600;
+          text-decoration: none; border-radius: var(--r-md); font-weight: 600;
           font-size: 14px; transition: background var(--t-base); }}
   .cta:hover {{ background: var(--primary-hover); color: white; }}
   footer {{ margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border);
-            font-size: 14px; color: var(--fg-subtle); font-family: var(--font-body); }}
+            font-size: 13px; color: var(--fg-subtle); font-family: var(--font-mono); }}
   footer a {{ color: var(--primary); }}
 </style>
 </head>
@@ -831,10 +831,7 @@ def render_position_page(pos, slug):
   <div class="message">{escape_html(full_message)}</div>
   {cta}
   <footer>
-    <a href="/">Browse all PhD &amp; Postdoc positions</a> &middot;
-    <a href="/privacy">Privacy</a> &middot;
-    <a href="/terms">Terms</a> &middot;
-    <a href="/?cookie-settings=1">Cookie settings</a>
+    <a href="/">Browse all PhD &amp; Postdoc positions</a>
   </footer>
 </div>
 </body>
@@ -862,7 +859,7 @@ def generate_position_pages(positions):
 
         path = os.path.join(pages_dir, f"{slug}.html")
         html = render_position_page(pos, slug)
-        with open(path, "w", encoding="utf-8", newline="\n") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(html)
         written += 1
 
@@ -918,7 +915,7 @@ def generate_sitemap(slug_to_lastmod=None, listing_urls=None):
     xml = "\n".join(parts)
 
     path = os.path.join(DOCS_DIR, "sitemap.xml")
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(xml)
     extra = len(slug_to_lastmod or {})
     print(f"Generated sitemap.xml: 4 static + {len(listing)} listing/hub + {extra} per-job URLs")
@@ -963,7 +960,7 @@ def generate_positions_json(positions, duplicates):
     }
 
     path = os.path.join(DOCS_DIR, "positions.json")
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(snapshot, f, separators=(",", ":"), ensure_ascii=False)
     size_kb = os.path.getsize(path) / 1024
     print(f"Generated positions.json: {len(pos_payload)} positions, {len(dup_payload)} duplicates, {size_kb:.0f}KB")
