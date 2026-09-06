@@ -308,7 +308,7 @@ function postHTML(p) {
     const msg = p.message || '';
     const truncated = msg.length > MSG_LIMIT;
     const bodyText = truncated ? msg.slice(0, MSG_LIMIT).trimEnd() + '…' : msg;
-    const moreLink = truncated ? '<button type="button" class="more-link" data-detail="1">Show full text</button>' : '';
+    const moreLink = truncated ? '<span class="more-link">show more</span>' : '';
 
     const reposts = (p.uri && state.duplicateMap[p.uri]) || [];
     const rep = reposts.length;
@@ -351,8 +351,8 @@ function postHTML(p) {
       <div class="p-body">${escapeHtml(bodyText)}${moreLink}</div>
       ${threadHTML}
       <div class="p-actions">
-        <button type="button" class="p-act" data-detail="1">Details</button>
-        ${slug ? `<a class="p-act" href="/p/${slug}" data-stop>Permalink</a>` : ''}
+        <button type="button" class="p-act sr-only" data-detail="1">Open position details</button>
+        <a class="p-act" href="${escapeHtml(postUrl)}" target="_blank" rel="noopener" data-stop style="margin-left:auto;color:var(--primary)">view on Bluesky →</a>
         <a class="p-act" href="${escapeHtml(postUrl)}" target="_blank" rel="noopener" data-stop style="margin-left:auto;color:var(--primary)">View source</a>
       </div>
     </article>`;
@@ -436,16 +436,17 @@ const CHIP_TOP_N = 5;
 const chipNames = { area: [], country: [] };   // full name lists by frequency (cached)
 
 function renderFilterChips() {
-    // Level — fixed set
     $('#chips-level').innerHTML = LEVEL_CHIPS.map(([val, lab]) =>
         `<button type="button" class="chip" data-level="${escapeHtml(val)}" aria-pressed="false">${escapeHtml(lab)}</button>`).join('');
-    // Area + Country — top 5 chips (+ any selected off-list) inline; full alpha list in dropdown
-    chipNames.area = countNames(p => p.disciplines || []);
-    chipNames.country = countNames(p => (p.country && p.country !== 'Unknown') ? [p.country] : []);
-    buildChipDropdown('area', 'chips-area');
-    buildChipDropdown('country', 'chips-country');
-    renderChipRow('area', 'chips-area');
-    renderChipRow('country', 'chips-country');
+    $('#chips-area').innerHTML = AREA_CHIPS.map(d =>
+        `<button type="button" class="chip" data-area="${escapeHtml(d)}" aria-pressed="false">${escapeHtml(discShort(d))}</button>`).join('');
+    const counts = {};
+    for (const p of state.all) {
+        if (p.country && p.country !== 'Unknown') counts[p.country] = (counts[p.country] || 0) + 1;
+    }
+    const topCountries = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([country]) => country);
+    $('#chips-country').innerHTML = topCountries.map(country =>
+        `<button type="button" class="chip" data-country="${escapeHtml(country)}" aria-pressed="false">${escapeHtml(country)}</button>`).join('');
     bindChips();
 }
 
@@ -489,14 +490,11 @@ function applyAreaChipStyle(c, on) {
 
 function setFilterValue(kind, val, on) {
     if (on) state.filters[kind].add(val); else state.filters[kind].delete(val);
-    if (kind === 'level') {
-        const chip = document.querySelector(`.chip[data-level="${CSS.escape(val)}"]`);
-        if (chip) { chip.classList.toggle('on', on); chip.setAttribute('aria-pressed', String(on)); }
-    } else {
-        renderChipRow(kind, 'chips-' + kind);            // show/hide off-list selected bubbles
-        const it = document.querySelector(`.chip-dropdown .dd-item[data-${kind}="${CSS.escape(val)}"]`);
-        if (it) { it.classList.toggle('on', on); it.setAttribute('aria-pressed', String(on)); }
-        bindChips();                                     // rebind the rebuilt chip row
+    const chip = document.querySelector(`.chip[data-${kind}="${CSS.escape(val)}"]`);
+    if (chip) {
+        chip.classList.toggle('on', on);
+        chip.setAttribute('aria-pressed', String(on));
+        if (kind === 'area') applyAreaChipStyle(chip, on);
     }
     renderFeedReset();
 }
