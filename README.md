@@ -45,6 +45,8 @@ BLUESKY_PASSWORD=your-app-password
 NVIDIA_API_KEY=your-nvidia-api-key
 # Optional - Mistral fallback, used automatically when NVIDIA is rate limited
 MISTRAL_API_KEY=your-mistral-api-key
+# Optional only for a Mistral project provisioned for a regional endpoint
+MISTRAL_BASE_URL=https://api.eu.mistral.ai
 
 # Optional - Supabase storage
 SUPABASE_URL=https://xxx.supabase.co

@@ -31,9 +31,9 @@ function isAggregator(handle) { return !!handle && aggregatorHandles.has(handle)
 const DISCIPLINE_COLORS = {
     'Biology': '#3F6B4F', 'Ecology': '#56703A', 'Computer Science': '#315F78',
     'Physics': '#516C80', 'Chemistry & Materials Science': '#6B6252', 'Medicine': '#985244',
-    'Mathematics': '#625C82', 'Economics': '#866633', 'Sociology & Political Science': '#496C70',
-    'Engineering': '#8A5E42', 'Environmental Sciences': '#56703A', 'Psychology': '#815C6D',
-    'Neuroscience': '#625C82', 'History': '#765E49', 'Arts & Humanities': '#765E49',
+    'Mathematics': '#526D7A', 'Economics': '#866633', 'Sociology & Political Science': '#496C70',
+    'Engineering': '#8A5E42', 'Environmental Sciences': '#56703A', 'Psychology': '#865D55',
+    'Neuroscience': '#526D7A', 'History': '#765E49', 'Arts & Humanities': '#765E49',
     'General call': '#68736E',
 };
 function getDisciplineColor(d) { return DISCIPLINE_COLORS[d] || '#315F78'; }
@@ -1160,6 +1160,101 @@ async function pauseWeeklyAlert(id) {
     toast('Weekly emails stopped. The search is still saved.', true);
 }
 
+function subscriptionCountries() {
+    return [...new Set(state.all.map(p => p.country).filter(country => country && country !== 'Unknown'))]
+        .sort((a, b) => a.localeCompare(b));
+}
+
+function editFilterButton(kind, value, label, selected) {
+    return `<button type="button" class="edit-filter-choice ${selected ? 'on' : ''}" data-edit-kind="${kind}" data-edit-value="${escapeHtml(value)}" aria-pressed="${selected}">${escapeHtml(label)}</button>`;
+}
+
+function openSubscriptionEditor(subscription) {
+    const draft = {
+        query_text: subscription.query_text || '',
+        disciplines: new Set(subscription.disciplines || []),
+        countries: new Set(subscription.countries || []),
+        position_types: new Set(subscription.position_types || []),
+        hide_aggregators: Boolean(subscription.hide_aggregators),
+    };
+    const card = $('#edit-sub-card');
+
+    const renderCountries = query => {
+        const needle = query.trim().toLocaleLowerCase();
+        const countries = subscriptionCountries().filter(country => country.toLocaleLowerCase().includes(needle));
+        const selectedOutsideCorpus = [...draft.countries].filter(country => !subscriptionCountries().includes(country));
+        const options = [...selectedOutsideCorpus, ...countries];
+        const target = card.querySelector('#edit-sub-countries');
+        target.innerHTML = options.length
+            ? options.map(country => editFilterButton('country', country, country, draft.countries.has(country))).join('')
+            : '<p class="edit-filter-empty">No countries match that name.</p>';
+        bindChoices();
+    };
+
+    const bindChoices = () => {
+        card.querySelectorAll('[data-edit-kind]').forEach(button => {
+            button.onclick = () => {
+                const kind = button.dataset.editKind;
+                const value = button.dataset.editValue;
+                if (kind === 'hide_aggregators') draft.hide_aggregators = !draft.hide_aggregators;
+                else {
+                    const values = kind === 'area' ? draft.disciplines : kind === 'level' ? draft.position_types : draft.countries;
+                    values.has(value) ? values.delete(value) : values.add(value);
+                }
+                button.classList.toggle('on', kind === 'hide_aggregators' ? draft.hide_aggregators : !button.classList.contains('on'));
+                button.setAttribute('aria-pressed', String(button.classList.contains('on')));
+                if (kind === 'country') renderCountries(card.querySelector('#edit-sub-country-search').value);
+            };
+        });
+    };
+
+    card.innerHTML = `
+      <button type="button" class="modal-close" data-close="1" aria-label="Close">${ICON_CLOSE}</button>
+      <div class="modal-head">
+        <h2 id="edit-sub-title" class="page-heading">Edit saved search</h2>
+        <p class="auth-sub">Change the filters in this saved search without creating another one.</p>
+      </div>
+      <div class="auth-body edit-sub-body">
+        <div class="field"><label for="edit-sub-query">Keywords</label><input id="edit-sub-query" value="${escapeHtml(draft.query_text)}" placeholder="Optional keyword"></div>
+        <fieldset class="edit-filter-group"><legend>Area</legend><div class="edit-filter-options">${AREA_CHIPS.map(area => editFilterButton('area', area, discShort(area), draft.disciplines.has(area))).join('')}</div></fieldset>
+        <fieldset class="edit-filter-group"><legend>Level</legend><div class="edit-filter-options">${LEVEL_CHIPS.map(([level, label]) => editFilterButton('level', level, label, draft.position_types.has(level))).join('')}</div></fieldset>
+        <fieldset class="edit-filter-group"><legend>Country</legend><input id="edit-sub-country-search" class="edit-country-search" placeholder="Find or add a country" autocomplete="off"><div id="edit-sub-countries" class="edit-filter-options edit-country-options"></div></fieldset>
+        <button type="button" class="edit-aggregators ${draft.hide_aggregators ? 'on' : ''}" data-edit-kind="hide_aggregators" data-edit-value="1" aria-pressed="${draft.hide_aggregators}">Hide aggregator reposts</button>
+        <p class="field-help">${subscription.deliver_email && subscription.email_consent_at ? 'Weekly delivery remains on with the revised filters.' : 'This changes only the saved search; weekly email remains off.'}</p>
+        <div class="edit-sub-actions"><button type="button" class="btn-primary" id="save-sub-filters">Save changes</button><button type="button" class="btn-ghost" data-close="1">Cancel</button></div>
+      </div>`;
+    card.querySelectorAll('[data-close]').forEach(button => button.onclick = closeOverlays);
+    card.querySelector('#edit-sub-country-search').oninput = event => renderCountries(event.target.value);
+    renderCountries('');
+    card.querySelector('#save-sub-filters').onclick = async () => {
+        const fields = {
+            query_text: card.querySelector('#edit-sub-query').value.trim() || null,
+            disciplines: [...draft.disciplines].sort(),
+            countries: [...draft.countries].sort(),
+            position_types: [...draft.position_types].sort(),
+            hide_aggregators: draft.hide_aggregators,
+        };
+        if (state.subs.some(item => item.id !== subscription.id && sameFilter(item, fields))) {
+            toast('An identical saved search already exists.');
+            return;
+        }
+        const save = card.querySelector('#save-sub-filters');
+        save.disabled = true;
+        const { error } = await supabaseClient.from('subscriptions').update(fields).eq('id', subscription.id);
+        if (error) {
+            save.disabled = false;
+            toast(error.code === '23505' ? 'An identical saved search already exists.' : `Could not save changes: ${error.message}`);
+            return;
+        }
+        Object.assign(subscription, fields);
+        closeOverlays();
+        renderRailSubs();
+        renderSubsPage();
+        toast('Saved search updated.', true);
+    };
+    openDialog($('#modal-edit-sub'), '#edit-sub-query');
+}
+
 async function updateSub(id, fields) {
     const { error } = await supabaseClient.from('subscriptions').update(fields).eq('id', id);
     if (error) { toast(`Update failed: ${error.message}`); return; }
@@ -1214,6 +1309,7 @@ function renderSubsPage() {
             ${emailOn
                 ? `<button type="button" class="btn-ghost" data-pause-sub="${escapeHtml(s.id)}">Stop weekly emails</button>`
                 : `<button type="button" class="btn-primary" data-start-sub="${escapeHtml(s.id)}">Email me weekly</button>`}
+            <button type="button" class="btn-ghost" data-edit-sub="${escapeHtml(s.id)}">Edit filters</button>
             <button type="button" class="sub-delete" data-del-sub="${escapeHtml(s.id)}">Delete search</button>
           </div>
         </div>`;
@@ -1577,6 +1673,8 @@ function wireEvents() {
         if (start) { const subscription = state.subs.find(item => item.id === start.dataset.startSub); if (subscription) openWeeklyAlertDialog(subscription); return; }
         const pause = e.target.closest('[data-pause-sub]');
         if (pause) { pauseWeeklyAlert(pause.dataset.pauseSub); return; }
+        const edit = e.target.closest('[data-edit-sub]');
+        if (edit) { const subscription = state.subs.find(item => item.id === edit.dataset.editSub); if (subscription) openSubscriptionEditor(subscription); return; }
         const dsub = e.target.closest('[data-del-sub]');
         if (dsub) { deleteSub(dsub.dataset.delSub); return; }
     });

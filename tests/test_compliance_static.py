@@ -40,6 +40,15 @@ def test_product_and_legal_claims_match():
     assert "does not sell this data or use it to train AI models" in app
 
 
+def test_saved_searches_can_be_edited_without_recreating_them():
+    index = read("docs/index.html")
+    app = read("docs/app.js")
+    assert 'id="modal-edit-sub"' in index
+    assert "openSubscriptionEditor" in app
+    assert "Edit filters" in app
+    assert "Saved search updated." in app
+
+
 def test_no_preconsent_analytics_or_third_party_asset_cdns_in_document():
     index = read("docs/index.html")
     tokens = read("docs/colors_and_type.css")

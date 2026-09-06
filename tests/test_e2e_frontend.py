@@ -106,6 +106,19 @@ def test_account_deletion_requires_typed_confirmation(page, server_url):
     assert delete_button.is_enabled()
 
 
+def test_saved_search_filters_can_be_edited_in_place(page, server_url):
+    open_mock(page, server_url)
+    page.evaluate("""
+      state.user = {id:'mock-user', email:'researcher@example.edu', created_at:'2026-01-01', user_metadata:{}};
+      state.subs = [{id:'saved-1', query_text:null, disciplines:['Biology'], countries:['Germany'], position_types:['PhD Student'], hide_aggregators:false, deliver_email:false}];
+      setView('subs');
+    """)
+    page.get_by_role("button", name="Edit filters").click()
+    assert page.locator("#modal-edit-sub").get_attribute("aria-hidden") == "false"
+    assert page.get_by_role("heading", name="Edit saved search").is_visible()
+    assert page.locator("#edit-sub-countries button", has_text="Germany").get_attribute("aria-pressed") == "true"
+
+
 def test_optional_analytics_absent_before_consent_and_withdrawal_deletes_ga_cookie(page, server_url):
     open_mock(page, server_url)
     assert page.locator('script[src*="googletagmanager"]').count() == 0

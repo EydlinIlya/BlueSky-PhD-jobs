@@ -35,6 +35,25 @@ class OpenAICompatibleProvider(LLMProvider):
         self.api_key = api_key
         self.model = model or self.default_model
 
+    @staticmethod
+    def _error_detail(resp: requests.Response) -> str:
+        """Return Mistral/NIM's useful JSON error message when available."""
+        try:
+            body = resp.json()
+            if isinstance(body, dict):
+                return str(body.get("message") or body.get("detail") or body)
+        except ValueError:
+            pass
+        return resp.text[:500] or resp.reason
+
+    @staticmethod
+    def _retry_delay(resp: requests.Response, attempt: int) -> int:
+        """Prefer a provider-supplied retry delay, with bounded fallback."""
+        try:
+            return max(0, min(int(float(resp.headers.get("Retry-After", ""))), MAX_DELAY))
+        except ValueError:
+            return min(BASE_DELAY * (2 ** attempt), MAX_DELAY)
+
     def classify(self, text: str, prompt: str) -> str:
         """Send a classification prompt via a chat-completions API.
 
@@ -62,10 +81,21 @@ class OpenAICompatibleProvider(LLMProvider):
                 )
 
                 if resp.status_code == 429:
-                    delay = min(BASE_DELAY * (2 ** attempt), MAX_DELAY)
+                    # A zero RPM allocation cannot recover through client-side
+                    # waiting.  Fail over immediately and say what needs fixing
+                    # in the Mistral API project, rather than stalling a run for
+                    # several minutes of exponential backoff.
+                    rpm_limit = resp.headers.get("x-ratelimit-limit-req-minute")
+                    if rpm_limit == "0":
+                        raise LLMUnavailableError(
+                            f"{self.name} API has a 0 requests/minute allocation for this key/model "
+                            f"(HTTP 429: {self._error_detail(resp)}). Check the API project's rate-limit "
+                            "allocation or use a provisioned MISTRAL_BASE_URL."
+                        )
+                    delay = self._retry_delay(resp, attempt)
                     logger.warning(
                         f"{self.name} rate limited (attempt {attempt + 1}/{MAX_RETRIES}). "
-                        f"Waiting {delay}s..."
+                        f"Waiting {delay}s... Detail: {self._error_detail(resp)}"
                     )
                     time.sleep(delay)
                     continue
@@ -77,6 +107,9 @@ class OpenAICompatibleProvider(LLMProvider):
 
                 data = resp.json()
                 return data["choices"][0]["message"]["content"]
+
+            except LLMUnavailableError:
+                raise
 
             except requests.exceptions.Timeout as e:
                 if attempt < MAX_TIMEOUT_RETRIES - 1:
@@ -90,6 +123,13 @@ class OpenAICompatibleProvider(LLMProvider):
                     raise LLMUnavailableError(
                         f"{self.name} API unreachable after {MAX_TIMEOUT_RETRIES} attempts: {e}"
                     ) from e
+
+            except requests.exceptions.HTTPError as e:
+                response = e.response
+                detail = self._error_detail(response) if response is not None else str(e)
+                raise LLMUnavailableError(
+                    f"{self.name} API returned HTTP {response.status_code if response is not None else 'error'}: {detail}"
+                ) from e
 
             except requests.exceptions.RequestException as e:
                 if attempt < MAX_RETRIES - 1:

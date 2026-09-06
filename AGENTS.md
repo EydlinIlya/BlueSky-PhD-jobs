@@ -55,6 +55,7 @@ Optional:
 ```
 NVIDIA_API_KEY=your-nvidia-api-key    # For LLM filtering (Bluesky)
 MISTRAL_API_KEY=your-mistral-api-key  # Fallback LLM when NVIDIA is rate limited
+MISTRAL_BASE_URL=https://api.eu.mistral.ai  # Optional: only for a provisioned regional Mistral endpoint
 SUPABASE_URL=https://xxx.supabase.co  # For Supabase storage
 SUPABASE_KEY=your-anon-key            # For Supabase storage
 TELEGRAM_BOT_TOKEN=your-bot-token     # For Telegram channel
@@ -113,7 +114,7 @@ python bluesky_search.py --no-llm
 - `base.py` - Abstract `LLMProvider` class + `LLMUnavailableError`
 - `openai_compatible.py` - `OpenAICompatibleProvider` base with the shared `/v1/chat/completions` retry / rate-limit / timeout logic. Raises `LLMUnavailableError` once a provider is exhausted so a fallback can take over.
 - `nvidia.py` - `NvidiaProvider` (Llama 4 Maverick via NVIDIA NIM); thin subclass of the OpenAI-compatible base
-- `mistral.py` - `MistralProvider` (Mistral La Plateforme); fallback for NVIDIA, same base
+- `mistral.py` - `MistralProvider` (Mistral La Plateforme); fallback for NVIDIA, same base. Uses the documented global endpoint by default; `MISTRAL_BASE_URL` supports a Mistral-provisioned regional endpoint.
 - `fallback.py` - `FallbackProvider`: tries providers in priority order (NVIDIA → Mistral), failing over on `LLMUnavailableError`. A per-provider cooldown (`FALLBACK_COOLDOWN`, 1800s) skips a rate-limited/down primary so the per-post classify loop doesn't re-burn its retry budget on every post.
 - `classifier.py` - `JobClassifier` for filtering and metadata extraction
 
