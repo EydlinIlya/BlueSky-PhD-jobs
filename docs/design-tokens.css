@@ -1,6 +1,6 @@
 /* ============================================================
    PhD Sky — Foundation tokens (colors + type)
-   Dark scientific terminal aesthetic.
+   Light scientific terminal aesthetic.
    Fonts: Fira Code (mono) + Fira Sans (display/body)
    ============================================================ */
 
@@ -53,66 +53,66 @@
     --fw-bold:     700;
 
     /* ============================================================
-       COLORS — slate / cobalt / amber
+       COLORS — paper / academic blue / signal amber
        ============================================================ */
 
     /* Foundational neutral scale (slate) */
-    --slate-950: #020617;
-    --slate-900: #0f172a;   /* page bg */
-    --slate-850: #172033;
-    --slate-800: #1e293b;   /* card / surface */
-    --slate-700: #334155;   /* border */
-    --slate-600: #475569;
-    --slate-500: #64748b;
-    --slate-400: #94a3b8;
-    --slate-300: #a8b8c8;
-    --slate-200: #cbd5e1;
-    --slate-100: #e2e8f0;   /* primary text */
-    --slate-50:  #f1f5f9;
+    --slate-950: #172033;
+    --slate-900: #263449;
+    --slate-850: #334155;
+    --slate-800: #475569;
+    --slate-700: #64748b;
+    --slate-600: #758397;
+    --slate-500: #8d9aad;
+    --slate-400: #aeb9c8;
+    --slate-300: #c8d2df;
+    --slate-200: #d9e1eb;
+    --slate-100: #edf2f7;
+    --slate-50:  #f7f9fc;
 
     /* Brand — cobalt blue (terminal prompt & primary action) */
-    --blue-700: #1d4ed8;
-    --blue-600: #2563eb;
-    --blue-500: #3b82f6;     /* primary */
-    --blue-400: #60a5fa;     /* terminal accent */
-    --blue-300: #93c5fd;
-    --blue-200: #bfdbfe;
+    --blue-700: #1f3f64;
+    --blue-600: #294e79;
+    --blue-500: #365f91;     /* primary */
+    --blue-400: #5279a8;     /* terminal accent */
+    --blue-300: #82a2c5;
+    --blue-200: #cad8e8;
 
     /* Accent — signal amber (terminal cursor / warning) */
-    --amber-600: #d97706;
-    --amber-500: #f59e0b;    /* accent */
-    --amber-400: #fbbf24;
-    --amber-300: #fcd34d;
+    --amber-600: #854d0e;
+    --amber-500: #a16207;    /* accent */
+    --amber-400: #b7791f;
+    --amber-300: #d5a84a;
 
-    /* Violet — used in the AI badge gradient */
-    --violet-500: #8b5cf6;
-    --violet-600: #7c3aed;
+    /* Violet — reserved for a few discipline badges */
+    --violet-500: #6f5aa7;
+    --violet-600: #5d478e;
 
     /* Semantic state */
-    --green-600:  #059669;   /* country chip / success */
-    --green-700:  #047857;
-    --red-500:    #ef4444;
-    --red-600:    #dc2626;
-    --red-900-30: rgba(127, 29, 29, 0.3);
+    --green-600:  #2f7d5b;   /* country chip / success */
+    --green-700:  #246347;
+    --red-500:    #b83232;
+    --red-600:    #962929;
+    --red-900-30: rgba(185, 28, 28, 0.08);
 
     /* ── Semantic surface tokens ───────────────────────────── */
-    --bg:           var(--slate-900);
-    --bg-elevated:  var(--slate-800);
-    --bg-card:      var(--slate-800);
-    --bg-deep:      var(--slate-950);
-    --bg-input:     var(--slate-900);
-    --border:       var(--slate-700);
-    --border-strong: var(--slate-600);
+    --bg:           var(--slate-50);
+    --bg-elevated:  var(--slate-100);
+    --bg-card:      #ffffff;
+    --bg-deep:      var(--slate-200);
+    --bg-input:     #fbfcfe;
+    --border:       var(--slate-300);
+    --border-strong: var(--slate-400);
 
-    --fg:           var(--slate-100);
-    --fg-muted:     var(--slate-300);
-    --fg-subtle:    var(--slate-400);
-    --fg-inverse:   var(--slate-50);
+    --fg:           var(--slate-950);
+    --fg-muted:     var(--slate-800);
+    --fg-subtle:    var(--slate-700);
+    --fg-inverse:   #ffffff;
 
     --primary:      var(--blue-500);
     --primary-hover: var(--blue-600);
     --primary-active: var(--blue-700);
-    --primary-glow: rgba(59, 130, 246, 0.15);
+    --primary-glow: rgba(54, 95, 145, 0.15);
 
     --accent:       var(--amber-500);
     --accent-hover: var(--amber-400);
@@ -121,26 +121,26 @@
     --link-hover:   var(--amber-500);
 
     /* ── Discipline colors (badge palette) ─────────────────── */
-    --disc-biology:        #16a34a;
-    --disc-ecology:        #15803d;
-    --disc-cs:             #6d28d9;
-    --disc-physics:        #0284c7;
-    --disc-chemistry:      #0891b2;
-    --disc-medicine:       #dc2626;
-    --disc-mathematics:    #7c3aed;
-    --disc-economics:      #b45309;
-    --disc-sociology:      #0369a1;
-    --disc-engineering:    #c2410c;
-    --disc-environment:    #15803d;
-    --disc-psychology:     #be185d;
-    --disc-neuroscience:   #7c3aed;
-    --disc-history:        #92400e;
-    --disc-arts:           #a21caf;
-    --disc-general:        #475569;
+    --disc-biology:        #237a4a;
+    --disc-ecology:        #2f6f44;
+    --disc-cs:             #405f91;
+    --disc-physics:        #276d93;
+    --disc-chemistry:      #287889;
+    --disc-medicine:       #b33a3a;
+    --disc-mathematics:    #69589b;
+    --disc-economics:      #986317;
+    --disc-sociology:      #3c6f91;
+    --disc-engineering:    #a6502a;
+    --disc-environment:    #39734d;
+    --disc-psychology:     #9a456c;
+    --disc-neuroscience:   #68588f;
+    --disc-history:        #805a32;
+    --disc-arts:           #8a4f78;
+    --disc-general:        #59677a;
 
-    --pos-type-bg:         #c2410c;   /* position-type chip — terracotta */
-    --country-bg:          #059669;   /* country chip — emerald */
-    --aggregator-bg:       #475569;
+    --pos-type-bg:         #a6502a;   /* position-type chip — terracotta */
+    --country-bg:          #2f7d5b;   /* country chip — emerald */
+    --aggregator-bg:       #59677a;
 
     /* ── Spacing scale (8pt grid + 4pt half-steps) ─────────── */
     --space-0:  0;
@@ -166,12 +166,12 @@
     --r-pill: 9999px;  /* AI badge / switch */
 
     /* ── Shadows ───────────────────────────────────────────── */
-    --shadow-sm:    0 1px 0 rgba(59, 130, 246, 0.15);                /* header rule */
-    --shadow-md:    0 4px 12px rgba(0, 0, 0, 0.3);
-    --shadow-lg:    0 8px 24px rgba(0, 0, 0, 0.5);                   /* dropdown */
-    --shadow-xl:    0 8px 32px rgba(0, 0, 0, 0.5);                   /* search focus */
-    --shadow-focus: 0 0 0 3px rgba(99, 102, 241, 0.15);
-    --shadow-inset-thumb: 0 1px 3px rgba(0,0,0,0.3);                 /* switch thumb */
+    --shadow-sm:    0 1px 0 rgba(54, 95, 145, 0.12);                /* header rule */
+    --shadow-md:    0 4px 12px rgba(23, 32, 51, 0.08);
+    --shadow-lg:    0 8px 24px rgba(23, 32, 51, 0.12);               /* dropdown */
+    --shadow-xl:    0 8px 32px rgba(23, 32, 51, 0.14);               /* search focus */
+    --shadow-focus: 0 0 0 3px rgba(54, 95, 145, 0.15);
+    --shadow-inset-thumb: 0 1px 3px rgba(23,32,51,0.18);             /* switch thumb */
 
     /* ── Transitions ───────────────────────────────────────── */
     --t-fast:  0.15s ease;
