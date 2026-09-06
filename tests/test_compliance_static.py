@@ -109,13 +109,13 @@ def test_migration_and_weekly_workflow_contract():
     assert "vars." not in workflow and "SUPABASE_KEY:" not in workflow
 
 
-def test_research_library_assets_and_semantics_are_present():
+def test_dark_terminal_assets_and_semantics_are_present():
     tokens = read("docs/colors_and_type.css")
     styles = read("docs/styles.css")
     index = read("docs/index.html")
-    for color in ("#F3F5F2", "#FFFFFF", "#18201D", "#55625C", "#C8D0CB", "#18594A", "#315F78", "#B54632"):
+    for color in ("#0f172a", "#1e293b", "#3b82f6", "#8b5cf6", "#f59e0b", "#7c3aed"):
         assert color in tokens
-    assert "Literata" in tokens and "Atkinson Hyperlegible" in tokens and "IBM Plex Mono" in tokens
+    assert "Atkinson Hyperlegible" in tokens and "IBM Plex Mono" in tokens
     assert "linear-gradient" not in styles
     assert 'role="dialog"' in index and 'aria-live="polite"' in index
     assert ":focus-visible" in styles
