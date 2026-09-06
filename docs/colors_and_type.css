@@ -1,4 +1,4 @@
-/* PhD Sky — Research Library foundation. All type is served locally. */
+/* PhD Sky — light terminal foundation. All type is served locally. */
 @font-face {
   font-family: "Atkinson Hyperlegible";
   src: url("/assets/fonts/atkinson-hyperlegible-regular.ttf") format("truetype");
@@ -31,42 +31,42 @@
 }
 
 :root {
-  --font-display: "Literata", Georgia, serif;
-  --font-body: "Atkinson Hyperlegible", Arial, sans-serif;
+  --font-display: "IBM Plex Mono", ui-monospace, monospace;
+  --font-body: "IBM Plex Mono", ui-monospace, monospace;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
-  --paper: #F3F5F2;
+  --paper: #F4F7F9;
   --surface: #FFFFFF;
-  --ink: #18201D;
-  --muted: #55625C;
-  --rule: #C8D0CB;
-  --library-green: #18594A;
-  --archival-blue: #315F78;
-  --vermilion: #B54632;
+  --ink: #17212B;
+  --muted: #4B5C6B;
+  --rule: #CAD5DE;
+  --library-green: #176B63;
+  --archival-blue: #2B668B;
+  --vermilion: #AD5B35;
 
   --bg: var(--paper);
   --bg-card: var(--surface);
   --bg-elevated: var(--surface);
-  --bg-deep: #E7EBE8;
+  --bg-deep: #E7EDF1;
   --bg-input: var(--surface);
   --border: var(--rule);
-  --border-strong: #8F9D96;
+  --border-strong: #8A9AA8;
   --fg: var(--ink);
   --fg-muted: var(--muted);
-  --fg-subtle: #69766F;
+  --fg-subtle: #667787;
   --fg-inverse: #FFFFFF;
   --primary: var(--library-green);
-  --primary-hover: #10493C;
-  --primary-active: #0C3B31;
+  --primary-hover: #10564F;
+  --primary-active: #0B4843;
   --primary-glow: transparent;
   --accent: var(--vermilion);
-  --accent-hover: #963725;
+  --accent-hover: #8F4628;
   --link: var(--archival-blue);
   --link-hover: var(--library-green);
   --blue-400: var(--archival-blue);
   --green-600: var(--library-green);
   --red-500: var(--vermilion);
-  --red-900-30: #F7E7E3;
+  --red-900-30: #F9ECE7;
 
   --disc-biology: #3F6B4F;
   --disc-ecology: #56703A;
