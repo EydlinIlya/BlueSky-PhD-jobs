@@ -1034,6 +1034,111 @@ async function updateSub(id, fields) {
     renderSubsPage();
 }
 
+function subscriptionCountries() {
+    return [...new Set(state.all.map(p => p.country).filter(country => country && country !== 'Unknown'))]
+        .sort((a, b) => a.localeCompare(b));
+}
+
+function editFilterButton(kind, value, label, selected) {
+    return `<button type="button" class="edit-filter-choice ${selected ? 'on' : ''}" data-edit-kind="${kind}" data-edit-value="${escapeHtml(value)}" aria-pressed="${selected}">${escapeHtml(label)}</button>`;
+}
+
+function sameSubscriptionFilter(left, right) {
+    const normalized = values => [...(values || [])].sort().join('\u0000');
+    return (left.query_text || '') === (right.query_text || '')
+        && normalized(left.disciplines) === normalized(right.disciplines)
+        && normalized(left.countries) === normalized(right.countries)
+        && normalized(left.position_types) === normalized(right.position_types)
+        && Boolean(left.hide_aggregators) === Boolean(right.hide_aggregators);
+}
+
+function openSubscriptionEditor(subscription) {
+    const draft = {
+        query_text: subscription.query_text || '',
+        disciplines: new Set(subscription.disciplines || []),
+        countries: new Set(subscription.countries || []),
+        position_types: new Set(subscription.position_types || []),
+        hide_aggregators: Boolean(subscription.hide_aggregators),
+    };
+    const card = $('#edit-sub-card');
+
+    const bindChoices = () => {
+        card.querySelectorAll('[data-edit-kind]').forEach(button => {
+            button.onclick = () => {
+                const kind = button.dataset.editKind;
+                const value = button.dataset.editValue;
+                if (kind === 'hide_aggregators') {
+                    draft.hide_aggregators = !draft.hide_aggregators;
+                    button.classList.toggle('on', draft.hide_aggregators);
+                } else {
+                    const values = kind === 'area' ? draft.disciplines : kind === 'level' ? draft.position_types : draft.countries;
+                    values.has(value) ? values.delete(value) : values.add(value);
+                    button.classList.toggle('on', values.has(value));
+                }
+                button.setAttribute('aria-pressed', String(button.classList.contains('on')));
+            };
+        });
+    };
+
+    const renderCountries = query => {
+        const needle = query.trim().toLocaleLowerCase();
+        const available = subscriptionCountries();
+        const selectedOutsideCorpus = [...draft.countries].filter(country => !available.includes(country));
+        const options = [...new Set([...selectedOutsideCorpus, ...available.filter(country => country.toLocaleLowerCase().includes(needle))])];
+        const target = card.querySelector('#edit-sub-countries');
+        target.innerHTML = options.length
+            ? options.map(country => editFilterButton('country', country, country, draft.countries.has(country))).join('')
+            : '<p class="edit-filter-empty">No countries match.</p>';
+        bindChoices();
+    };
+
+    card.innerHTML = `
+      <button class="modal-close" data-close-edit="1">${ICON_CLOSE}</button>
+      <div class="auth-head"><div class="auth-title"><span>&gt;</span> edit_subscription</div><div class="auth-sub">Change the filters without recreating the subscription.</div></div>
+      <div class="auth-body edit-sub-body">
+        <div class="field"><label>Keywords</label><input id="edit-sub-query" value="${escapeHtml(draft.query_text)}" placeholder="optional keyword"></div>
+        <fieldset class="edit-filter-group"><legend>Area</legend><div class="edit-filter-options">${AREA_CHIPS.map(area => editFilterButton('area', area, discShort(area), draft.disciplines.has(area))).join('')}</div></fieldset>
+        <fieldset class="edit-filter-group"><legend>Level</legend><div class="edit-filter-options">${LEVEL_CHIPS.map(([level, label]) => editFilterButton('level', level, label, draft.position_types.has(level))).join('')}</div></fieldset>
+        <fieldset class="edit-filter-group"><legend>Country</legend><input id="edit-sub-country-search" class="edit-country-search" placeholder="find a country" autocomplete="off"><div id="edit-sub-countries" class="edit-filter-options edit-country-options"></div></fieldset>
+        <button type="button" class="edit-aggregators ${draft.hide_aggregators ? 'on' : ''}" data-edit-kind="hide_aggregators" data-edit-value="1" aria-pressed="${draft.hide_aggregators}">Hide aggregator reposts</button>
+        <div class="edit-sub-actions"><button type="button" class="btn-primary" id="save-sub-filters">save changes</button><button type="button" class="btn-ghost" data-close-edit="1">cancel</button></div>
+      </div>`;
+    card.querySelectorAll('[data-close-edit]').forEach(button => button.onclick = closeOverlays);
+    card.querySelector('#edit-sub-country-search').oninput = event => renderCountries(event.target.value);
+    renderCountries('');
+    card.querySelector('#save-sub-filters').onclick = async () => {
+        const fields = {
+            query_text: card.querySelector('#edit-sub-query').value.trim() || null,
+            disciplines: [...draft.disciplines].sort(),
+            countries: [...draft.countries].sort(),
+            position_types: [...draft.position_types].sort(),
+            hide_aggregators: draft.hide_aggregators,
+        };
+        if (state.subs.some(item => item.id !== subscription.id && sameSubscriptionFilter(item, fields))) {
+            toast('An identical subscription already exists.');
+            return;
+        }
+        const save = card.querySelector('#save-sub-filters');
+        save.disabled = true;
+        const { error } = await supabaseClient.from('subscriptions').update(fields).eq('id', subscription.id);
+        if (error) {
+            save.disabled = false;
+            toast(`Update failed: ${error.message}`);
+            return;
+        }
+        Object.assign(subscription, fields);
+        closeOverlays();
+        renderRailSubs();
+        renderSubsPage();
+        toast('Subscription updated', true);
+    };
+
+    bindChoices();
+    $('#modal-edit-sub').classList.add('open');
+    $('#backdrop').classList.add('open');
+    card.querySelector('#edit-sub-query').focus();
+}
+
 async function deleteSub(id) {
     const { error } = await supabaseClient.from('subscriptions').delete().eq('id', id);
     if (error) { toast(`Delete failed: ${error.message}`); return; }
@@ -1071,6 +1176,7 @@ function renderSubsPage() {
           <div class="sub-card-tags">${tags}</div>
           <div class="sub-delivery">
             <span class="del-static">Weekly email digest → <span class="em">${escapeHtml(u.email || '')}</span></span>
+            <button class="sub-edit" data-edit-sub="${escapeHtml(s.id)}">Edit filters</button>
             <button class="sub-delete" data-del-sub="${escapeHtml(s.id)}">delete</button>
           </div>
         </div>`;
@@ -1232,6 +1338,12 @@ function wireEvents() {
     // subscriptions page interactions (delegated)
     $('#view-subs').addEventListener('click', e => {
         if (e.target.closest('#subs-add') || e.target.closest('#subs-empty-add')) { saveCurrentSearch(); return; }
+        const edit = e.target.closest('[data-edit-sub]');
+        if (edit) {
+            const subscription = state.subs.find(item => String(item.id) === edit.dataset.editSub);
+            if (subscription) openSubscriptionEditor(subscription);
+            return;
+        }
         const dsub = e.target.closest('[data-del-sub]');
         if (dsub) { deleteSub(dsub.dataset.delSub); return; }
     });

@@ -43,6 +43,8 @@ BLUESKY_PASSWORD=your-app-password
 NVIDIA_API_KEY=your-nvidia-api-key
 # Optional - Mistral fallback, used automatically when NVIDIA is rate limited
 MISTRAL_API_KEY=your-mistral-api-key
+# Optional - only for a Mistral project provisioned for a regional endpoint
+MISTRAL_BASE_URL=https://api.eu.mistral.ai
 
 # Optional - Supabase storage
 SUPABASE_URL=https://xxx.supabase.co
@@ -265,7 +267,8 @@ The browse-positions site is at **<https://phdsky.org/>** (Vercel, served from
 The UI is a Twitter/Bluesky-style **feed**: a chronological river of positions
 with day separators and infinite scroll, a left rail of filter chips
 (Level / Country / Area + "Hide aggregator reposts"), a command/search bar, and a
-post-detail flyout. Plain HTML + CSS + vanilla JS, no build step. Data loads from
+post-detail flyout. Saved subscriptions can be edited in place without recreating
+them. Plain HTML + CSS + vanilla JS, no build step. Data loads from
 an embedded snapshot → `positions.json` → live Supabase. Open it locally with
 `python -m http.server --directory docs` (add `?mock` to use bundled sample data).
 

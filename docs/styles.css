@@ -45,7 +45,7 @@ body { padding-bottom: 34px; }
 .btn-signup:hover { background: var(--primary-hover); }
 
 /* avatar + profile menu (logged-in) */
-.avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg,#3b82f6,#8b5cf6); display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: #fff; cursor: pointer; border: 1px solid transparent; transition: box-shadow .15s; }
+.avatar { width: 34px; height: 34px; border-radius: 50%; background: #3b82f6; display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 12px; font-weight: 700; color: #fff; cursor: pointer; border: 1px solid transparent; transition: box-shadow .15s; }
 .avatar:hover { box-shadow: 0 0 0 3px rgba(59,130,246,.2); }
 .avatar.sm { width: 40px; height: 40px; font-size: 14px; }
 .avatar.lg { width: 56px; height: 56px; font-size: 18px; border-radius: 12px; }
@@ -176,7 +176,7 @@ body { padding-bottom: 34px; }
 .acct-unfollow:hover { background: transparent; color: var(--red-500); border-color: var(--red-500); }
 
 /* logged-out nudge in rail */
-.rail-nudge { background: linear-gradient(160deg, rgba(59,130,246,.10), rgba(139,92,246,.06)); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 9px; }
+.rail-nudge { background: rgba(59,130,246,.08); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 9px; }
 .rail-nudge .nh { font-family: var(--font-mono); font-size: 12px; color: var(--fg); font-weight: 600; }
 .rail-nudge .nb { font-family: var(--font-display); font-size: 12px; color: var(--fg-muted); line-height: 1.5; }
 .rail-nudge .nbtn { padding: 8px; background: var(--primary); color: #fff; border: none; border-radius: 6px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; cursor: pointer; transition: background .15s; }
@@ -471,6 +471,21 @@ a.p-time:hover { color: var(--primary); text-decoration: underline; }
 .del-static .em { color: var(--fg-subtle); }
 .sub-delete { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--fg-subtle); background: none; border: none; cursor: pointer; }
 .sub-delete:hover { color: var(--red-500); }
+.sub-edit { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--primary); background: none; border: none; cursor: pointer; }
+.sub-edit:hover { color: var(--accent); }
+.sub-edit + .sub-delete { margin-left: 0; }
+
+.edit-sub-body { max-height: min(68vh, 620px); overflow-y: auto; }
+.edit-filter-group { margin: 0; padding: 0; border: 0; }
+.edit-filter-group legend { padding: 0; margin: 0 0 7px; font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--fg); }
+.edit-filter-options { display: flex; flex-wrap: wrap; gap: 7px; }
+.edit-filter-choice,.edit-aggregators { min-height: 34px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-input); color: var(--fg-muted); font-family: var(--font-mono); font-size: 11px; cursor: pointer; }
+.edit-filter-choice:hover,.edit-aggregators:hover { border-color: var(--primary); color: var(--fg); }
+.edit-filter-choice.on,.edit-aggregators.on { background: var(--primary); color: #fff; border-color: var(--primary); }
+.edit-country-search { width: 100%; min-height: 38px; margin: 0 0 8px; padding: 8px 10px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--fg); font-family: var(--font-mono); }
+.edit-country-options { max-height: 168px; overflow-y: auto; padding: 1px; }
+.edit-filter-empty { margin: 0; color: var(--fg-muted); font-size: 12px; }
+.edit-sub-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
 
 .follow-grid { display: flex; flex-wrap: wrap; gap: 7px; }
 .subs-empty { padding: 40px 20px; text-align: center; border: 1px dashed var(--border); border-radius: 11px; display: flex; flex-direction: column; align-items: center; gap: 10px; }

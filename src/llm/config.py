@@ -12,6 +12,11 @@ DEFAULT_MODEL = os.environ.get("NVIDIA_MODEL", "meta/llama-4-maverick-17b-128e-i
 # Override with the MISTRAL_MODEL env var if needed.
 MISTRAL_MODEL = os.environ.get("MISTRAL_MODEL", "mistral-medium-latest")
 
+# The global endpoint is Mistral's documented default. Keep this configurable
+# for API projects explicitly provisioned for a regional endpoint. Do not
+# include ``/v1`` in this value.
+MISTRAL_BASE_URL = os.environ.get("MISTRAL_BASE_URL", "https://api.mistral.ai").rstrip("/")
+
 # When a provider fails over in FallbackProvider, skip it for this many seconds
 # so we don't re-hit a rate-limited/down primary on every post in the classify
 # loop. Kept high (30 min) because a down NVIDIA costs a full timeout-retry
