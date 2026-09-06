@@ -308,7 +308,7 @@ function postHTML(p) {
     const msg = p.message || '';
     const truncated = msg.length > MSG_LIMIT;
     const bodyText = truncated ? msg.slice(0, MSG_LIMIT).trimEnd() + '…' : msg;
-    const moreLink = truncated ? '<span class="more-link">show more</span>' : '';
+    const moreLink = '';
 
     const reposts = (p.uri && state.duplicateMap[p.uri]) || [];
     const rep = reposts.length;
