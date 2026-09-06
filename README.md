@@ -277,8 +277,8 @@ The browse-positions site is at **<https://phdsky.org/>** (Vercel, served from
 (`eydlinilya.github.io/BlueSky-PhD-jobs/`) now serves a 0-second redirect to
 `phdsky.org` from the `gh-pages` branch.
 
-The UI uses a light **terminal** identity: a chronological river of positions
-with the existing monospace controls, day separators and infinite scroll, a left rail of filter chips
+The UI uses a light **Research Library** identity: a chronological river of positions
+with editorial source rules, day separators and infinite scroll, a left rail of filter chips
 (Level / Country / Area + "Hide aggregator reposts"), a command/search bar, and a
 post-detail flyout. Literata, Atkinson Hyperlegible, IBM Plex Mono, Supabase JS,
 and CookieConsent are served locally. Plain HTML + CSS + vanilla JS, no build step. Data loads from

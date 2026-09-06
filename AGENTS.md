@@ -325,8 +325,8 @@ Required secrets:
 ## Frontend (`docs/`)
 
 Static Vercel/GitHub Pages site for browsing PhD positions. The UI is the light
-**terminal** feed: it preserves the existing dense monospace layout and explicit
-post actions, using flat, low-gradient light surfaces with teal/blue accents.
+**Research Library** feed: a chronological river with editorial source rules,
+mineral-paper surfaces, restrained academic type, and explicit post actions.
 No build step; plain HTML + CSS + vanilla JS.
 
 **`docs/index.html`** - Single-page feed shell:
@@ -350,8 +350,9 @@ go through `json_for_script()` in `scripts/generate_seo_pages.py`, never bare
 (Python) or `escapeHtml()` (`docs/app.js`). Covered by
 `tests/test_seo_escaping.py`.
 
-**`docs/colors_and_type.css`** - Light terminal tokens: cool paper, carbon ink,
-teal, blue, vermilion, and self-hosted IBM Plex Mono. Loads before `styles.css`.
+**`docs/colors_and_type.css`** - Research Library tokens: mineral paper, carbon
+ink, library green, archival blue, signal vermilion, and self-hosted Literata /
+Atkinson Hyperlegible / IBM Plex Mono. Loads before `styles.css`.
 
 **`docs/styles.css`** - v3 feed styles (topbar, rails, river/post, flyout, modal,
 onboarding, subscriptions page, toasts).
