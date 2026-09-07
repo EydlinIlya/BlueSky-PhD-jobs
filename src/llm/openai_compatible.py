@@ -85,11 +85,8 @@ class OpenAICompatibleProvider(LLMProvider):
                     if rpm_limit == "0":
                         raise LLMUnavailableError(
                             f"{self.name} API has a 0 requests/minute allocation for this key/model "
-                            f"at {self.api_url} using {self.model} "
-                            f"(HTTP 429: {self._error_detail(resp)}). The endpoint authenticated, but "
-                            "the key's organization/workspace grants it no API inference requests. "
-                            "Check the provider's API-specific limits; product-plan quota and prepaid "
-                            "credits may be separate."
+                            f"(HTTP 429: {self._error_detail(resp)}). Check the API project's rate-limit "
+                            "allocation and endpoint configuration."
                         )
                     delay = self._retry_delay(resp, attempt)
                     logger.warning(
