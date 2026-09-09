@@ -1,72 +1,144 @@
-"""Gemini LLM provider implementation."""
+"""Google Gemini Developer API provider."""
 
 import logging
 import time
 
-from google import genai
-from google.genai import errors as genai_errors
+import requests
 
-from .base import LLMProvider
-from .config import MAX_RETRIES, BASE_DELAY, MAX_DELAY, REQUEST_COOLDOWN
+from .base import LLMProvider, LLMUnavailableError
+from .config import (
+    BASE_DELAY,
+    GEMINI_MODEL,
+    MAX_DELAY,
+    MAX_RETRIES,
+    MAX_TIMEOUT_RETRIES,
+    REQUEST_COOLDOWN,
+    REQUEST_TIMEOUT,
+)
 
 logger = logging.getLogger("bluesky_search")
 
-DEFAULT_GEMINI_MODEL = "gemma-3-1b-it"
-
 
 class GeminiProvider(LLMProvider):
-    """Google Gemini LLM provider."""
+    """Text classifier backed by the Gemini Interactions REST API."""
 
-    def __init__(self, api_key: str, model: str = DEFAULT_GEMINI_MODEL):
-        """Initialize Gemini provider.
+    name = "Google Gemini"
+    api_url = "https://generativelanguage.googleapis.com/v1beta/interactions"
 
-        Args:
-            api_key: Google AI API key
-            model: Model name to use (default: gemma-3-1b-it, has higher rate limits)
-        """
-        self.client = genai.Client(api_key=api_key)
-        self.model = model
+    def __init__(self, api_key: str, model: str | None = None):
+        self.api_key = api_key
+        self.model = model or GEMINI_MODEL
+
+    @staticmethod
+    def _error_detail(response: requests.Response) -> str:
+        try:
+            body = response.json()
+            if isinstance(body, dict):
+                error = body.get("error", body)
+                if isinstance(error, dict):
+                    return str(error.get("message") or error)
+                return str(error)
+        except ValueError:
+            pass
+        return response.text[:500] or response.reason
+
+    @staticmethod
+    def _retry_delay(response: requests.Response, attempt: int) -> int:
+        try:
+            return max(
+                0,
+                min(int(float(response.headers.get("Retry-After", ""))), MAX_DELAY),
+            )
+        except ValueError:
+            return min(BASE_DELAY * (2**attempt), MAX_DELAY)
+
+    @staticmethod
+    def _response_text(data: dict) -> str:
+        try:
+            text_parts = [
+                content["text"]
+                for step in data["steps"]
+                if step.get("type") == "model_output"
+                for content in step.get("content", [])
+                if content.get("type") == "text" and content.get("text")
+            ]
+            if text_parts:
+                return "".join(text_parts)
+        except (KeyError, IndexError, TypeError):
+            pass
+        raise LLMUnavailableError(
+            "Google Gemini API returned no text output; the response may have been blocked"
+        )
 
     def classify(self, text: str, prompt: str) -> str:
-        """Send a classification prompt to Gemini with retry logic.
-
-        Args:
-            text: The text to classify
-            prompt: The classification prompt/instructions
-
-        Returns:
-            The model's response as a string
-        """
-        full_prompt = f"{prompt}\n\nText: {text}"
+        """Send a classification prompt, retrying transient API failures."""
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": self.api_key,
+        }
+        payload = {
+            "model": self.model,
+            "input": f"{prompt}\n\nText:\n{text}",
+            "store": False,
+            "generation_config": {"thinking_level": "low"},
+        }
 
         for attempt in range(MAX_RETRIES):
             try:
-                response = self.client.models.generate_content(
-                    model=self.model,
-                    contents=full_prompt,
+                response = requests.post(
+                    self.api_url,
+                    headers=headers,
+                    json=payload,
+                    timeout=REQUEST_TIMEOUT,
                 )
-                # Cooldown to stay within rate limits
+
+                if response.status_code == 429 or response.status_code >= 500:
+                    delay = self._retry_delay(response, attempt)
+                    logger.warning(
+                        f"Google Gemini API returned HTTP {response.status_code} "
+                        f"(attempt {attempt + 1}/{MAX_RETRIES}). Retrying in {delay}s. "
+                        f"Detail: {self._error_detail(response)}"
+                    )
+                    time.sleep(delay)
+                    continue
+
+                response.raise_for_status()
                 if REQUEST_COOLDOWN > 0:
                     time.sleep(REQUEST_COOLDOWN)
-                return response.text
+                return self._response_text(response.json())
 
-            except genai_errors.ClientError as e:
-                error_str = str(e)
-                if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-                    # Calculate delay with exponential backoff
-                    delay = min(BASE_DELAY * (2 ** attempt), MAX_DELAY)
+            except requests.exceptions.Timeout as error:
+                if attempt < MAX_TIMEOUT_RETRIES - 1:
+                    delay = min(BASE_DELAY * (2**attempt), MAX_DELAY)
                     logger.warning(
-                        f"Gemini rate limited (attempt {attempt + 1}/{MAX_RETRIES}). "
-                        f"Waiting {delay}s..."
+                        f"Google Gemini API timeout "
+                        f"(attempt {attempt + 1}/{MAX_TIMEOUT_RETRIES}). "
+                        f"Retrying in {delay}s."
                     )
                     time.sleep(delay)
                 else:
-                    # Non-rate-limit error, re-raise
-                    raise
+                    raise LLMUnavailableError(
+                        f"Google Gemini API unreachable after "
+                        f"{MAX_TIMEOUT_RETRIES} attempts: {error}"
+                    ) from error
+            except requests.exceptions.HTTPError as error:
+                detail = self._error_detail(response)
+                raise LLMUnavailableError(
+                    f"Google Gemini API returned HTTP {response.status_code}: {detail}"
+                ) from error
+            except requests.exceptions.RequestException as error:
+                if attempt < MAX_RETRIES - 1:
+                    delay = min(BASE_DELAY * (2**attempt), MAX_DELAY)
+                    logger.warning(
+                        f"Google Gemini API request failed: {error}. "
+                        f"Retrying in {delay}s."
+                    )
+                    time.sleep(delay)
+                else:
+                    raise LLMUnavailableError(
+                        f"Google Gemini API failed after {MAX_RETRIES} attempts: {error}"
+                    ) from error
 
-        # If we've exhausted all retries, raise the last error
-        raise genai_errors.ClientError(
-            429,
-            {"error": {"message": f"Rate limit exceeded after {MAX_RETRIES} retries"}},
-            None,
+        raise LLMUnavailableError(
+            f"Google Gemini API unavailable after {MAX_RETRIES} retries"
         )

@@ -5,7 +5,7 @@
 ## What This Site Does
 
 This site collects and displays academic job postings from Bluesky (social network).
-Posts are filtered using AI (Llama) to identify genuine position announcements.
+Posts are filtered using AI to identify genuine position announcements.
 Data is updated daily via automated pipelines.
 
 ## Content

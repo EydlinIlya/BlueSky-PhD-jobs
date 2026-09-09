@@ -2,33 +2,16 @@
 
 import os
 
-# Model configuration
-DEFAULT_MODEL = os.environ.get("NVIDIA_MODEL", "meta/llama-4-maverick-17b-128e-instruct")
-
-# Mistral fallback model (used when NVIDIA is rate limited / unavailable).
-# All Mistral chat models are instruct-tuned. Default is mistral-medium-latest:
-# it won a benchmark vs the 41 hand-labeled ground-truth posts — best job-filter
-# accuracy (88% / F1 92%), metadata tied at top, and it beat mistral-large-latest.
-# Override with the MISTRAL_MODEL env var if needed.
-MISTRAL_MODEL = os.environ.get("MISTRAL_MODEL", "mistral-medium-latest")
-
-# The global endpoint is Mistral's documented default. Keep this configurable
-# for API projects explicitly provisioned for a regional endpoint. Do not
-# include ``/v1`` in this value.
-MISTRAL_BASE_URL = os.environ.get("MISTRAL_BASE_URL", "https://api.mistral.ai").rstrip("/")
-
-# When a provider fails over in FallbackProvider, skip it for this many seconds
-# so we don't re-hit a rate-limited/down primary on every post in the classify
-# loop. Kept high (30 min) because a down NVIDIA costs a full timeout-retry
-# cycle (~3 min) each time the cooldown lapses before it fails back to Mistral.
-FALLBACK_COOLDOWN = 1800  # seconds
+# Stable Flash model with free-tier access through the Gemini Developer API.
+# Override for testing or future model upgrades without changing application code.
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
 
 # Rate limit settings
 MAX_RETRIES = 5        # retries for rate limits / transient errors
 MAX_TIMEOUT_RETRIES = 4  # retries for network timeouts (API may be down)
 BASE_DELAY = 10  # seconds (initial backoff on rate limit)
 MAX_DELAY = 120  # seconds (max backoff)
-REQUEST_COOLDOWN = 2  # seconds between requests (free tier: 30 req/min = 2s)
+REQUEST_COOLDOWN = 6  # seconds between requests; conservative for free-tier quotas
 REQUEST_TIMEOUT = 30  # seconds to wait for a single API response
 
 # Academic disciplines for classification

@@ -40,11 +40,9 @@ BLUESKY_HANDLE=your-handle.bsky.social
 BLUESKY_PASSWORD=your-app-password
 
 # Optional - LLM filtering (recommended for Bluesky)
-NVIDIA_API_KEY=your-nvidia-api-key
-# Optional - Mistral fallback, used automatically when NVIDIA is rate limited
-MISTRAL_API_KEY=your-mistral-api-key
-# Optional - only for a Mistral project provisioned for a regional endpoint
-MISTRAL_BASE_URL=https://api.eu.mistral.ai
+GEMINI_API_KEY=your-gemini-api-key
+# Optional model override (default: free-tier gemini-3.8-flash)
+GEMINI_MODEL=gemini-3.8-flash
 
 # Optional - Supabase storage
 SUPABASE_URL=https://xxx.supabase.co
@@ -56,7 +54,15 @@ TELEGRAM_CHANNEL_ID=@your_channel
 ```
 
 Get a Bluesky app password at Settings → App Passwords.
-Get an NVIDIA API key at https://build.nvidia.com
+Create a Gemini API key in [Google AI Studio](https://aistudio.google.com/apikey),
+then put it in the repository's local `.env` file as `GEMINI_API_KEY`. For the
+scheduled ingest, also add the same name and value under GitHub repository
+**Settings → Secrets and variables → Actions → New repository secret**. Never put
+the key in `docs/` or any browser-side JavaScript. Google currently lists
+`gemini-3.8-flash` input and output as free of charge on the Free Tier; quotas
+depend on the project and free-tier submissions may be used to improve Google's
+products. Check the [current pricing](https://ai.google.dev/gemini-api/docs/pricing)
+and your AI Studio rate-limit dashboard before increasing ingest volume.
 
 ## Usage
 
@@ -217,10 +223,9 @@ To enable:
 
 1. Push to GitHub
 2. Go to Settings → Secrets and variables → Actions
-3. Add secrets: `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`, `NVIDIA_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`
-4. (Optional) Add `MISTRAL_API_KEY` for LLM fallback when NVIDIA is rate limited
-5. (Optional) Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHANNEL_ID` for Telegram posting
-6. The workflows run automatically or can be triggered manually from the Actions tab
+3. Add secrets: `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`, `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`
+4. (Optional) Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHANNEL_ID` for Telegram posting
+5. The workflows run automatically or can be triggered manually from the Actions tab
 
 ## Telegram Channel
 
@@ -339,7 +344,7 @@ for catch-all discipline labels, so they don't become thin pages.
 - [atproto](https://atproto.blue/) - AT Protocol SDK for Bluesky
 - [httpx](https://www.python-httpx.org/) - HTTP client for ScholarshipDB
 - [beautifulsoup4](https://www.crummy.com/software/BeautifulSoup/) - HTML parsing
-- [requests](https://requests.readthedocs.io/) - NVIDIA API
+- [requests](https://requests.readthedocs.io/) - Gemini API and web requests
 - [scikit-learn](https://scikit-learn.org/) - TF-IDF similarity for deduplication
 - [supabase](https://supabase.com/docs/reference/python) - Supabase client
 

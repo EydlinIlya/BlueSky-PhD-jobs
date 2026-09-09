@@ -7,9 +7,7 @@ from datetime import date
 
 from src.logger import setup_logger
 from src.llm import (
-    NvidiaProvider,
-    MistralProvider,
-    FallbackProvider,
+    GeminiProvider,
     JobClassifier,
     LLMUnavailableError,
 )
@@ -27,25 +25,11 @@ AVAILABLE_SOURCES = ["bluesky", "scholarshipdb"]
 
 
 def get_classifier() -> JobClassifier | None:
-    """Create a job classifier from whichever LLM keys are available.
-
-    NVIDIA is primary; Mistral is used as a fallback when NVIDIA is rate
-    limited or unavailable. If both keys are set, requests fail over from
-    NVIDIA to Mistral automatically. Returns None if no key is configured.
-    """
-    providers = []
-    nvidia_key = os.environ.get("NVIDIA_API_KEY")
-    if nvidia_key:
-        providers.append(NvidiaProvider(nvidia_key))
-    mistral_key = os.environ.get("MISTRAL_API_KEY")
-    if mistral_key:
-        providers.append(MistralProvider(mistral_key))
-
-    if not providers:
+    """Create a Gemini-backed classifier when its API key is configured."""
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
         return None
-
-    llm = providers[0] if len(providers) == 1 else FallbackProvider(providers)
-    return JobClassifier(llm)
+    return JobClassifier(GeminiProvider(api_key))
 
 
 def get_storage(backend: str, output: str) -> StorageBackend:
@@ -108,7 +92,7 @@ def main():
     parser.add_argument(
         "--no-llm",
         action="store_true",
-        help="Disable LLM filtering for Bluesky (uses NVIDIA_API_KEY)",
+        help="Disable LLM filtering for Bluesky (uses GEMINI_API_KEY)",
     )
     parser.add_argument(
         "--full-sync",
@@ -162,9 +146,9 @@ def main():
     if not args.no_llm:
         classifier = get_classifier()
         if classifier:
-            logger.info("LLM filtering enabled (NVIDIA primary, Mistral fallback if configured)")
+            logger.info("LLM filtering enabled (Google Gemini Flash)")
         else:
-            logger.info("LLM filtering disabled (no NVIDIA_API_KEY or MISTRAL_API_KEY)")
+            logger.info("LLM filtering disabled (no GEMINI_API_KEY)")
 
     # --- Supabase: use 4-stage persistent pipeline ---
     if args.storage == "supabase":

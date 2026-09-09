@@ -2,20 +2,15 @@
 
 from .base import LLMProvider, LLMUnavailableError
 from .classifier import JobClassifier
-from .config import DISCIPLINES, POSITION_TYPES, DEFAULT_MODEL, MISTRAL_MODEL
-from .nvidia import NvidiaProvider
-from .mistral import MistralProvider
-from .fallback import FallbackProvider
+from .config import DISCIPLINES, GEMINI_MODEL, POSITION_TYPES
+from .gemini import GeminiProvider
 
 __all__ = [
     "LLMProvider",
     "LLMUnavailableError",
-    "NvidiaProvider",
-    "MistralProvider",
-    "FallbackProvider",
+    "GeminiProvider",
     "JobClassifier",
     "DISCIPLINES",
     "POSITION_TYPES",
-    "DEFAULT_MODEL",
-    "MISTRAL_MODEL",
+    "GEMINI_MODEL",
 ]
