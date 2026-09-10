@@ -25,7 +25,7 @@ class FakeResponse:
             raise requests.HTTPError(response=response)
 
 
-def test_classify_uses_flash_rest_api(monkeypatch):
+def test_classify_uses_default_gemma_rest_api(monkeypatch):
     captured = {}
 
     def fake_post(url, **kwargs):
@@ -42,9 +42,28 @@ def test_classify_uses_flash_rest_api(monkeypatch):
     assert result == "YES"
     assert captured["url"].endswith("/v1beta/interactions")
     assert captured["headers"]["x-goog-api-key"] == "secret-key"
-    assert captured["json"]["model"] == "gemini-3.8-flash"
+    assert captured["json"]["model"] == "gemma-4-31b-it"
     assert captured["json"]["input"] == "Classify it\n\nText:\nA PhD opening"
     assert captured["json"]["store"] is False
+    assert captured["json"]["generation_config"]["thinking_level"] == "minimal"
+
+
+def test_gemini_override_uses_low_thinking(monkeypatch):
+    captured = {}
+
+    def fake_post(url, **kwargs):
+        captured.update(url=url, **kwargs)
+        return FakeResponse(
+            body={"steps": [{"type": "model_output", "content": [{"type": "text", "text": "YES"}]}]}
+        )
+
+    monkeypatch.setattr("src.llm.gemini.requests.post", fake_post)
+    monkeypatch.setattr("src.llm.gemini.REQUEST_COOLDOWN", 0)
+
+    GeminiProvider("secret-key", model="gemini-3.8-flash").classify(
+        "A PhD opening", "Classify it"
+    )
+
     assert captured["json"]["generation_config"]["thinking_level"] == "low"
 
 

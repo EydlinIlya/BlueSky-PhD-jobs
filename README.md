@@ -41,8 +41,8 @@ BLUESKY_PASSWORD=your-app-password
 
 # Optional - LLM filtering (recommended for Bluesky)
 GEMINI_API_KEY=your-gemini-api-key
-# Optional model override (default: free-tier gemini-3.8-flash)
-GEMINI_MODEL=gemini-3.8-flash
+# Optional model override (default: gemma-4-31b-it)
+GEMINI_MODEL=gemma-4-31b-it
 
 # Optional - Supabase storage
 SUPABASE_URL=https://xxx.supabase.co
@@ -58,10 +58,9 @@ Create a Gemini API key in [Google AI Studio](https://aistudio.google.com/apikey
 then put it in the repository's local `.env` file as `GEMINI_API_KEY`. For the
 scheduled ingest, also add the same name and value under GitHub repository
 **Settings → Secrets and variables → Actions → New repository secret**. Never put
-the key in `docs/` or any browser-side JavaScript. Google currently lists
-`gemini-3.8-flash` input and output as free of charge on the Free Tier; quotas
-depend on the project and free-tier submissions may be used to improve Google's
-products. Check the [current pricing](https://ai.google.dev/gemini-api/docs/pricing)
+the key in `docs/` or any browser-side JavaScript. The default hosted model is
+the instruction-tuned `gemma-4-31b-it`; availability, pricing, and quotas depend
+on the project. Check the [current pricing](https://ai.google.dev/gemini-api/docs/pricing)
 and your AI Studio rate-limit dashboard before increasing ingest volume.
 
 ## Usage

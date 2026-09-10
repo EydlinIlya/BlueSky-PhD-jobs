@@ -54,7 +54,7 @@ BLUESKY_PASSWORD=your-app-password
 Optional:
 ```
 GEMINI_API_KEY=your-gemini-api-key    # For LLM filtering (Bluesky)
-GEMINI_MODEL=gemini-3.8-flash         # Optional model override
+GEMINI_MODEL=gemma-4-31b-it           # Optional model override
 SUPABASE_URL=https://xxx.supabase.co  # For Supabase storage
 SUPABASE_KEY=your-anon-key            # For Supabase storage
 TELEGRAM_BOT_TOKEN=your-bot-token     # For Telegram channel
@@ -111,10 +111,10 @@ python bluesky_search.py --no-llm
 **`src/llm/`** - LLM integration (for Bluesky)
 - `config.py` - Gemini model setting, retry settings, prompts, discipline list (includes `Ecology`), and position types. The `METADATA_PROMPT_TEMPLATE` contains an explicit rule that remote-sensing-of-forests/crop-fields posts must be classified as Ecology primary (Biology / CS only as secondary tags).
 - `base.py` - Abstract `LLMProvider` class + `LLMUnavailableError`
-- `gemini.py` - `GeminiProvider` calls the native Gemini Interactions REST API with low reasoning, disabled server-side storage, timeout, transient-error retry, rate-limit backoff, and free-tier pacing. It raises `LLMUnavailableError` after retries are exhausted.
+- `gemini.py` - `GeminiProvider` calls the native Gemini Interactions REST API with model-compatible minimal/low reasoning, disabled server-side storage, timeout, transient-error retry, rate-limit backoff, and free-tier pacing. It raises `LLMUnavailableError` after retries are exhausted.
 - `classifier.py` - `JobClassifier` for filtering and metadata extraction
 
-`bluesky_search.py:get_classifier()` creates `GeminiProvider` when `GEMINI_API_KEY` is set; otherwise it returns `None` (no LLM). `GEMINI_MODEL` optionally overrides the `gemini-3.8-flash` default.
+`bluesky_search.py:get_classifier()` creates `GeminiProvider` when `GEMINI_API_KEY` is set; otherwise it returns `None` (no LLM). `GEMINI_MODEL` optionally overrides the `gemma-4-31b-it` default. Gemma 4 requests use `minimal` thinking; Gemini overrides use `low` thinking.
 
 **`src/storage/`** - Storage backends
 - `base.py` - Abstract `StorageBackend` class

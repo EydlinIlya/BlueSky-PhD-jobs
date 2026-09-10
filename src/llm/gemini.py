@@ -76,11 +76,14 @@ class GeminiProvider(LLMProvider):
             "Content-Type": "application/json",
             "x-goog-api-key": self.api_key,
         }
+        # Gemma 4 exposes thinking as an on/off choice (minimal/high), while
+        # Gemini models support the low level used by existing overrides.
+        thinking_level = "minimal" if self.model.startswith("gemma-4-") else "low"
         payload = {
             "model": self.model,
             "input": f"{prompt}\n\nText:\n{text}",
             "store": False,
-            "generation_config": {"thinking_level": "low"},
+            "generation_config": {"thinking_level": thinking_level},
         }
 
         for attempt in range(MAX_RETRIES):

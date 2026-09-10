@@ -2,16 +2,16 @@
 
 import os
 
-# Stable Flash model with free-tier access through the Gemini Developer API.
+# Instruction-tuned Gemma model hosted through the Gemini Developer API.
 # Override for testing or future model upgrades without changing application code.
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemma-4-31b-it")
 
 # Rate limit settings
 MAX_RETRIES = 5        # retries for rate limits / transient errors
 MAX_TIMEOUT_RETRIES = 4  # retries for network timeouts (API may be down)
 BASE_DELAY = 10  # seconds (initial backoff on rate limit)
 MAX_DELAY = 120  # seconds (max backoff)
-REQUEST_COOLDOWN = 6  # seconds between requests; conservative for free-tier quotas
+REQUEST_COOLDOWN = 12  # seconds between requests; conservative for 14k TPM quota
 REQUEST_TIMEOUT = 30  # seconds to wait for a single API response
 
 # Academic disciplines for classification
