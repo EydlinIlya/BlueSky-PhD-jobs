@@ -24,7 +24,7 @@ PhD Position Finder aggregates PhD position announcements from multiple sources:
 
 Features include:
 - Multi-source aggregation with unified data format
-- LLM-based filtering for Bluesky posts (Google Gemini 3.8 Flash)
+- LLM-based filtering for Bluesky posts (Mistral/Ministral 14B → Gemini/Gemma → NVIDIA NIM → Groq failover)
 - Pre-classified positions from ScholarshipDB (no LLM needed)
 - Single JSON metadata extraction: disciplines (1-3), country, and position type
 - Per-source incremental sync state
@@ -53,8 +53,14 @@ BLUESKY_PASSWORD=your-app-password
 
 Optional:
 ```
+MISTRAL_API_KEY=your-mistral-api-key  # Primary LLM for Bluesky filtering
+MISTRAL_MODEL=ministral-14b-latest    # Optional Mistral model override
 GEMINI_API_KEY=your-gemini-api-key    # For LLM filtering (Bluesky)
 GEMINI_MODEL=gemma-4-31b-it           # Optional model override
+NVIDIA_API_KEY=your-nvidia-api-key    # Optional NVIDIA NIM fallback
+NVIDIA_MODEL=google/gemma-4-31b-it     # Optional NVIDIA model override
+GROQ_API_KEY=your-groq-api-key        # Optional final fallback (or sole provider)
+GROQ_MODEL=openai/gpt-oss-120b        # Optional Groq model override
 SUPABASE_URL=https://xxx.supabase.co  # For Supabase storage
 SUPABASE_KEY=your-anon-key            # For Supabase storage
 TELEGRAM_BOT_TOKEN=your-bot-token     # For Telegram channel
@@ -109,12 +115,25 @@ python bluesky_search.py --no-llm
 **`src/logger.py`** - Logging configuration
 
 **`src/llm/`** - LLM integration (for Bluesky)
-- `config.py` - Gemini model setting, retry settings, prompts, discipline list (includes `Ecology`), and position types. The `METADATA_PROMPT_TEMPLATE` contains an explicit rule that remote-sensing-of-forests/crop-fields posts must be classified as Ecology primary (Biology / CS only as secondary tags).
+- `config.py` - Provider model settings, retry settings, prompts, discipline list (includes `Ecology`), and position types. The `METADATA_PROMPT_TEMPLATE` contains an explicit rule that remote-sensing-of-forests/crop-fields posts must be classified as Ecology primary (Biology / CS only as secondary tags).
 - `base.py` - Abstract `LLMProvider` class + `LLMUnavailableError`
+- `mistral.py` - `MistralProvider` calls Mistral Chat Completions. The default `ministral-14b-latest` was selected by the checked-in 41-case benchmark. Stable hash-based `prompt_cache_key` values keep filter/metadata instructions eligible for cached-input pricing without putting user data in cache keys.
 - `gemini.py` - `GeminiProvider` calls the native Gemini Interactions REST API with model-compatible minimal/low reasoning, disabled server-side storage, timeout, transient-error retry, rate-limit backoff, and free-tier pacing. It raises `LLMUnavailableError` after retries are exhausted.
+- `nvidia.py` - `NvidiaNIMProvider` calls NVIDIA's hosted OpenAI-compatible Chat Completions endpoint. The default `google/gemma-4-31b-it` matches the primary model for prompt/output consistency, uses deterministic sampling, a 512-token response cap, and fails quickly to Groq on API errors.
+- `groq.py` - `GroqProvider` calls Groq's OpenAI-compatible Chat Completions REST API. The default `openai/gpt-oss-120b` uses low reasoning, excludes returned reasoning, caps completions at 512 tokens, and uses a 15-second cooldown for the 8k free-plan TPM limit.
+- `fallback.py` - `FallbackProvider` composes the configured Mistral → Gemini → NVIDIA NIM → Groq chain. Failover is sticky for the process lifetime so a depleted provider is not retried for every row.
 - `classifier.py` - `JobClassifier` for filtering and metadata extraction
 
-`bluesky_search.py:get_classifier()` creates `GeminiProvider` when `GEMINI_API_KEY` is set; otherwise it returns `None` (no LLM). `GEMINI_MODEL` optionally overrides the `gemma-4-31b-it` default. Gemma 4 requests use `minimal` thinking; Gemini overrides use `low` thinking.
+`bluesky_search.py:get_classifier()` builds the configured Mistral → Gemini → NVIDIA NIM → Groq chain, skipping missing providers; any provider can operate alone. With none configured it returns `None` (no LLM). `MISTRAL_MODEL`, `GEMINI_MODEL`, `NVIDIA_MODEL`, and `GROQ_MODEL` override their respective defaults.
+
+**Model benchmark:** `scripts/benchmark_mistral_models.py` runs the production
+classifier against `tests/fixtures/llm_benchmark_cases.json` (41 hand-reviewed
+posts; current policy labels 29 jobs / 12 non-jobs). Reports under `.benchmarks/`
+include classification/metadata quality, latency, token usage, cache hits, and
+estimated standard/batch cost. The 2026-09-16 run selected Ministral 14B: it tied
+Mistral Medium 3.5 on filter quality while costing much less. Mistral's Batch API
+offers a 50% discount, but the production pipeline currently uses synchronous
+per-row calls so its checkpoint/resume semantics remain simple.
 
 **`src/storage/`** - Storage backends
 - `base.py` - Abstract `StorageBackend` class
@@ -180,7 +199,7 @@ Each stage writes persistent state before proceeding. A restart on the same
 | 3 Dedup | verified staging rows + existing canonical posts in `phd_positions` | `duplicate_of` set on staging rows |
 | 4 Publish | all staging rows | upserted into `phd_positions`; staging + `pipeline_runs` row deleted |
 
-The ingest workflow (`.github/workflows/scheduled-search.yml`) runs **4×/day** (07:00, 13:00, 19:00, 01:00 UTC). After each successful publish the `pipeline_runs` row is deleted, so subsequent runs within the same day fetch only posts newer than the last publish (incremental via `phd_positions.created_at`).
+The ingest workflow (`.github/workflows/scheduled-search.yml`) runs **4×/day** (05:00, 11:00, 17:00, 23:00 UTC). After each successful publish the `pipeline_runs` row is deleted, so subsequent runs within the same day fetch only posts newer than the last publish (incremental via `phd_positions.created_at`).
 
 The Telegram digest runs separately on its own 3×/day schedule — see the post_to_telegram entry above.
 
@@ -209,6 +228,9 @@ python -m pytest tests/ -v
 
 Test files:
 - `tests/test_classifier.py` - LLM classifier with mock LLM provider
+- `tests/test_mistral.py` - Mistral request, caching, retry, and usage behavior
+- `tests/test_provider_selection.py` - Provider ordering and single-provider selection
+- `tests/test_llm_benchmark_fixture.py` - Benchmark fixture schema and label counts
 - `tests/test_csv_storage.py` - CSV storage with array serialization
 - `tests/test_mock_storage.py` - Mock storage backend behavior
 - `tests/test_integration.py` - End-to-end classifier → storage pipeline
@@ -221,7 +243,7 @@ Test files:
 - `httpx` - HTTP client (ScholarshipDB scraping)
 - `beautifulsoup4` - HTML parsing
 - `python-dotenv` - Environment variables
-- `requests` - Gemini API and web requests
+- `requests` - Hosted LLM APIs and web requests
 - `scikit-learn` - TF-IDF similarity (deduplication)
 - `supabase` - Supabase client
 
@@ -304,13 +326,17 @@ CREATE TABLE phd_positions_staging (
 
 ## GitHub Actions
 
-The workflow at `.github/workflows/scheduled-search.yml` runs daily at 8:30 AM UTC.
+The workflow at `.github/workflows/scheduled-search.yml` runs 4×/day
+(05:00, 11:00, 17:00, and 23:00 UTC).
 The Telegram digest (`telegram-digest.yml`) and the Bluesky repost bot
 (`bluesky-repost.yml`, every 6h) run on their own separate schedules.
 
 Required secrets:
 - `BLUESKY_HANDLE`, `BLUESKY_PASSWORD` (the search + repost bot account)
-- `GEMINI_API_KEY`
+- `MISTRAL_API_KEY` (primary filter/dedup provider)
+- `GEMINI_API_KEY` (optional fallback)
+- `NVIDIA_API_KEY` (optional — enables NVIDIA NIM before Groq)
+- `GROQ_API_KEY` (optional — enables Groq fallback for filter and dedup)
 - `SUPABASE_URL`, `SUPABASE_KEY`
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID` (optional — skipped if not set)
 - Weekly email workflow: `SUPABASE_SERVICE_KEY`, `RESEND_API_KEY`, and a verified

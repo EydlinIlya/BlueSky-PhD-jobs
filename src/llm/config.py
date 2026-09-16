@@ -2,9 +2,16 @@
 
 import os
 
-# Instruction-tuned Gemma model hosted through the Gemini Developer API.
-# Override for testing or future model upgrades without changing application code.
+# Primary Mistral model and optional fallback-provider models.
+# Override any of them without changing application code.
+MISTRAL_MODEL = os.environ.get("MISTRAL_MODEL", "ministral-14b-latest")
+MISTRAL_MAX_COMPLETION_TOKENS = 256
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemma-4-31b-it")
+NVIDIA_MODEL = os.environ.get("NVIDIA_MODEL", "google/gemma-4-31b-it")
+NVIDIA_MAX_COMPLETION_TOKENS = 512
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+GROQ_MAX_COMPLETION_TOKENS = 512
+GROQ_REQUEST_COOLDOWN = 15  # max 4 requests/minute for Groq's 8k free-plan TPM
 
 # Rate limit settings
 MAX_RETRIES = 5        # retries for rate limits / transient errors

@@ -5,11 +5,19 @@ import os
 import sys
 from datetime import date
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from src.logger import setup_logger
 from src.llm import (
+    FallbackProvider,
     GeminiProvider,
+    GroqProvider,
     JobClassifier,
     LLMUnavailableError,
+    MistralProvider,
+    NvidiaNIMProvider,
 )
 from src.storage import StorageBackend, CSVStorage, SupabaseStorage
 from src.sync_state import SyncStateManager
@@ -25,11 +33,35 @@ AVAILABLE_SOURCES = ["bluesky", "scholarshipdb"]
 
 
 def get_classifier() -> JobClassifier | None:
-    """Create a Gemini-backed classifier when its API key is configured."""
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
+    """Create a Mistral-first classifier with optional provider fallbacks."""
+    mistral_key = os.environ.get("MISTRAL_API_KEY")
+    gemini_key = os.environ.get("GEMINI_API_KEY")
+    nvidia_key = os.environ.get("NVIDIA_API_KEY")
+    groq_key = os.environ.get("GROQ_API_KEY")
+
+    providers = []
+    if mistral_key:
+        providers.append(MistralProvider(mistral_key))
+    if gemini_key:
+        has_fallback = bool(nvidia_key or groq_key)
+        providers.append(
+            GeminiProvider(
+                gemini_key,
+                fail_fast_on_rate_limit=has_fallback,
+            )
+        )
+    if nvidia_key:
+        providers.append(NvidiaNIMProvider(nvidia_key))
+    if groq_key:
+        providers.append(GroqProvider(groq_key))
+
+    if not providers:
         return None
-    return JobClassifier(GeminiProvider(api_key))
+
+    llm = providers[-1]
+    for primary in reversed(providers[:-1]):
+        llm = FallbackProvider(primary, llm)
+    return JobClassifier(llm)
 
 
 def get_storage(backend: str, output: str) -> StorageBackend:
@@ -92,7 +124,7 @@ def main():
     parser.add_argument(
         "--no-llm",
         action="store_true",
-        help="Disable LLM filtering for Bluesky (uses GEMINI_API_KEY)",
+        help="Disable LLM filtering for Bluesky (ignores configured API keys)",
     )
     parser.add_argument(
         "--full-sync",
@@ -146,9 +178,9 @@ def main():
     if not args.no_llm:
         classifier = get_classifier()
         if classifier:
-            logger.info("LLM filtering enabled (Google Gemini Flash)")
+            logger.info(f"LLM filtering enabled ({classifier.llm.name})")
         else:
-            logger.info("LLM filtering disabled (no GEMINI_API_KEY)")
+            logger.info("LLM filtering disabled (no LLM provider configured)")
 
     # --- Supabase: use 4-stage persistent pipeline ---
     if args.storage == "supabase":

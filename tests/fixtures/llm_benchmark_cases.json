@@ -1,0 +1,395 @@
+{
+  "version": 2,
+  "label_policy": "Current IS_REAL_JOB_PROMPT policy as of 2026-09-16",
+  "source": "41 hand-reviewed Bluesky posts originally labeled 2026-01-27; cases 7 and 16 updated for current policy",
+  "cases": [
+    {
+      "id": 1,
+      "raw_text": "Job Alert\n\nPhD Position – Reliable Wireless Communications and Situational Awareness  \n\nDeadline: Until the position is filled \nLocation: Austria - Linz  \n\nwww.academiceurope.com/ads/phd-posi...\n\n#hiring #PhD #physics #MachineLearning #electricalengineering #materialsscience",
+      "metadata_text": "Job Alert\n\nPhD Position – Reliable Wireless Communications and Situational Awareness  \n\nDeadline: Until the position is filled \nLocation: Austria - Linz  \n\nwww.academiceurope.com/ads/phd-posi...\n\n#hiring #PhD #physics #MachineLearning #electricalengineering #materialsscience",
+      "expected": {
+        "is_job": true,
+        "country": "Austria",
+        "position": "PhD Student"
+      }
+    },
+    {
+      "id": 2,
+      "raw_text": "Open PhD student position in laboratory of Prof. Amit V Pandey @pandeylab.bsky.social  @dbmr-unibe.bsky.social  @medfacultyunibe.bsky.social @unibe.ch",
+      "metadata_text": "Open PhD student position in laboratory of Prof. Amit V Pandey @pandeylab.bsky.social  @dbmr-unibe.bsky.social  @medfacultyunibe.bsky.social @unibe.ch",
+      "expected": {
+        "is_job": true,
+        "country": "Switzerland",
+        "position": "PhD Student"
+      }
+    },
+    {
+      "id": 3,
+      "raw_text": "PhD Position – Synaptic Function and Resilience, Institute for Advanced Simulation, Germany PhD Position – Synaptic Function and Resilience: This is a unique opportunity for a PhD candidate to ...\n\n#PhD #PhD #Degree #PhD #fellow #Position #PhD #fellowship […] \n\n[Original post on researchersjob.com]",
+      "metadata_text": "PhD Position – Synaptic Function and Resilience, Institute for Advanced Simulation, Germany PhD Position – Synaptic Function and Resilience: This is a unique opportunity for a PhD candidate to ...\n\n#PhD #PhD #Degree #PhD #fellow #Position #PhD #fellowship […] \n\n[Original post on researchersjob.com]\n\n[Linked page - Original post on researchersjob.com: ]",
+      "expected": {
+        "is_job": true,
+        "country": "Germany",
+        "position": "PhD Student"
+      }
+    },
+    {
+      "id": 4,
+      "raw_text": "several #PhD #position (s) #nanomagnetism #spintronics buff.ly/acHs67t call open from 26 Jan to 16 Mar. Quantum Grenoble Doctoral Programme",
+      "metadata_text": "several #PhD #position (s) #nanomagnetism #spintronics buff.ly/acHs67t call open from 26 Jan to 16 Mar. Quantum Grenoble Doctoral Programme",
+      "expected": {
+        "is_job": true,
+        "country": "France",
+        "position": "PhD Student"
+      }
+    },
+    {
+      "id": 5,
+      "raw_text": "🚨 #PhD #JobOpportunity #PolarScience \nWe're pleased to share this open position for a PhD student in Polar Dynamical Meteorology at the Institute of Geography & the Oeschger Centre for Climate Change Research, University of Bern: ohws.prospective.ch/public/v1/jo...",
+      "metadata_text": "🚨 #PhD #JobOpportunity #PolarScience \nWe're pleased to share this open position for a PhD student in Polar Dynamical Meteorology at the Institute of Geography & the Oeschger Centre for Climate Change Research, University of Bern: ohws.prospective.ch/public/v1/jo...\n\n[Linked page - Uni Bern: PhD Student in Polar Dynamical Meteorology: Institute of Geography (GIUB) and the Oeschger Centre for Climate Change Research (OCCR) at the University of Bern Start of employment: 01.05.2026 or by agreement Employment is fixed term for 3 years.]",
+      "expected": {
+        "is_job": true,
+        "country": "Switzerland",
+        "position": "PhD Student"
+      }
+    },
+    {
+      "id": 6,
+      "raw_text": "The ELIAS - Lighthouse of AI for Sustainability 𝗩𝗶𝗿𝘁𝘂𝗮𝗹 𝗖𝗲𝗻𝘁𝗿𝗲 𝗼𝗳 𝗘𝘅𝗰𝗲𝗹𝗹𝗲𝗻𝗰𝗲 𝗶𝗻 𝗦𝘂𝘀𝘁𝗮𝗶𝗻𝗮𝗯𝗹𝗲 & 𝗧𝗿𝘂𝘀𝘁𝘄𝗼𝗿𝘁𝗵𝘆 𝗔𝗜 is expanding!\n\n🔹 Collaborate on research & publications\n🔹 Mobility for PhD & postdocs\n🔹 Join a Europe-wide AI network\n\nℹ️ Open to ELLIS Unit members\n🗓 Apply by 25 Feb\n🔗 https://bit.ly/4rajt0U",
+      "metadata_text": "The ELIAS - Lighthouse of AI for Sustainability 𝗩𝗶𝗿𝘁𝘂𝗮𝗹 𝗖𝗲𝗻𝘁𝗿𝗲 𝗼𝗳 𝗘𝘅𝗰𝗲𝗹𝗹𝗲𝗻𝗰𝗲 𝗶𝗻 𝗦𝘂𝘀𝘁𝗮𝗶𝗻𝗮𝗯𝗹𝗲 & 𝗧𝗿𝘂𝘀𝘁𝘄𝗼𝗿𝘁𝗵𝘆 𝗔𝗜 is expanding!\n\n🔹 Collaborate on research & publications\n🔹 Mobility for PhD & postdocs\n🔹 Join a Europe-wide AI network\n\nℹ️ Open to ELLIS Unit members\n🗓 Apply by 25 Feb\n🔗 https://bit.ly/4rajt0U",
+      "expected": {
+        "is_job": false
+      }
+    },
+    {
+      "id": 7,
+      "raw_text": "Call for Applications! APSA Diversity Fellowship Program - 1st and 2nd Year PhD Students | Deadline: March 8, 2026",
+      "metadata_text": "Call for Applications! APSA Diversity Fellowship Program - 1st and 2nd Year PhD Students | Deadline: March 8, 2026\n\n[Linked page - Call for Applications: APSA Diversity Fellowship Program – 1st and 2nd Year PhD Students | Deadline: March 8, 2026: Applications for the 2026-2027 APSA Diversity Fellowship Program- Spring Cycle are now open! The Spring APSA DPF application cycle will provide $2000 awards to support first- and second-year students in political science PhD programs. Each spring, the program offers fellowships to graduate students in the pre-dissertation stage of their doctoral program. The Spring DFP is a one time award of $2000, depending on funding availability.]",
+      "expected": {
+        "is_job": false
+      },
+      "label_note": "Student fellowship/award for already-enrolled PhD students; current policy excludes student awards."
+    },
+    {
+      "id": 8,
+      "raw_text": "Congratulations to UC Irvine criminology, law & society doctoral candidate Joanne DeCaro for accepting a tenure-track assistant professor position in the University of Missouri-St.-Louis Department of Criminology and Criminal Justice. #AnteaterPride #zotzotzot #UCIPrisonPandemic",
+      "metadata_text": "Congratulations to UC Irvine criminology, law & society doctoral candidate Joanne DeCaro for accepting a tenure-track assistant professor position in the University of Missouri-St.-Louis Department of Criminology and Criminal Justice. #AnteaterPride #zotzotzot #UCIPrisonPandemic",
+      "expected": {
+        "is_job": false
+      }
+    },
+    {
+      "id": 9,
+      "raw_text": "📣 PhD position @kingscollegelondon.bsky.social \nKing's prize Doctoral Programme: Genome Data Science and AI for Therapeutic Target Discovery. Check out our multiomics project with Sophia Tsoka www.kcl.ac.uk/research/tar...\n🗓️ Dadline 28 Feb\n💰4y fully funded UKRI rate\n👩‍🎓multidisciplinary co-supervision",
+      "metadata_text": "📣 PhD position @kingscollegelondon.bsky.social \nKing's prize Doctoral Programme: Genome Data Science and AI for Therapeutic Target Discovery. Check out our multiomics project with Sophia Tsoka www.kcl.ac.uk/research/tar...\n🗓️ Dadline 28 Feb\n💰4y fully funded UKRI rate\n👩‍🎓multidisciplinary co-supervision\n\n[Linked page - Genome Data Science and AI for Therapeutic Target Discovery - King’s Prize Doctoral Programme | King's College London: PhD programme in human genetics, AI and multi-omics to uncover causal biology and accelerate therapeutic target discovery with academic and industry partners.]",
+      "expected": {
+        "is_job": true,
+        "country": "UK",
+        "position": "PhD Student"
+      }
+    },
+    {
+      "id": 10,
+      "raw_text": "PhD Position in Prehistoric Archaeology – Freie Universität Berlin, Germany\nFunded doctoral research role in Neolithic archaeology, GIS, and archaeological data analysis\nEligibility: Master’s\nDeadline: 9 Feb 2026\nApply: higherjobz.com/prehistoric-...\n#Archaeology #PhD @freieuniversitaet.bsky.social",
+      "metadata_text": "PhD Position in Prehistoric Archaeology – Freie Universität Berlin, Germany\nFunded doctoral research role in Neolithic archaeology, GIS, and archaeological data analysis\nEligibility: Master’s\nDeadline: 9 Feb 2026\nApply: higherjobz.com/prehistoric-...\n#Archaeology #PhD @freieuniversitaet.bsky.social\n\n[Linked page - Prehistoric Archaeology PhD Position – FU Berlin | HigherJobz: PhD position in Prehistoric Archaeology at Freie Universität Berlin, Germany. Funded 3-year predoc research role in Neolithic archaeology.]",
+      "expected": {
+        "is_job": true,
+        "country": "Germany",
+        "position": "PhD Student"
+      }
+    },
+    {
+      "id": 11,
+      "raw_text": "Friedrich-Schiller-Universitat Jena is hiring:\nDoctoral Research Position as Research Associate",
+      "metadata_text": "Friedrich-Schiller-Universitat Jena is hiring:\nDoctoral Research Position as Research Associate",
+      "expected": {
+        "is_job": true,
+        "country": "Germany",
+        "position": "PhD Student"
+      }
+    },
+    {
+      "id": 12,
+      "raw_text": "We have a fantastic opportunity for a PhD studentship in collaboration with @jesuscollegecam.bsky.social and Cambridge Children’s Research Institute, part of the new Cambridge Children’s Hospital. Closing date 20th Feb; all the details here: www.cimr.cam.ac.uk/postgraduate...",
+      "metadata_text": "We have a fantastic opportunity for a PhD studentship in collaboration with @jesuscollegecam.bsky.social and Cambridge Children’s Research Institute, part of the new Cambridge Children’s Hospital. Closing date 20th Feb; all the details here: www.cimr.cam.ac.uk/postgraduate...\n\n[Linked page - The Chi-Wang PhD Studentship at Jesus College and the University of Cambridge School of Clinical Medicine | Cambridge Institute for Medical Research: The Chi-Wang Studentship at Jesus College and the University of Cambridge School of Clinical Medicine. Funding Application deadline: 23:59pm (midnight) UK time on 20th February 2026.]",
+      "expected": {
+        "is_job": true,
+        "country": "UK",
+        "position": "PhD Student"
+      }
+    },
+    {
+      "id": 13,
+      "raw_text": "So happy to see this new, growing open data resource out -- all credit to the amazing @juliettebrook.bsky.social + @tsalo.bsky.social + a superb team!!!! \n\nNOTE: @juliettebrook.bsky.social is currently applying to clinical psych PhD programs -- great opportunity to recruit a ⭐TOTAL ⭐ STAR ⭐",
+      "metadata_text": "So happy to see this new, growing open data resource out -- all credit to the amazing @juliettebrook.bsky.social + @tsalo.bsky.social + a superb team!!!! \n\nNOTE: @juliettebrook.bsky.social is currently applying to clinical psych PhD programs -- great opportunity to recruit a ⭐TOTAL ⭐ STAR ⭐",
+      "expected": {
+        "is_job": false
+      }
+    },
+    {
+      "id": 14,
+      "raw_text": "Over 3,000 pupils across Birmingham have taken part in The Scholars Programme, which gives students from non-selective state schools and colleges across the UK the opportunity to work with a PhD researcher: https://bit.ly/3tPlj9D",
+      "metadata_text": "Over 3,000 pupils across Birmingham have taken part in The Scholars Programme, which gives students from non-selective state schools and colleges across the UK the opportunity to work with a PhD researcher: https://bit.ly/3tPlj9D",
+      "expected": {
+        "is_job": false
+      }
+    },
+    {
+      "id": 15,
+      "raw_text": "Just over a week left to apply for PhD opportunity 'Who Cleans our Cities?' Funding for UK/Home students only. Further info here: www.lancaster.ac.uk/lec/graduate...",
+      "metadata_text": "Just over a week left to apply for PhD opportunity 'Who Cleans our Cities?' Funding for UK/Home students only. Further info here: www.lancaster.ac.uk/lec/graduate...\n\n[Linked page - Funded PhD Opportunities - Lancaster University: ]",
+      "expected": {
+        "is_job": true,
+        "country": "UK",
+        "position": "PhD Student"
+      }
+    },
+    {
+      "id": 16,
+      "raw_text": "In about 4 weeks, our research group will be opening a new funded PhD position in sports medicine/sport science.\n\nInterested candidates are welcome to send pre-enquiries to:\nAnne.Hecksteden@uibk.ac.at\n\nFull details and the official application link will be announced soon.",
+      "metadata_text": "In about 4 weeks, our research group will be opening a new funded PhD position in sports medicine/sport science.\n\nInterested candidates are welcome to send pre-enquiries to:\nAnne.Hecksteden@uibk.ac.at\n\nFull details and the official application link will be announced soon.",
+      "expected": {
+        "is_job": false
+      },
+      "label_note": "Future opening with no current application; current policy requires an open position."
+    },
+    {
+      "id": 17,
+      "raw_text": "PhD opportunity!\nCPop is opening a fully funded three year PhD position on lifespan inequalities.\nApply here 👇\nfa-eosd-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/Candid...",
+      "metadata_text": "PhD opportunity!\nCPop is opening a fully funded three year PhD position on lifespan inequalities.\nApply here 👇\nfa-eosd-saasfaprod1.fa.ocs.oraclecloud.com/hcmUI/Candid...\n\n[Linked page - PhD scholarship for research project on lifespan inequalities across social determinants of health: The Interdisciplinary Centre on population Dynamics (CPop) at the University of Southern Denmark (SDU) invites applications for a fully funded three year PhD position within a Danish Research Council ...]",
+      "expected": {
+        "is_job": true,
+        "country": "Denmark",
+        "position": "PhD Student"
+      }
+    },
+    {
+      "id": 18,
+      "raw_text": "We have a terrific new job opening for a program officer on our American Institutions team focused on the American economy and democracy (and replacing someone with a history PhD). Details at bit.ly/4sZeFgG.",
+      "metadata_text": "We have a terrific new job opening for a program officer on our American Institutions team focused on the American economy and democracy (and replacing someone with a history PhD). Details at bit.ly/4sZeFgG.\n\n[Linked page - Program Officer for American Institutions, Society, and the Public Good: The Program Officer is responsible for research and writing, project management, policy development and analysis, and other administrative tasks related to the Academy’s work in the program area of Am...]",
+      "expected": {
+        "is_job": false
+      }
+    },
+    {
+      "id": 19,
+      "raw_text": "Job opening for a program officer on our American Institutions team (replacing someone with a history PhD): bit.ly/4r87QHL",
+      "metadata_text": "Job opening for a program officer on our American Institutions team (replacing someone with a history PhD): bit.ly/4r87QHL\n\n[Linked page - Program Officer for American Institutions, Society, and the Public Good in Cambridge, MA for American Academy of Arts & Sciences: Exciting opportunity in Cambridge, MA for American Academy of Arts & Sciences as a Program Office...]",
+      "expected": {
+        "is_job": false
+      }
+    },
+    {
+      "id": 20,
+      "raw_text": "Do you have a PhD in Bioinformatics, Computational Biology, Genetics or related discipline? 🎓 \n\nCheck out our current vacancy ⤵️ \n\n💷 £37,500 to £45,350 \n🗓️ Apply by 8 February 2026\n➡️ buff.ly/YDXQBM0",
+      "metadata_text": "Do you have a PhD in Bioinformatics, Computational Biology, Genetics or related discipline? 🎓 \n\nCheck out our current vacancy ⤵️ \n\n💷 £37,500 to £45,350 \n🗓️ Apply by 8 February 2026\n➡️ buff.ly/YDXQBM0",
+      "expected": {
+        "is_job": true,
+        "country": "UK",
+        "position": "Postdoc"
+      }
+    },
+    {
+      "id": 21,
+      "raw_text": "✨PhD vacancy alert✨ Joost Batenburg and I are looking for someone that wants to work on fine-grained visual understanding in #ComputerVision\n\nApply here before 20 Feb:\ncareers.universiteitleiden.nl/job/PhD-Cand...",
+      "metadata_text": "✨PhD vacancy alert✨ Joost Batenburg and I are looking for someone that wants to work on fine-grained visual understanding in #ComputerVision\n\nApply here before 20 Feb:\ncareers.universiteitleiden.nl/job/PhD-Cand...",
+      "expected": {
+        "is_job": true,
+        "country": "Netherlands",
+        "position": "PhD Student"
+      }
+    },
+    {
+      "id": 22,
+      "raw_text": "🧬 Do you have a PhD in microbiology/genomics and experience working with bacterial pathogens and tissue culture?\n\nCheck out our current vacancy ⤵️ \n\n💷 £37,500 to £45,350\n🗓️ Apply by 28 January 2026 \n➡️ buff.ly/8iXH22u",
+      "metadata_text": "🧬 Do you have a PhD in microbiology/genomics and experience working with bacterial pathogens and tissue culture?\n\nCheck out our current vacancy ⤵️ \n\n💷 £37,500 to £45,350\n🗓️ Apply by 28 January 2026 \n➡️ buff.ly/8iXH22u",
+      "expected": {
+        "is_job": true,
+        "country": "UK",
+        "position": "Postdoc"
+      }
+    },
+    {
+      "id": 23,
+      "raw_text": "A 4-year PhD position in perceptual fluctuations research using EEG, psychophysics, and computational modelling is available at Lausanne University Hospital (CHUV), with application deadline 31 January 2026.\nrecrutement.chuv.ch/vacancy/phd-...\n#Hiring #PhD #EEG #CHUV",
+      "metadata_text": "A 4-year PhD position in perceptual fluctuations research using EEG, psychophysics, and computational modelling is available at Lausanne University Hospital (CHUV), with application deadline 31 January 2026.\nrecrutement.chuv.ch/vacancy/phd-...\n#Hiring #PhD #EEG #CHUV\n\n[Linked page - PhD position in the Psychophysics and Neural Dynamics (PND) Lab  (12985-RE-211-2025): ]",
+      "expected": {
+        "is_job": true,
+        "country": "Switzerland",
+        "position": "PhD Student"
+      }
+    },
+    {
+      "id": 24,
+      "raw_text": "I have a PhD opening for my #VIDI BrainShorts project 📽️🧠🤖! Are you or do you know an ambitious, recent (or almost) MSc graduate with a background in NeuroAI and interest in large-scale data collection and video perception? Check out our vacancy! (deadline Feb 15).\nwerkenbij.uva.nl/en/vacancies...",
+      "metadata_text": "I have a PhD opening for my #VIDI BrainShorts project 📽️🧠🤖! Are you or do you know an ambitious, recent (or almost) MSc graduate with a background in NeuroAI and interest in large-scale data collection and video perception? Check out our vacancy! (deadline Feb 15).\nwerkenbij.uva.nl/en/vacancies...\n\n[Linked page - Vacancy — PhD Position in NeuroAI for Video Perception in the Human Brain: <p><span>Are you interested in using AI to unravel the mysteries of the brain? Do you want to perform cutting-edge NeuroAI research and leverage deep learning to understand human vision? Then check out the vacancy below and apply for a PhD position in this exciting research direction.</span></p>]",
+      "expected": {
+        "is_job": true,
+        "country": "Netherlands",
+        "position": "PhD Student"
+      }
+    },
+    {
+      "id": 25,
+      "raw_text": "Our lab has an opening for a fully funded postdoc position! Start date is flexible; ideally summer 2026. Apply by Feb 20th for full consideration. For more about the lab and how to apply:\n\nsites.google.com/uncc.edu/mic...",
+      "metadata_text": "Our lab has an opening for a fully funded postdoc position! Start date is flexible; ideally summer 2026. Apply by Feb 20th for full consideration. For more about the lab and how to apply:\n\nsites.google.com/uncc.edu/mic...\n\n[Linked page - Luo Lab - Microbial Ecology - join: Lab members will have access to state-of-the art wet lab, and computing, and sequencing resources, including in-house sequencing for both short and long reads (Illumina NextSeq and Nanopore GridION). ...]",
+      "expected": {
+        "is_job": true,
+        "country": "USA",
+        "position": "Postdoc"
+      }
+    },
+    {
+      "id": 26,
+      "raw_text": "📢Job opportunity📢 Two year Alliance Interinstitutional #Postdoc position in \"mapping antibiotic resistance spread among human gut microbes\" available in my group in collaboration with Heidelberg University Hospital www.bioquant.uni-heidelberg.de/groups/khedk... #AMR #microbiome",
+      "metadata_text": "📢Job opportunity📢 Two year Alliance Interinstitutional #Postdoc position in \"mapping antibiotic resistance spread among human gut microbes\" available in my group in collaboration with Heidelberg University Hospital www.bioquant.uni-heidelberg.de/groups/khedk... #AMR #microbiome",
+      "expected": {
+        "is_job": true,
+        "country": "Germany",
+        "position": "Postdoc"
+      }
+    },
+    {
+      "id": 27,
+      "raw_text": "#OceanOpportunities PostDoc position: Movement ecology and digital twins - Deadline 15 February 2026 \nnf-pogo-alumni.org/27012026-7/",
+      "metadata_text": "#OceanOpportunities PostDoc position: Movement ecology and digital twins - Deadline 15 February 2026 \nnf-pogo-alumni.org/27012026-7/\n\n[Linked page - PostDoc position: Movement ecology and digital twins - Deadline 15 February 2026 - NANO | NF-POGO Alumni Network for the Ocean: The GEOMAR Helmholtz Centre for Ocean Research Kiel is a public law foundation jointly funded by the Federal Republic of Germany (90%) and the State of Schleswig-Holstein (10%). It is one of the world...]",
+      "expected": {
+        "is_job": true,
+        "country": "Germany",
+        "position": "Postdoc"
+      }
+    },
+    {
+      "id": 28,
+      "raw_text": "📌 Hiring one postdoctoral and two predoctoral researchers for the @erc.europa.eu project #COUNSTER, each position for up to 3 years to start on May 2026. \n\nPostdoc: stars.bilkent.edu.tr/staffapp/IR2... (Deadline Feb 20)\n\nPredoc: stars.bilkent.edu.tr/staffapp/IR2... (Deadline March 1)",
+      "metadata_text": "📌 Hiring one postdoctoral and two predoctoral researchers for the @erc.europa.eu project #COUNSTER, each position for up to 3 years to start on May 2026. \n\nPostdoc: stars.bilkent.edu.tr/staffapp/IR2... (Deadline Feb 20)\n\nPredoc: stars.bilkent.edu.tr/staffapp/IR2... (Deadline March 1)",
+      "expected": {
+        "is_job": true,
+        "country": "Turkey",
+        "position": "Multiple"
+      }
+    },
+    {
+      "id": 29,
+      "raw_text": "Reminder: Call for Early Career Researchers – join our ECR Panel! \n\n ⏰ Apply by 31 January\n\nGreat opportunity for PhD students, postdocs, & other ECRs to expand network across the UK proteostasis community, contribute strategically, and build visibility and leadership.\n\nDetails: lnkd.in/e-gzWawx",
+      "metadata_text": "Reminder: Call for Early Career Researchers – join our ECR Panel! \n\n ⏰ Apply by 31 January\n\nGreat opportunity for PhD students, postdocs, & other ECRs to expand network across the UK proteostasis community, contribute strategically, and build visibility and leadership.\n\nDetails: lnkd.in/e-gzWawx\n\n[Linked page - LinkedIn: This link will take you to a page that’s not on LinkedIn]",
+      "expected": {
+        "is_job": false
+      }
+    },
+    {
+      "id": 30,
+      "raw_text": "Please take a look at our latest newsletter with a special Call for Applications for our Harvard Bell Postdoctoral Fellowships and brief summaries of the most recent publications of our postdocs, researchers, and faculty members...\n\nhsph.me/harvard_pop_...",
+      "metadata_text": "Please take a look at our latest newsletter with a special Call for Applications for our Harvard Bell Postdoctoral Fellowships and brief summaries of the most recent publications of our postdocs, researchers, and faculty members...\n\nhsph.me/harvard_pop_...",
+      "expected": {
+        "is_job": true,
+        "country": "USA",
+        "position": "Postdoc"
+      }
+    },
+    {
+      "id": 31,
+      "raw_text": "Call for Expression of Interest: early-career researchers/postdocs (based outside the UK) to join my group at the University of Bath via an externally funded, UK-based fellowship route. [1/4]",
+      "metadata_text": "Call for Expression of Interest: early-career researchers/postdocs (based outside the UK) to join my group at the University of Bath via an externally funded, UK-based fellowship route. [1/4]",
+      "expected": {
+        "is_job": true,
+        "country": "UK",
+        "position": "Postdoc"
+      }
+    },
+    {
+      "id": 32,
+      "raw_text": "🚀 Call for Students & Postdocs \n🗓 Deadline: Feb 3\nI’m scouting talented students & postdocs interested in ML for Materials and ML for Quantum Science for potential training & research opportunities under CIRTA at @McMasterCCB \nInterest form: forms.gle/uV7fLhokmTCs...\n#compchem",
+      "metadata_text": "🚀 Call for Students & Postdocs \n🗓 Deadline: Feb 3\nI’m scouting talented students & postdocs interested in ML for Materials and ML for Quantum Science for potential training & research opportunities under CIRTA at @McMasterCCB \nInterest form: forms.gle/uV7fLhokmTCs...\n#compchem",
+      "expected": {
+        "is_job": false
+      }
+    },
+    {
+      "id": 33,
+      "raw_text": "Kind of a late breaking MS opportunity in my lab - please share! Hoping to have someone this summer for some of the before data collection prior to a restoration project. Please don't hesitate to reach out with questions.",
+      "metadata_text": "Kind of a late breaking MS opportunity in my lab - please share! Hoping to have someone this summer for some of the before data collection prior to a restoration project. Please don't hesitate to reach out with questions.",
+      "expected": {
+        "is_job": true,
+        "country": "Unknown",
+        "position": "Master Student"
+      }
+    },
+    {
+      "id": 34,
+      "raw_text": "🙌*Exciting*🙌 opportunity in my lab! #postdoc #hiring 🚀\nWe’re looking for a highly motivated researcher to join our team and push the boundaries of lung disease research. This role focuses on emplyoing human iPSC-derived lung organoid models 🧫 and applying computational approaches 💻 to uncover how...",
+      "metadata_text": "🙌*Exciting*🙌 opportunity in my lab! #postdoc #hiring 🚀\nWe’re looking for a highly motivated researcher to join our team and push the boundaries of lung disease research. This role focuses on emplyoing human iPSC-derived lung organoid models 🧫 and applying computational approaches 💻 to uncover how...",
+      "expected": {
+        "is_job": true,
+        "country": "Unknown",
+        "position": "Postdoc"
+      }
+    },
+    {
+      "id": 35,
+      "raw_text": "I’m excited to recruit a postdoc to join my lab at NIAID (Rocky Mountain Labs). We study mucosal immunity and vaccine responses to respiratory viruses in a collaborative, supportive environment.\nDetails & apply: www.training.nih.gov/jobs/pdf-miv...\n#Postdoc #Immunology #Virology #NIHJobs",
+      "metadata_text": "I’m excited to recruit a postdoc to join my lab at NIAID (Rocky Mountain Labs). We study mucosal immunity and vaccine responses to respiratory viruses in a collaborative, supportive environment.\nDetails & apply: www.training.nih.gov/jobs/pdf-miv...\n#Postdoc #Immunology #Virology #NIHJobs",
+      "expected": {
+        "is_job": true,
+        "country": "USA",
+        "position": "Postdoc"
+      }
+    },
+    {
+      "id": 36,
+      "raw_text": "listserv.liv.ac.uk: Call for Funded Participation (undergraduate and Master students): Episodic Memory: Functions Across Contexts\n\nCAUTION: This email originated outside of the University. Do not click links unless you can verify the source of this email and know the content is safe. Check s...",
+      "metadata_text": "listserv.liv.ac.uk: Call for Funded Participation (undergraduate and Master students): Episodic Memory: Functions Across Contexts\n\nCAUTION: This email originated outside of the University. Do not click links unless you can verify the source of this email and know the content is safe. Check s...",
+      "expected": {
+        "is_job": false
+      }
+    },
+    {
+      "id": 37,
+      "raw_text": "Learn Advanced Excel and Tally with GST through practical, job-ready training at PixelZ Education, Baidyabati. Get ISO-validated certification, placement guidance, and hands-on learning from expert trainers\n\nRead the full details here: pixelzedu.in/advanced-exc...",
+      "metadata_text": "Learn Advanced Excel and Tally with GST through practical, job-ready training at PixelZ Education, Baidyabati. Get ISO-validated certification, placement guidance, and hands-on learning from expert trainers\n\nRead the full details here: pixelzedu.in/advanced-exc...",
+      "expected": {
+        "is_job": false
+      }
+    },
+    {
+      "id": 38,
+      "raw_text": "🚨New Jobs Alert 🚨\n\nWe're hiring a research associate and a research assistant (PhD position) to join our research using Targeted Memory Reactivation. Closing dates are 5th and 6th February - more details below:\n\nwww.sleepengineering.co.uk/jobs",
+      "metadata_text": "🚨New Jobs Alert 🚨\n\nWe're hiring a research associate and a research assistant (PhD position) to join our research using Targeted Memory Reactivation. Closing dates are 5th and 6th February - more details below:\n\nwww.sleepengineering.co.uk/jobs\n\n[Linked page - Jobs (List) | Sleep Engineering: ]",
+      "expected": {
+        "is_job": true,
+        "country": "UK",
+        "position": "Multiple"
+      }
+    },
+    {
+      "id": 39,
+      "raw_text": "Laboratory Research Assistant Job in Microbial Biology at Aarhus University, Denmark [open to international applicants]\n\nAarhus University is hiring a Laboratory Research Assistant in microbial biology to support cutting-edge research on microbial CO2 utilization. This full-time, 2-year position…",
+      "metadata_text": "Laboratory Research Assistant Job in Microbial Biology at Aarhus University, Denmark [open to international applicants]\n\nAarhus University is hiring a Laboratory Research Assistant in microbial biology to support cutting-edge research on microbial CO2 utilization. This full-time, 2-year position…\n\n[Linked page - Laboratory Research Assistant Job in Microbial Biology at Aarhus University, Denmark [open to international applicants]: Aarhus University is hiring a Laboratory Research Assistant in microbial biology to support cutting-edge research on microbial CO2 utilization. This full-time, 2-year position starts in March 2026 and combines lab management with hands-on research.]",
+      "expected": {
+        "is_job": true,
+        "country": "Denmark",
+        "position": "Research Assistant"
+      }
+    },
+    {
+      "id": 40,
+      "raw_text": "We are seeking applications for an Endowed Research Chair in Watershed and/or Aquatic Sciences — Full-time, tenure/tenure-track faculty position our department.\n\nAssistant or Associate Professor level & expected to start Sept 1, 2026. \n\nApps due March 1, 2026: \n\nunbc.njoyn.com/CL/xweb/xweb...",
+      "metadata_text": "We are seeking applications for an Endowed Research Chair in Watershed and/or Aquatic Sciences — Full-time, tenure/tenure-track faculty position our department.\n\nAssistant or Associate Professor level & expected to start Sept 1, 2026. \n\nApps due March 1, 2026: \n\nunbc.njoyn.com/CL/xweb/xweb...",
+      "expected": {
+        "is_job": true,
+        "country": "Canada",
+        "position": "Postdoc"
+      }
+    },
+    {
+      "id": 41,
+      "raw_text": "Uppsala University is hiring:\nResearch Assistant position in biomedical microsystems",
+      "metadata_text": "Uppsala University is hiring:\nResearch Assistant position in biomedical microsystems",
+      "expected": {
+        "is_job": true,
+        "country": "Sweden",
+        "position": "Research Assistant"
+      }
+    }
+  ]
+}

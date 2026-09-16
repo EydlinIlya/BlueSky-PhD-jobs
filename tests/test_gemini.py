@@ -87,6 +87,28 @@ def test_rate_limit_retries_then_succeeds(monkeypatch):
     assert GeminiProvider("key").classify("text", "prompt") == "NO"
 
 
+def test_rate_limit_can_fail_fast_for_fallback(monkeypatch):
+    response = FakeResponse(
+        status_code=429,
+        body={"error": {"message": "quota exceeded"}},
+    )
+    calls = 0
+
+    def fake_post(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return response
+
+    monkeypatch.setattr("src.llm.gemini.requests.post", fake_post)
+
+    with pytest.raises(LLMUnavailableError, match="rate limited: quota exceeded"):
+        GeminiProvider("key", fail_fast_on_rate_limit=True).classify(
+            "text", "prompt"
+        )
+
+    assert calls == 1
+
+
 def test_non_transient_http_error_becomes_unavailable(monkeypatch):
     response = FakeResponse(
         status_code=400,

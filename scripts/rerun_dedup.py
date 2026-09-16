@@ -31,7 +31,7 @@ from src.dedup import (
     _verify_pair,
     _is_duplicate,
 )
-from src.llm import NvidiaProvider, MistralProvider, FallbackProvider
+from src.llm import FallbackProvider, MistralProvider, NvidiaNIMProvider
 from src.storage.supabase import SupabaseStorage
 
 
@@ -425,20 +425,20 @@ def main():
     llm = None
     if not args.no_llm:
         providers = []
-        nvidia_key = os.environ.get("NVIDIA_API_KEY")
-        if nvidia_key:
-            providers.append(NvidiaProvider(nvidia_key))
         mistral_key = os.environ.get("MISTRAL_API_KEY")
         if mistral_key:
             providers.append(MistralProvider(mistral_key))
+        nvidia_key = os.environ.get("NVIDIA_API_KEY")
+        if nvidia_key:
+            providers.append(NvidiaNIMProvider(nvidia_key))
         if not providers:
             print("LLM provider: None (no NVIDIA_API_KEY or MISTRAL_API_KEY)")
         elif len(providers) == 1:
             llm = providers[0]
             print(f"LLM provider: {providers[0].name} (enabled)")
         else:
-            llm = FallbackProvider(providers)
-            print("LLM provider: NVIDIA primary, Mistral fallback (enabled)")
+            llm = FallbackProvider(providers[0], providers[1])
+            print("LLM provider: Mistral primary, NVIDIA NIM fallback (enabled)")
     else:
         print("LLM provider: disabled (--no-llm)")
     print()

@@ -10,7 +10,7 @@ Aggregate PhD and academic position announcements from multiple sources into a u
 ## Features
 
 - **Multi-source aggregation** - Combine positions from multiple sources
-- **LLM filtering** - Automatically filter out non-job posts from Bluesky
+- **LLM filtering** - Mistral (Ministral 14B) with optional Gemini → NVIDIA NIM → Groq failover
 - **Multi-discipline classification** - Categorize positions into 1-3 academic disciplines
 - **Country detection** - Identifies position country from university, domain, or city names
 - **Position type extraction** - PhD Student, Postdoc, Master Student, Research Assistant
@@ -39,10 +39,25 @@ Create a `.env` file:
 BLUESKY_HANDLE=your-handle.bsky.social
 BLUESKY_PASSWORD=your-app-password
 
-# Optional - LLM filtering (recommended for Bluesky)
+# Recommended - primary LLM filtering for Bluesky
+MISTRAL_API_KEY=your-mistral-api-key
+# Optional model override (default: ministral-14b-latest)
+MISTRAL_MODEL=ministral-14b-latest
+
+# Optional fallbacks
 GEMINI_API_KEY=your-gemini-api-key
 # Optional model override (default: gemma-4-31b-it)
 GEMINI_MODEL=gemma-4-31b-it
+
+# Optional intermediate fallback through NVIDIA NIM
+NVIDIA_API_KEY=your-nvidia-api-key
+# Optional model override (default: google/gemma-4-31b-it)
+NVIDIA_MODEL=google/gemma-4-31b-it
+
+# Optional final fallback (also works as the sole LLM provider)
+GROQ_API_KEY=your-groq-api-key
+# Optional model override (default: openai/gpt-oss-120b)
+GROQ_MODEL=openai/gpt-oss-120b
 
 # Optional - Supabase storage
 SUPABASE_URL=https://xxx.supabase.co
@@ -54,14 +69,39 @@ TELEGRAM_CHANNEL_ID=@your_channel
 ```
 
 Get a Bluesky app password at Settings → App Passwords.
-Create a Gemini API key in [Google AI Studio](https://aistudio.google.com/apikey),
-then put it in the repository's local `.env` file as `GEMINI_API_KEY`. For the
-scheduled ingest, also add the same name and value under GitHub repository
+Create a key in [Mistral Studio](https://console.mistral.ai/api-keys), then put
+it in the repository's local `.env` file as `MISTRAL_API_KEY`. For scheduled
+ingest, also add the same name and value under GitHub repository
 **Settings → Secrets and variables → Actions → New repository secret**. Never put
-the key in `docs/` or any browser-side JavaScript. The default hosted model is
-the instruction-tuned `gemma-4-31b-it`; availability, pricing, and quotas depend
-on the project. Check the [current pricing](https://ai.google.dev/gemini-api/docs/pricing)
-and your AI Studio rate-limit dashboard before increasing ingest volume.
+the key in `docs/` or browser-side JavaScript. The default is
+`ministral-14b-latest`, selected against the checked-in 41-case benchmark. The
+provider uses a stable prompt cache key so repeated filter and metadata
+instructions can use Mistral's discounted cached-input pricing.
+
+The provider order is Mistral → Gemini → NVIDIA NIM → Groq, skipping providers
+that are not configured. Any provider can operate alone. Set `NVIDIA_API_KEY`
+to use NVIDIA's hosted NIM endpoint with `google/gemma-4-31b-it`; Groq defaults
+to `openai/gpt-oss-120b`.
+
+Create a final-fallback key in the [GroqCloud console](https://console.groq.com/keys)
+and set `GROQ_API_KEY`. A Gemini rate-limit response triggers immediate failover;
+other terminal failures switch after their normal retries. The selected fallback
+remains active for the rest of the running filter or dedup process. For scheduled
+runs, add any fallback keys you want as GitHub Actions secrets.
+
+### Model benchmark
+
+The reproducible benchmark uses 41 hand-reviewed Bluesky posts and the real
+production prompts/code path:
+
+```bash
+python scripts/benchmark_mistral_models.py
+```
+
+Reports are written under `.benchmarks/` and include filter precision/recall/F1,
+metadata accuracy, latency, token usage, prompt-cache hits, and estimated
+standard and Batch API costs. The fixture is
+`tests/fixtures/llm_benchmark_cases.json`.
 
 ## Usage
 
@@ -207,7 +247,7 @@ UPDATE phd_positions SET reposted_to_bluesky_at = NOW() WHERE reposted_to_bluesk
 Two workflows run on cron:
 
 - **`scheduled-search.yml`** — ingests new Bluesky posts and regenerates the
-  static frontend snapshot. Runs **4×/day** (07:00, 13:00, 19:00, 01:00 UTC)
+  static frontend snapshot. Runs **4×/day** (05:00, 11:00, 17:00, 23:00 UTC)
   for fresh website data.
 - **`telegram-digest.yml`** — pulls Bio + CS positions where
   `posted_to_telegram_at IS NULL` and posts them to the channel, then marks
@@ -222,7 +262,7 @@ To enable:
 
 1. Push to GitHub
 2. Go to Settings → Secrets and variables → Actions
-3. Add secrets: `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`, `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`
+3. Add secrets: `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`, `MISTRAL_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`
 4. (Optional) Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHANNEL_ID` for Telegram posting
 5. The workflows run automatically or can be triggered manually from the Actions tab
 
@@ -343,7 +383,7 @@ for catch-all discipline labels, so they don't become thin pages.
 - [atproto](https://atproto.blue/) - AT Protocol SDK for Bluesky
 - [httpx](https://www.python-httpx.org/) - HTTP client for ScholarshipDB
 - [beautifulsoup4](https://www.crummy.com/software/BeautifulSoup/) - HTML parsing
-- [requests](https://requests.readthedocs.io/) - Gemini API and web requests
+- [requests](https://requests.readthedocs.io/) - Hosted LLM APIs and web requests
 - [scikit-learn](https://scikit-learn.org/) - TF-IDF similarity for deduplication
 - [supabase](https://supabase.com/docs/reference/python) - Supabase client
 

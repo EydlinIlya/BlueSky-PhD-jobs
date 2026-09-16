@@ -9,10 +9,10 @@ name: Daily Job Board Update
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 5 * * *"   # 07:00 UTC
-    - cron: "0 11 * * *"  # 13:00 UTC
-    - cron: "0 17 * * *"  # 19:00 UTC
-    - cron: "0 23 * * *"  # 01:00 UTC
+    - cron: "0 5 * * *"   # 05:00 UTC
+    - cron: "0 11 * * *"  # 11:00 UTC
+    - cron: "0 17 * * *"  # 17:00 UTC
+    - cron: "0 23 * * *"  # 23:00 UTC
 
 permissions:
   contents: write
@@ -44,14 +44,20 @@ jobs:
       - name: Stage 2 - Filter (LLM classification)
         run: python bluesky_search.py --storage supabase --sources bluesky --stage filter
         env:
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
 
       - name: Stage 3 - Deduplicate
         run: python bluesky_search.py --storage supabase --sources bluesky --stage dedup
         env:
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
 

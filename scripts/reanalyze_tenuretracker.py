@@ -299,13 +299,22 @@ def apply_changes(analysis: dict, storage) -> None:
         if not nvidia_key and not mistral_key:
             logger.warning("No NVIDIA_API_KEY or MISTRAL_API_KEY — skipping reclassification of %d posts", len(reclassify))
         else:
-            from src.llm import NvidiaProvider, MistralProvider, FallbackProvider, JobClassifier
+            from src.llm import (
+                FallbackProvider,
+                JobClassifier,
+                MistralProvider,
+                NvidiaNIMProvider,
+            )
             providers = []
-            if nvidia_key:
-                providers.append(NvidiaProvider(nvidia_key))
             if mistral_key:
                 providers.append(MistralProvider(mistral_key))
-            llm = providers[0] if len(providers) == 1 else FallbackProvider(providers)
+            if nvidia_key:
+                providers.append(NvidiaNIMProvider(nvidia_key))
+            llm = (
+                providers[0]
+                if len(providers) == 1
+                else FallbackProvider(providers[0], providers[1])
+            )
             classifier = JobClassifier(llm)
             logger.info(f"Reclassifying {len(reclassify)} posts...")
             for i, entry in enumerate(reclassify):
