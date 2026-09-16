@@ -1034,15 +1034,16 @@ def generate_positions_json(positions, duplicates, now=None):
     print(f"Generated positions.json: {len(pos_payload)} positions, {len(dup_payload)} duplicates, {size_kb:.0f}KB")
 
 
-def validate_generation_ready(active_positions):
-    """Refuse a partial rollout that would publish an incomplete jobs sitemap."""
+def report_generation_readiness(active_positions):
+    """Report incomplete enrichment without blocking a safe partial refresh."""
     unenriched = [p for p in active_positions if not p.get("seo_enriched_at")]
     if unenriched:
-        raise RuntimeError(
-            f"Refusing SEO generation: {len(unenriched)} active positions have not "
-            "completed SEO enrichment. Apply migration 008 and finish "
-            "scripts/backfill_seo_metadata.py first."
+        print(
+            f"WARNING: {len(unenriched)} active positions have not completed SEO "
+            "enrichment. They remain available in the feed but are excluded from "
+            "the jobs sitemap and JobPosting markup until enriched."
         )
+    return len(unenriched)
 
 
 def main():
@@ -1053,7 +1054,7 @@ def main():
     all_duplicates = fetch_all_duplicates(client)
     now = datetime.now(timezone.utc)
     active_positions = [p for p in all_positions if is_position_active(p, now=now)]
-    validate_generation_ready(active_positions)
+    report_generation_readiness(active_positions)
     eligible_count = sum(is_seo_eligible(p, now=now) for p in active_positions)
     active_uris = {p.get("uri") for p in active_positions}
     active_duplicates = [

@@ -444,9 +444,9 @@ python scripts/backfill_seo_metadata.py
 python scripts/generate_seo_pages.py
 ```
 
-The generator refuses to overwrite the static site while any active canonical
-row still has a null `seo_enriched_at`, preventing a partial or empty jobs
-sitemap from being deployed.
+The generator warns when active rows still have a null `seo_enriched_at` and
+refreshes the site safely: those rows remain usable in the feed but stay out
+of the jobs sitemap and `JobPosting` markup until enrichment completes.
 
 The manual **SEO Metadata Backfill** workflow accepts the existing privileged
 `SUPABASE_KEY` Actions secret. If present, a separately named

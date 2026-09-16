@@ -352,11 +352,17 @@ def test_homepage_identity_has_visible_h1_and_no_dataset_claim():
     assert "PhD_Positions" not in html
 
 
-def test_generator_refuses_partially_enriched_active_corpus():
+def test_generator_reports_partially_enriched_active_corpus(capsys):
     active = _corpus(2)
     active[0]["seo_enriched_at"] = "2026-09-16T10:00:00Z"
-    with pytest.raises(RuntimeError, match="finish scripts/backfill_seo_metadata.py"):
-        gsp.validate_generation_ready(active)
+    assert gsp.report_generation_readiness(active) == 1
+    assert "excluded from the jobs sitemap" in capsys.readouterr().out
 
     active[1]["seo_enriched_at"] = "2026-09-16T10:01:00Z"
-    gsp.validate_generation_ready(active)
+    assert gsp.report_generation_readiness(active) == 0
+
+
+def test_active_filter_is_not_passed_directly_as_array_callback():
+    """Array.filter passes the row index as arg 2, which is not a Date."""
+    app_js = (REPO / "docs" / "app.js").read_text(encoding="utf-8")
+    assert ".filter(isActivePosition)" not in app_js

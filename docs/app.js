@@ -139,7 +139,7 @@ async function fetchStaticSnapshot() {
         if (!data || !Array.isArray(data.positions)) return null;
         const positions = data.positions
             .map(p => ({ ...p, country: normalizeCountry(p.country) }))
-            .filter(isActivePosition);
+            .filter(position => isActivePosition(position));
         const dupMap = buildDuplicateMap(data.duplicates || []);
         return { positions, duplicates: dupMap, total: data.total || positions.length };
     } catch (e) { console.warn('snapshot fetch failed', e); return null; }
@@ -169,7 +169,9 @@ async function fetchSupabasePositions() {
             .range(from, from + PAGE - 1);
         if (error) throw error;
         all = all.concat(
-            data.map(p => ({ ...p, country: normalizeCountry(p.country) })).filter(isActivePosition)
+            data
+                .map(p => ({ ...p, country: normalizeCountry(p.country) }))
+                .filter(position => isActivePosition(position))
         );
         if (data.length < PAGE) break;
         from += PAGE;
@@ -216,7 +218,7 @@ function loadStaticData() {
         if (data && Array.isArray(data.positions) && data.positions.length > 0) {
             const positions = data.positions
                 .map(p => ({ ...p, country: normalizeCountry(p.country) }))
-                .filter(isActivePosition);
+                .filter(position => isActivePosition(position));
             return { positions, total: data.total || positions.length };
         }
     } catch (e) { console.warn('static parse failed', e); }
