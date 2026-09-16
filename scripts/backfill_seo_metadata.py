@@ -81,13 +81,15 @@ def main() -> None:
     args = parse_args()
 
     supabase_url = os.environ.get("SUPABASE_URL")
-    service_key = os.environ.get("SUPABASE_SERVICE_KEY")
+    service_key = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get(
+        "SUPABASE_KEY"
+    )
     mistral_key = os.environ.get("MISTRAL_API_KEY")
     missing = [
         name
         for name, value in (
             ("SUPABASE_URL", supabase_url),
-            ("SUPABASE_SERVICE_KEY", service_key),
+            ("SUPABASE_SERVICE_KEY (or privileged SUPABASE_KEY)", service_key),
             ("MISTRAL_API_KEY", mistral_key),
         )
         if not value

@@ -56,7 +56,9 @@ jobs:
       - name: Backfill active position metadata
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          # Prefer a dedicated name, but existing deployments already store the
+          # privileged server-side key as SUPABASE_KEY. Secrets only: never vars.
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_KEY }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
           ROW_LIMIT: ${{ inputs.limit }}
           DRY_RUN: ${{ inputs.dry_run }}

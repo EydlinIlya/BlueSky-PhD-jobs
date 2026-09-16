@@ -24,7 +24,7 @@ class SupabaseStorage(StorageBackend):
 
         Args:
             url: Supabase project URL (or SUPABASE_URL env var)
-            key: Supabase anon key (or SUPABASE_KEY env var)
+            key: Supabase server-side API key (or SUPABASE_KEY env var)
             table: Table name to use
         """
         url = url or os.environ.get("SUPABASE_URL")

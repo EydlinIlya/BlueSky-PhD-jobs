@@ -66,9 +66,10 @@ GROQ_MODEL=openai/gpt-oss-120b
 
 # Optional - Supabase storage
 SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_KEY=your-anon-key
-# Required only for the resumable SEO metadata backfill
-SUPABASE_SERVICE_KEY=your-service-role-key
+# Server-side secret key used by ingestion and maintenance scripts; never expose it
+SUPABASE_KEY=your-secret-key
+# Optional dedicated alias for maintenance/email jobs
+SUPABASE_SERVICE_KEY=your-secret-key
 
 # Optional - Telegram channel
 TELEGRAM_BOT_TOKEN=your-bot-token
@@ -269,7 +270,7 @@ UPDATE phd_positions SET reposted_to_bluesky_at = NOW() WHERE reposted_to_bluesk
 
 3. Go to Settings → API and copy:
    - Project URL → `SUPABASE_URL`
-   - anon/public key → `SUPABASE_KEY`
+   - secret/service-role key → `SUPABASE_KEY` (server-side only)
 
 4. Add to your `.env` file
 
@@ -429,10 +430,12 @@ The generator refuses to overwrite the static site while any active canonical
 row still has a null `seo_enriched_at`, preventing a partial or empty jobs
 sitemap from being deployed.
 
-To avoid keeping the service-role key locally, store `SUPABASE_SERVICE_KEY` as
-a GitHub Actions secret and run **SEO Metadata Backfill** from the Actions tab.
-Its manual dispatch defaults to a 20-row dry run; rerun with dry run disabled
-and `limit=0` to process all remaining active rows. The operation is resumable.
+The manual **SEO Metadata Backfill** workflow accepts the existing privileged
+`SUPABASE_KEY` Actions secret. If present, a separately named
+`SUPABASE_SERVICE_KEY` takes precedence. Both names must be stored as Actions
+secrets, never plaintext variables. The dispatch defaults to a 20-row dry run;
+rerun with dry run disabled and `limit=0` to process all remaining active rows.
+The operation is resumable.
 
 After deploying regenerated output, remove and resubmit `sitemap.xml` in Google
 Search Console, then inspect the homepage, `/positions`, two hubs, and several

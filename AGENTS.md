@@ -62,7 +62,7 @@ NVIDIA_MODEL=google/gemma-4-31b-it     # Optional NVIDIA model override
 GROQ_API_KEY=your-groq-api-key        # Optional final fallback (or sole provider)
 GROQ_MODEL=openai/gpt-oss-120b        # Optional Groq model override
 SUPABASE_URL=https://xxx.supabase.co  # For Supabase storage
-SUPABASE_KEY=your-anon-key            # For Supabase storage
+SUPABASE_KEY=your-secret-key          # Privileged backend key; never expose to frontend
 TELEGRAM_BOT_TOKEN=your-bot-token     # For Telegram channel
 TELEGRAM_CHANNEL_ID=@your_channel     # Telegram channel ID
 SUPABASE_SERVICE_KEY=service-role-key # For subscription digest cron (bypasses RLS)
@@ -154,10 +154,14 @@ substantive description. Invalid dates/URLs fail conservatively.
   595 completion tokens).
 - `scripts/backfill_seo_metadata.py` uses one metadata call per active,
   canonical, unenriched row and persists each successful row immediately. It
-  requires `MISTRAL_API_KEY`, `SUPABASE_URL`, and `SUPABASE_SERVICE_KEY`.
+  requires `MISTRAL_API_KEY`, `SUPABASE_URL`, and either
+  `SUPABASE_SERVICE_KEY` or the existing privileged `SUPABASE_KEY`.
 - `.github/workflows/seo-metadata-backfill.yml` exposes that script through a
   guarded manual dispatch. It defaults to a 20-row dry run; use `limit=0` with
-  dry run disabled for the complete resumable backfill. Apply migration 008 first.
+  dry run disabled for the complete resumable backfill. It prefers the
+  `SUPABASE_SERVICE_KEY` Actions secret and otherwise uses the existing
+  `SUPABASE_KEY` Actions secret; it never reads plaintext Actions variables.
+  Apply migration 008 first.
 
 **`src/pipeline/`** - 4-stage persistent pipeline (Supabase only)
 - `runner.py` - Orchestrates stages; skips already-completed ones using `pipeline_runs` checkpoints
@@ -348,7 +352,7 @@ CREATE TABLE phd_positions_staging (
     UNIQUE(run_date, uri)
 );
 ```
-3. Get URL and anon key from Settings → API
+3. Get the project URL and a server-side secret/service-role key from Settings → API
 4. Add to `.env`: `SUPABASE_URL` and `SUPABASE_KEY`
 
 **`duplicate_of` column:** `NULL` = canonical post (shown in UI). Contains URI of the newest (canonical) post in a duplicate group. When duplicates are detected, the older post gets `duplicate_of` set to the newer post's URI.
