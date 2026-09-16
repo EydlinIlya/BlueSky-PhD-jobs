@@ -283,7 +283,10 @@ Two workflows run on cron:
 
 - **`scheduled-search.yml`** — ingests new Bluesky posts and regenerates the
   static frontend snapshot. Runs **4×/day** (05:00, 11:00, 17:00, 23:00 UTC)
-  for fresh website data.
+  for fresh website data. Manual dispatch supports a guarded recovery mode:
+  enable `full_sync` and use `fetch_limit=100` to re-fetch the deepest recent
+  result window after a failed publish. Recovery runs skip static SEO generation;
+  regenerate after the separate metadata backfill is complete.
 - **`telegram-digest.yml`** — pulls Bio + CS positions where
   `posted_to_telegram_at IS NULL` and posts them to the channel, then marks
   them as posted. Runs **3×/day** (08:00, 14:00, 20:00 UTC). Decoupled from
@@ -300,6 +303,11 @@ To enable:
 3. Add secrets: `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`, `MISTRAL_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`
 4. (Optional) Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHANNEL_ID` for Telegram posting
 5. The workflows run automatically or can be triggered manually from the Actions tab
+
+Publish is fail-safe: repeated staging URIs are collapsed to the newest row
+before the Supabase upsert, and staging/checkpoint rows are deleted only after
+the complete batch is confirmed saved. A database error therefore leaves the
+queue intact for the next retry.
 
 ## Telegram Channel
 

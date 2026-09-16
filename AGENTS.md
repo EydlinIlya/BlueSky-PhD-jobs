@@ -173,6 +173,11 @@ substantive description. Invalid dates/URLs fail conservatively.
 
 **Drain-all semantics:** only **Fetch** is scoped to today's `run_date` (it decides "what's new to pull"). **Filter, Dedup, and Publish drain the whole pending staging queue across ALL run_dates** (`get_staging_*`/`delete_staging` accept `run_date=None`). So if a day crashes before Publish, the next successful run sweeps up its leftover staging rows, classifies/dedups/publishes them, and Publish then clears the **entire** staging table plus **all** `pipeline_runs` rows. This guarantees orphaned staging can never accumulate. Per-row write-backs (`update_staging_filter`/`_dedup`) are keyed by each row's own `run_date`.
 
+Before a drain-all upsert, Publish collapses repeated `uri` values across run
+dates to the newest staging row. Supabase write errors propagate, and a short
+save count raises, so staging and checkpoints are cleared only after the full
+unique batch succeeds. `tests/test_publish_stage.py` protects these invariants.
+
 **`scripts/find_aggregator_candidates.py`** - One-shot helper that lists Bluesky handles with ≥ `--min-posts` (default 5) canonical posts plus the bio from each handle's most recent post. Pure read; does not touch the pipeline or dedup. A human reviews the output and hand-edits `docs/aggregators.json` to add/remove aggregator handles. The frontend's **"Hide aggregator reposts"** toggle reads that JSON and filters the grid + card views accordingly. Dedup is unaffected because `preprocess_text()` already strips `[Bio: ...]` prefixes before TF-IDF comparison.
 
 **`scripts/post_to_telegram.py`** - Telegram channel posting (standalone digest)
@@ -367,6 +372,11 @@ CREATE TABLE phd_positions_staging (
 
 The workflow at `.github/workflows/scheduled-search.yml` runs 4×/day
 (05:00, 11:00, 17:00, and 23:00 UTC).
+Its manual dispatch accepts `full_sync` plus a validated `fetch_limit` from 1
+to 100. Use `full_sync=true` and `fetch_limit=100` only for recovery because it
+re-fetches and reclassifies the deepest recent Bluesky search window. Recovery
+runs skip static SEO generation so the separate enrichment rollout guard does
+not turn a successful database rescue into a false workflow failure.
 The Telegram digest (`telegram-digest.yml`) and the Bluesky repost bot
 (`bluesky-repost.yml`, every 6h) run on their own separate schedules.
 

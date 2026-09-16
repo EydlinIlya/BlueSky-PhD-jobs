@@ -90,10 +90,10 @@ class SupabaseStorage(StorageBackend):
         # Upsert to avoid duplicates (uri is unique)
         try:
             self.client.table(self.table).upsert(records, on_conflict="uri").execute()
-            return len(records)
-        except Exception as e:
-            logger.error(f"Failed to save posts to Supabase: {e}")
-            return 0
+        except Exception:
+            logger.exception("Failed to save posts to Supabase")
+            raise
+        return len(records)
 
     def get_existing_uris(self) -> set[str]:
         """Get all URIs from Supabase (paginated).
