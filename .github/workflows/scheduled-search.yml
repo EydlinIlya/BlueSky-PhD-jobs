@@ -8,6 +8,17 @@ name: Daily Job Board Update
 
 on:
   workflow_dispatch:
+    inputs:
+      full_sync:
+        description: "Recovery mode: ignore the stored timestamp and re-fetch recent search results"
+        required: true
+        default: false
+        type: boolean
+      fetch_limit:
+        description: "Results per Bluesky query (1-100; use 100 for recovery)"
+        required: true
+        default: "50"
+        type: string
   schedule:
     - cron: "0 5 * * *"   # 05:00 UTC
     - cron: "0 11 * * *"  # 11:00 UTC
@@ -34,12 +45,23 @@ jobs:
         run: pip install -e .
 
       - name: Stage 1 - Fetch posts
-        run: python bluesky_search.py --storage supabase --sources bluesky --stage fetch
         env:
+          FULL_SYNC: ${{ inputs.full_sync || 'false' }}
+          FETCH_LIMIT: ${{ inputs.fetch_limit || '50' }}
           BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
           BLUESKY_PASSWORD: ${{ secrets.BLUESKY_PASSWORD }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          if ! [[ "$FETCH_LIMIT" =~ ^[0-9]+$ ]] || (( FETCH_LIMIT < 1 || FETCH_LIMIT > 100 )); then
+            echo "fetch_limit must be an integer from 1 to 100" >&2
+            exit 2
+          fi
+          args=(--storage supabase --sources bluesky --stage fetch --limit "$FETCH_LIMIT")
+          if [[ "$FULL_SYNC" == "true" ]]; then
+            args+=(--full-sync)
+          fi
+          python bluesky_search.py "${args[@]}"
 
       - name: Stage 2 - Filter (LLM classification)
         run: python bluesky_search.py --storage supabase --sources bluesky --stage filter
@@ -68,12 +90,14 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
 
       - name: Generate SEO pages
+        if: ${{ github.event_name != 'workflow_dispatch' || !inputs.full_sync }}
         run: python scripts/generate_seo_pages.py
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
 
       - name: Commit and push SEO updates
+        if: ${{ github.event_name != 'workflow_dispatch' || !inputs.full_sync }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

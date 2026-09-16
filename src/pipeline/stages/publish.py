@@ -42,6 +42,32 @@ def _staging_to_save_dict(row: dict) -> dict:
     return post
 
 
+def _row_recency_key(row: dict) -> tuple[str, str, int]:
+    """Return a deterministic recency key for repeated staging URIs."""
+    return (
+        str(row.get("run_date") or ""),
+        str(row.get("staged_at") or ""),
+        int(row.get("id") or 0),
+    )
+
+
+def _deduplicate_staging_rows(rows: list[dict]) -> list[dict]:
+    """Keep only the newest staging row for each canonical URI.
+
+    The staging uniqueness constraint is ``(run_date, uri)``, so a drain-all
+    publish can contain the same URI from multiple interrupted run dates.
+    PostgreSQL rejects such a multi-row upsert because one statement cannot
+    update the same constrained row twice.
+    """
+    by_uri: dict[str, dict] = {}
+    for row in rows:
+        uri = row["uri"]
+        current = by_uri.get(uri)
+        if current is None or _row_recency_key(row) > _row_recency_key(current):
+            by_uri[uri] = row
+    return list(by_uri.values())
+
+
 def run(run_date, storage, args) -> None:
     """Publish all staging rows to phd_positions, clean up, post to Telegram."""
 
@@ -54,12 +80,25 @@ def run(run_date, storage, args) -> None:
         storage.delete_run()
         return
 
-    logger.info(f"Publishing {len(all_rows)} posts to phd_positions...")
+    unique_rows = _deduplicate_staging_rows(all_rows)
+    duplicate_count = len(all_rows) - len(unique_rows)
+    if duplicate_count:
+        logger.warning(
+            "Collapsed %s repeated staging rows before publish", duplicate_count
+        )
 
-    posts_to_save = [_staging_to_save_dict(row) for row in all_rows]
+    logger.info(f"Publishing {len(unique_rows)} posts to phd_positions...")
+
+    posts_to_save = [_staging_to_save_dict(row) for row in unique_rows]
 
     saved_count = storage.save_posts(posts_to_save)
     logger.info(f"Saved {saved_count} posts to phd_positions")
+
+    if saved_count != len(posts_to_save):
+        raise RuntimeError(
+            f"Publish incomplete: expected {len(posts_to_save)} saved rows, "
+            f"received {saved_count}; staging was preserved for retry"
+        )
 
     # Clean up: clear the ENTIRE staging table and ALL pipeline_runs checkpoints.
     # After a successful drain-all publish nothing is in flight, so this also
