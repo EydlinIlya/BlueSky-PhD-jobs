@@ -14,6 +14,11 @@ Aggregate PhD and academic position announcements from multiple sources into a u
 - **Multi-discipline classification** - Categorize positions into 1-3 academic disciplines
 - **Country detection** - Identifies position country from university, domain, or city names
 - **Position type extraction** - PhD Student, Postdoc, Master Student, Research Assistant
+- **Evidence-backed job metadata** - Exact title, employer, application URL,
+  deadline, and location are extracted in the existing metadata call; uncertain
+  values remain empty
+- **Active-job search index** - Explicit deadlines override a 90-day fallback;
+  only complete active jobs are indexed with `JobPosting`
 - **Deduplication** - TF-IDF + LLM-based detection of reposted positions
 - **Incremental sync** - Only fetch new positions since last run
 - **4-stage persistent pipeline** - Supabase runs use checkpointed stages (fetch → filter → dedup → publish); a crash mid-filter resumes from the last unprocessed post on the next run
@@ -62,6 +67,8 @@ GROQ_MODEL=openai/gpt-oss-120b
 # Optional - Supabase storage
 SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_KEY=your-anon-key
+# Required only for the resumable SEO metadata backfill
+SUPABASE_SERVICE_KEY=your-service-role-key
 
 # Optional - Telegram channel
 TELEGRAM_BOT_TOKEN=your-bot-token
@@ -102,6 +109,16 @@ Reports are written under `.benchmarks/` and include filter precision/recall/F1,
 metadata accuracy, latency, token usage, prompt-cache hits, and estimated
 standard and Batch API costs. The fixture is
 `tests/fixtures/llm_benchmark_cases.json`.
+
+Before an SEO backfill, benchmark the five evidence-backed job fields on the
+separate hand-reviewed fixture:
+
+```bash
+python scripts/benchmark_seo_enrichment.py --model ministral-14b-latest
+```
+
+The current Ministral 14B result is 30/30 accepted fields. The six-case run used
+8,235 prompt tokens (7,680 cached) and 595 completion tokens.
 
 ## Usage
 
@@ -146,7 +163,9 @@ python bluesky_search.py --no-llm -l 10
 
 ## Output
 
-CSV columns: `uri`, `message`, `url`, `user`, `created`, `disciplines`, `is_verified_job`, `country`, `position_type`
+CSV output also carries nullable `job_title`, `hiring_organization`,
+`application_url`, `application_deadline`, `location_text`, and
+`seo_enriched_at` fields when they are available.
 
 - **Bluesky posts**: `message` includes author bio as `[Bio: ...]` prefix
 - **ScholarshipDB**: `is_verified_job` is always `True` (pre-verified from job site)
@@ -175,7 +194,13 @@ CREATE TABLE phd_positions (
     country TEXT,
     position_type TEXT[],
     indexed_at TIMESTAMPTZ DEFAULT NOW(),
-    duplicate_of TEXT
+    duplicate_of TEXT,
+    job_title TEXT,
+    hiring_organization TEXT,
+    application_url TEXT,
+    application_deadline DATE,
+    location_text TEXT,
+    seo_enriched_at TIMESTAMPTZ
 );
 
 CREATE TABLE pipeline_runs (
@@ -206,6 +231,12 @@ CREATE TABLE phd_positions_staging (
     disciplines TEXT[],
     country TEXT,
     position_type TEXT[],
+    job_title TEXT,
+    hiring_organization TEXT,
+    application_url TEXT,
+    application_deadline DATE,
+    location_text TEXT,
+    seo_enriched_at TIMESTAMPTZ,
     duplicate_of TEXT,
     filter_completed BOOLEAN DEFAULT FALSE,
     staged_at TIMESTAMPTZ DEFAULT NOW(),
@@ -241,6 +272,9 @@ UPDATE phd_positions SET reposted_to_bluesky_at = NOW() WHERE reposted_to_bluesk
    - anon/public key → `SUPABASE_KEY`
 
 4. Add to your `.env` file
+
+Existing projects should apply all SQL files under `migrations/` through
+`008_seo_job_metadata.sql` before deploying the updated ingest or generator.
 
 ## GitHub Actions
 
@@ -308,7 +342,7 @@ The browse-positions site is at **<https://phdsky.org/>** (Vercel, served from
 (`eydlinilya.github.io/BlueSky-PhD-jobs/`) now serves a 0-second redirect to
 `phdsky.org` from the `gh-pages` branch.
 
-The UI is a light, terminal-styled Twitter/Bluesky-style **feed**: a chronological river of positions
+The UI is a light academic **feed**: a chronological river of active positions
 with day separators and infinite scroll, a left rail of filter chips
 (Level / Country / Area + "Hide aggregator reposts"), a command/search bar, and a
 post-detail flyout. Saved subscriptions can be edited in place without recreating
@@ -369,14 +403,41 @@ alongside it by `scripts/generate_seo_pages.py`:
 
 | URL | What it is |
 | --- | --- |
-| `/p/<slug>` | One page per position. Carries the `JobPosting` structured data that makes the site eligible for Google Jobs. |
-| `/positions`, `/positions/<n>` | Paginated listing of every position. This is what gives each `/p/` page an internal link — a sitemap entry alone is not enough. |
-| `/area/<slug>` | Per-discipline hub, e.g. `/area/biology`. |
-| `/country/<slug>` | Per-country hub, e.g. `/country/germany`. |
+| `/p/<slug>` | Detail page for an active or archived position. Archived/incomplete pages are `noindex`; only complete active pages carry `JobPosting`. |
+| `/positions`, `/positions/<n>` | Active positions only. Page one is indexable; later pagination is `noindex, follow`. |
+| `/area/<slug>` | Active positions for one discipline, e.g. `/area/biology`. |
+| `/country/<slug>` | Active positions for one country, e.g. `/country/germany`. |
+| `/sitemap.xml` | Sitemap index for `/sitemaps/core.xml` and `/sitemaps/jobs.xml`. |
 
 Listing and hub pages use `CollectionPage` + `ItemList` structured data and link
 to the `/p/` pages. Hubs are skipped for buckets below `FACET_MIN_POSITIONS`, and
 for catch-all discipline labels, so they don't become thin pages.
+
+An explicit application deadline controls activity. Without one, a position is
+active for 90 days from its source-post date. A page is SEO-eligible only when
+it is active and has a verified title, employer, external application URL,
+country, and a substantive description. Run the one-time enrichment after the
+schema update:
+
+```bash
+python scripts/backfill_seo_metadata.py --limit 20 --dry-run
+python scripts/backfill_seo_metadata.py
+python scripts/generate_seo_pages.py
+```
+
+The generator refuses to overwrite the static site while any active canonical
+row still has a null `seo_enriched_at`, preventing a partial or empty jobs
+sitemap from being deployed.
+
+To avoid keeping the service-role key locally, store `SUPABASE_SERVICE_KEY` as
+a GitHub Actions secret and run **SEO Metadata Backfill** from the Actions tab.
+Its manual dispatch defaults to a 20-row dry run; rerun with dry run disabled
+and `limit=0` to process all remaining active rows. The operation is resumable.
+
+After deploying regenerated output, remove and resubmit `sitemap.xml` in Google
+Search Console, then inspect the homepage, `/positions`, two hubs, and several
+current eligible job URLs. The generator deliberately does not use the Google
+Indexing API yet.
 
 ## Dependencies
 

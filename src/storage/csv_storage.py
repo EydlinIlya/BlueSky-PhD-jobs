@@ -18,7 +18,11 @@ class CSVStorage(StorageBackend):
         """
         self.filename = filename
         self.base_fields = ["uri", "message", "url", "user", "created"]
-        self.extra_fields = ["disciplines", "is_verified_job", "country", "position_type"]
+        self.extra_fields = [
+            "disciplines", "is_verified_job", "country", "position_type",
+            "job_title", "hiring_organization", "application_url",
+            "application_deadline", "location_text", "seo_enriched_at",
+        ]
 
     def save_posts(self, posts: list[dict]) -> int:
         """Save posts to CSV file.

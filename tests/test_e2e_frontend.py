@@ -1,35 +1,29 @@
-"""End-to-end tests for the frontend using Playwright.
+"""Current frontend smoke tests using the bundled ``?mock`` data path.
 
-These tests verify the frontend loads correctly and displays position data.
-They require network access to Supabase (the duplicate_of column must exist).
-
-Run:
-    python -m pytest tests/test_e2e_frontend.py -v
-
-Requires:
-    pip install pytest-playwright
-    playwright install chromium
+The suite is intentionally independent of Supabase and external listing state.
+It exercises the selectors and interaction model that the v3 feed actually
+ships instead of the removed card-grid UI.
 """
 
-import subprocess
 import socket
+import subprocess
+import sys
 import time
 
 import pytest
 
 
 def _free_port():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("", 0))
-        return s.getsockname()[1]
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("", 0))
+        return sock.getsockname()[1]
 
 
 @pytest.fixture(scope="module")
 def server_url():
-    """Start a local HTTP server serving docs/."""
     port = _free_port()
     proc = subprocess.Popen(
-        ["python", "-m", "http.server", str(port), "--directory", "docs"],
+        [sys.executable, "-m", "http.server", str(port), "--directory", "docs"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -39,76 +33,56 @@ def server_url():
                 break
         except OSError:
             time.sleep(0.25)
-    yield f"http://localhost:{port}"
+    yield f"http://localhost:{port}/?mock"
     proc.terminate()
     proc.wait(timeout=5)
 
 
+def open_feed(page, server_url):
+    page.goto(server_url, wait_until="domcontentloaded")
+    page.wait_for_selector("article.post", timeout=15000)
+
+
 class TestFrontendLoads:
-    """Test that the frontend loads and displays data from Supabase."""
-
-    def test_page_title(self, server_url, page):
-        page.goto(server_url)
+    def test_page_identity_and_visible_heading(self, server_url, page):
+        open_feed(page, server_url)
         assert "PhD" in page.title()
+        assert "Current PhD" in page.locator("h1").inner_text()
 
-    def test_positions_load(self, server_url, page):
-        """Verify positions load from Supabase and cards are rendered."""
-        page.goto(server_url)
-        page.wait_for_selector(".position-card, #error:not(.hidden)", timeout=15000)
-        cards = page.query_selector_all(".position-card")
-        assert len(cards) > 0, "No position cards rendered"
-
-    def test_no_error_message(self, server_url, page):
-        """Verify no error message is shown."""
-        page.goto(server_url)
-        page.wait_for_selector(".position-card, #error:not(.hidden)", timeout=15000)
-        error_el = page.query_selector("#error")
-        if error_el:
-            assert "hidden" in (error_el.get_attribute("class") or ""), \
-                "Error message is visible — data failed to load"
+    def test_positions_render_from_mock_data(self, server_url, page):
+        open_feed(page, server_url)
+        assert page.locator("article.post").count() > 0
 
     def test_no_js_exceptions(self, server_url, page):
-        """Verify no uncaught JS exceptions."""
         errors = []
-        page.on("pageerror", lambda err: errors.append(str(err)))
-        page.goto(server_url)
-        page.wait_for_selector(".position-card, #error:not(.hidden)", timeout=15000)
-        assert errors == [], f"JS exceptions: {errors}"
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        open_feed(page, server_url)
+        page.wait_for_timeout(250)
+        assert errors == []
 
-    def test_card_has_required_elements(self, server_url, page):
-        """Verify cards have the expected structure."""
-        page.goto(server_url)
-        page.wait_for_selector(".position-card", timeout=15000)
-        first_card = page.query_selector(".position-card")
-        assert first_card.query_selector(".card-header"), "Card missing header"
-        assert first_card.query_selector(".card-message"), "Card missing message"
-        assert first_card.query_selector(".card-actions"), "Card missing actions"
+    def test_post_has_explicit_content_and_actions(self, server_url, page):
+        open_feed(page, server_url)
+        first = page.locator("article.post").first
+        assert first.locator(".p-head").count() == 1
+        assert first.locator(".p-body").count() == 1
+        assert first.locator(".p-actions a").count() >= 1
+        assert first.locator("a.p-time[href^='/p/']").count() == 1
 
-    def test_search_filters_cards(self, server_url, page):
-        """Verify search input filters the displayed cards."""
-        page.goto(server_url)
-        page.wait_for_selector(".position-card", timeout=15000)
-        initial_count = len(page.query_selector_all(".position-card"))
-        assert initial_count > 0
+    def test_search_filters_feed(self, server_url, page):
+        open_feed(page, server_url)
+        initial_count = page.locator("article.post").count()
+        page.locator("#cmd-input").fill("xyznonexistent12345")
+        page.wait_for_timeout(350)
+        assert page.locator("article.post").count() < initial_count
+        assert page.locator(".feed-empty").count() == 1
 
-        page.fill("#global-search", "xyznonexistent12345")
-        page.click("button:has-text('Search')")
-        page.wait_for_timeout(500)
+    def test_filter_rail_and_count_are_present(self, server_url, page):
+        open_feed(page, server_url)
+        assert page.locator("#left-rail").count() == 1
+        assert page.locator("#chips-level .chip").count() > 0
+        assert page.locator("#tab-latest-ct").inner_text().strip()
 
-        filtered_count = len(page.query_selector_all(".position-card"))
-        assert filtered_count < initial_count, "Search did not filter cards"
-
-    def test_filter_panel_visible(self, server_url, page):
-        """Verify filter panel is present."""
-        page.goto(server_url)
-        page.wait_for_selector(".position-card", timeout=15000)
-        assert page.query_selector("#filter-panel"), "Filter panel not found"
-
-    def test_card_count_displayed(self, server_url, page):
-        """Verify the card count text is shown."""
-        page.goto(server_url)
-        page.wait_for_selector(".position-card", timeout=15000)
-        count_el = page.query_selector("#card-count")
-        assert count_el, "Card count element not found"
-        text = count_el.text_content()
-        assert "positions" in text.lower(), f"Unexpected count text: {text}"
+    def test_keyboard_shortcut_focuses_search(self, server_url, page):
+        open_feed(page, server_url)
+        page.keyboard.press("Control+k")
+        assert page.locator("#cmd-input").evaluate("el => el === document.activeElement")

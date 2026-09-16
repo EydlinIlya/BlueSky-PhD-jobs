@@ -145,6 +145,9 @@ class TestScholarshipDBSource:
         assert posts[0].country == "Germany"
         assert posts[0].disciplines == ["Biology"]
         assert posts[0].is_verified_job is True
+        assert posts[0].job_title == "PhD in Test"
+        assert posts[0].application_url.endswith("/scholarships-in-Germany/Test-PhD=abc123.html")
+        assert posts[0].location_text == "Germany"
 
     @patch("src.sources.scholarshipdb.httpx.get")
     def test_fetch_page_handles_error(self, mock_get):

@@ -105,7 +105,9 @@ python bluesky_search.py --no-llm
 ### Modules
 
 **`src/sources/`** - Data source implementations
-- `base.py` - `DataSource` ABC with `fetch_posts()` method, `Post` dataclass (includes `raw_text`, `metadata_text` fields)
+- `base.py` - `DataSource` ABC with `fetch_posts()` method, `Post` dataclass
+  (includes raw/metadata text plus nullable title, employer, application URL,
+  deadline, location, and enrichment timestamp fields)
 - `bluesky.py` - Bluesky source; stores `raw_text`/`metadata_text` on Post; returns posts unclassified (`is_verified_job=None`)
 - `scholarshipdb.py` - ScholarshipDB web scraper
 
@@ -115,7 +117,7 @@ python bluesky_search.py --no-llm
 **`src/logger.py`** - Logging configuration
 
 **`src/llm/`** - LLM integration (for Bluesky)
-- `config.py` - Provider model settings, retry settings, prompts, discipline list (includes `Ecology`), and position types. The `METADATA_PROMPT_TEMPLATE` contains an explicit rule that remote-sensing-of-forests/crop-fields posts must be classified as Ecology primary (Biology / CS only as secondary tags).
+- `config.py` - Provider model settings, retry settings, prompts, discipline list (includes `Ecology`), and position types. The single `METADATA_PROMPT_TEMPLATE` also extracts evidence-backed `job_title`, `hiring_organization`, `application_url`, `application_deadline`, and `location_text`; uncertain values must be null. It contains an explicit rule that remote-sensing-of-forests/crop-fields posts must be classified as Ecology primary (Biology / CS only as secondary tags).
 - `base.py` - Abstract `LLMProvider` class + `LLMUnavailableError`
 - `mistral.py` - `MistralProvider` calls Mistral Chat Completions. The default `ministral-14b-latest` was selected by the checked-in 41-case benchmark. Stable hash-based `prompt_cache_key` values keep filter/metadata instructions eligible for cached-input pricing without putting user data in cache keys.
 - `gemini.py` - `GeminiProvider` calls the native Gemini Interactions REST API with model-compatible minimal/low reasoning, disabled server-side storage, timeout, transient-error retry, rate-limit backoff, and free-tier pacing. It raises `LLMUnavailableError` after retries are exhausted.
@@ -139,6 +141,23 @@ per-row calls so its checkpoint/resume semantics remain simple.
 - `base.py` - Abstract `StorageBackend` class
 - `csv_storage.py` - Local CSV file storage
 - `supabase.py` - Supabase PostgreSQL storage; also contains pipeline support methods (`get_or_create_run`, `update_run`, `insert_staging`, `get_staging_*`, `update_staging_*`, `delete_staging`)
+
+**`src/seo.py`** - Shared active/archive/eligibility policy. A valid explicit
+deadline overrides the 90-day posting-age fallback. SEO eligibility additionally
+requires a verified title, employer, external application URL, country, and a
+substantive description. Invalid dates/URLs fail conservatively.
+
+**SEO enrichment tools:**
+- `scripts/benchmark_seo_enrichment.py` evaluates Ministral 14B against the
+  hand-reviewed `tests/fixtures/seo_enrichment_cases.json` fixture. The
+  2026-09-16 run scored 30/30 accepted fields (8,235 prompt tokens, 7,680 cached,
+  595 completion tokens).
+- `scripts/backfill_seo_metadata.py` uses one metadata call per active,
+  canonical, unenriched row and persists each successful row immediately. It
+  requires `MISTRAL_API_KEY`, `SUPABASE_URL`, and `SUPABASE_SERVICE_KEY`.
+- `.github/workflows/seo-metadata-backfill.yml` exposes that script through a
+  guarded manual dispatch. It defaults to a 20-row dry run; use `limit=0` with
+  dry run disabled for the complete resumable backfill. Apply migration 008 first.
 
 **`src/pipeline/`** - 4-stage persistent pipeline (Supabase only)
 - `runner.py` - Orchestrates stages; skips already-completed ones using `pipeline_runs` checkpoints
@@ -195,7 +214,7 @@ Each stage writes persistent state before proceeding. A restart on the same
 | Stage | Input | Output |
 |-------|-------|--------|
 | 1 Fetch | sync state (last_timestamp, existing_uris from `phd_positions`) | rows in `phd_positions_staging` |
-| 2 Filter | unfiltered staging rows | `is_verified_job`, `disciplines`, `country`, `position_type` set per row |
+| 2 Filter | unfiltered staging rows | classification plus the five nullable SEO metadata fields set in one model call |
 | 3 Dedup | verified staging rows + existing canonical posts in `phd_positions` | `duplicate_of` set on staging rows |
 | 4 Publish | all staging rows | upserted into `phd_positions`; staging + `pipeline_runs` row deleted |
 
@@ -235,6 +254,10 @@ Test files:
 - `tests/test_mock_storage.py` - Mock storage backend behavior
 - `tests/test_integration.py` - End-to-end classifier → storage pipeline
 - `tests/test_scholarshipdb_source.py` - ScholarshipDB source
+- `tests/test_seo_lifecycle.py` - active/archive boundaries and strict eligibility
+- `tests/test_seo_pipeline.py` - source-to-staging-to-publish SEO field contract
+- `tests/test_seo_escaping.py` - generated pages, split sitemaps, indexing/schema invariants, and script safety
+- `tests/test_e2e_frontend.py` - offline `?mock` Playwright smoke tests for the current feed selectors
 - `tests/test_sync_state.py` - Multi-source sync state management
 
 ## Key Dependencies
@@ -265,6 +288,12 @@ CREATE TABLE phd_positions (
     position_type TEXT[],
     indexed_at TIMESTAMPTZ DEFAULT NOW(),
     duplicate_of TEXT,
+    job_title TEXT,
+    hiring_organization TEXT,
+    application_url TEXT,
+    application_deadline DATE,
+    location_text TEXT,
+    seo_enriched_at TIMESTAMPTZ,
     posted_to_telegram_at TIMESTAMPTZ,  -- NULL = un-posted; set by Telegram digest
     reposted_to_bluesky_at TIMESTAMPTZ  -- NULL = un-reposted; set by Bluesky repost bot
 );
@@ -307,6 +336,12 @@ CREATE TABLE phd_positions_staging (
     disciplines TEXT[],
     country TEXT,
     position_type TEXT[],
+    job_title TEXT,
+    hiring_organization TEXT,
+    application_url TEXT,
+    application_deadline DATE,
+    location_text TEXT,
+    seo_enriched_at TIMESTAMPTZ,
     duplicate_of TEXT,
     filter_completed BOOLEAN DEFAULT FALSE,
     staged_at TIMESTAMPTZ DEFAULT NOW(),
@@ -380,7 +415,8 @@ onboarding, subscriptions page, toasts).
 **`docs/app.js`** - Application logic:
 - Initializes Supabase client (anon key); `?mock` loads `mock_data.json`
 - 3-tier data loader: embedded `#static-positions` JSON → `positions.json`
-  snapshot → live Supabase query (`is_verified_job=true`, `duplicate_of is null`)
+  snapshot → live Supabase query (`is_verified_job=true`, `duplicate_of is null`);
+  every production path applies the same deadline/90-day active filter
 - Renders the feed with day separators + infinite scroll (IntersectionObserver,
   `BATCH_SIZE=30`); posts are non-interactive containers with explicit detail,
   permalink, and source actions
@@ -453,7 +489,7 @@ or account-data AI training. Both are linked from the footer; signup shows a
 "By creating an account you agree to Terms & Privacy" line.
 
 Deployment: verify `phdsky.org` in Resend (SPF/DKIM/DMARC), apply migrations
-through 007, deploy the static UI, test the digest and unsubscribe flow, then
+through 008, deploy the static UI, test the digest and unsubscribe flow, then
 enable the digest workflow. The service-role key must never be exposed to
 frontend code.
 
@@ -468,14 +504,18 @@ page.
 
 | URL | File | Role |
 |-----|------|------|
-| `/p/<slug>` | `docs/p/<slug>.html` | One per position; holds the `JobPosting` markup that drives Google Jobs eligibility |
-| `/positions`, `/positions/<n>` | `docs/positions.html`, `docs/positions/<n>.html` | Paginated over the **whole** corpus (`POSITIONS_PER_PAGE`) |
-| `/area/<slug>`, `/country/<slug>` | `docs/area/*.html`, `docs/country/*.html` | Facet hubs — the actual ranking targets |
+| `/p/<slug>` | `docs/p/<slug>.html` | One per active or archived position. Archived/weak pages are `noindex, follow`; only complete active jobs hold `JobPosting`. |
+| `/positions`, `/positions/<n>` | `docs/positions.html`, `docs/positions/<n>.html` | Active positions only. Page one is indexable; later pages are `noindex, follow`. |
+| `/area/<slug>`, `/country/<slug>` | `docs/area/*.html`, `docs/country/*.html` | Active-only facet hubs — the primary evergreen ranking targets. |
+| `/sitemap.xml` | `docs/sitemap.xml` | Sitemap index pointing to the two child sitemaps. |
+| `/sitemaps/core.xml` | `docs/sitemaps/core.xml` | Homepage, `/positions`, legal/about, and active hubs; no deep pagination. |
+| `/sitemaps/jobs.xml` | `docs/sitemaps/jobs.xml` | SEO-eligible active job pages only. |
 
 Two invariants worth preserving:
 
-- **Every `/p/` page needs an internal link.** Sitemaps drive discovery; internal
-  links drive crawl priority. The paginated listing exists to guarantee this, and
+- **Every eligible `/p/` page needs an internal link.** Active listings and hubs
+  provide those links; archived pages intentionally drop out of navigation and
+  sitemaps while remaining available at their existing URL. The feed also
   `docs/app.js` `postHTML()` links each post's timestamp to its `/p/` permalink
   (`data-stop` keeps the flyout working). A previous redesign dropped that link
   and orphaned the corpus — `tests/test_seo_escaping.py` now guards it.
@@ -486,6 +526,21 @@ Two invariants worth preserving:
 
 Generated directories are pruned each run, so a shrinking corpus doesn't leave
 stale pages serving 200s.
+
+The generator fetches the full canonical corpus to keep archive URLs alive, then
+uses `src/seo.py` to derive active and eligible subsets. Active rows alone feed
+the homepage snapshot, `positions.json`, listings, and hub counts. Detail titles
+use the extracted role and employer; the primary CTA uses the verified
+application URL and Bluesky remains a secondary source. JSON-LD descriptions
+remain plain text identical to the visible source text.
+`validate_generation_ready()` aborts before any file writes while an active row
+still has a null `seo_enriched_at`; do not remove this rollout guard.
+
+SEO rollout order: apply `008_seo_job_metadata.sql`; run the enrichment benchmark;
+run the resumable active-row backfill; regenerate static output; deploy; delete
+and resubmit `sitemap.xml` in Search Console; then inspect the homepage,
+`/positions`, two hubs, and five eligible current job pages. Do not add the
+Indexing API until the structured-data cohort is clean.
 
 **`vercel.json`** - Static deploy config for Vercel (serves `docs/`). The site is canonical at **<https://phdsky.org/>** (Vercel from `main:/docs`). The legacy GitHub Pages URL redirects here from the `gh-pages` branch (its `docs/` contains only a meta-refresh + JS redirect to `phdsky.org`). `scripts/generate_seo_pages.py` defaults `BASE_URL` to `https://phdsky.org/`; override with `SITE_BASE_URL` env if you need a different host.
 

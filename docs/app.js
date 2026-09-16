@@ -87,6 +87,17 @@ function safeUrl(u) {
     catch { return null; }
 }
 
+function isActivePosition(position, now = new Date()) {
+    const rawDeadline = position && position.application_deadline;
+    if (typeof rawDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDeadline)) {
+        const deadline = new Date(`${rawDeadline}T23:59:59Z`);
+        if (!Number.isNaN(deadline.getTime())) return deadline >= now;
+    }
+    const created = new Date(position && position.created_at);
+    if (Number.isNaN(created.getTime())) return false;
+    return created >= new Date(now.getTime() - 90 * 86400000);
+}
+
 /* ───────────────────────── STATE ───────────────────────── */
 const state = {
     all: [],                 // all positions (canonical, verified)
@@ -126,7 +137,9 @@ async function fetchStaticSnapshot() {
         if (!r.ok) return null;
         const data = await r.json();
         if (!data || !Array.isArray(data.positions)) return null;
-        const positions = data.positions.map(p => ({ ...p, country: normalizeCountry(p.country) }));
+        const positions = data.positions
+            .map(p => ({ ...p, country: normalizeCountry(p.country) }))
+            .filter(isActivePosition);
         const dupMap = buildDuplicateMap(data.duplicates || []);
         return { positions, duplicates: dupMap, total: data.total || positions.length };
     } catch (e) { console.warn('snapshot fetch failed', e); return null; }
@@ -148,14 +161,16 @@ async function fetchSupabasePositions() {
     while (true) {
         const { data, error } = await supabaseClient
             .from('phd_positions')
-            .select('uri, created_at, disciplines, country, position_type, user_handle, message, url, indexed_at')
+            .select('uri, created_at, disciplines, country, position_type, user_handle, message, url, indexed_at, is_verified_job, job_title, hiring_organization, application_url, application_deadline, location_text')
             .eq('is_verified_job', true)
             .is('duplicate_of', null)
             .gte('indexed_at', '2026-01-27')
             .order('created_at', { ascending: false })
             .range(from, from + PAGE - 1);
         if (error) throw error;
-        all = all.concat(data.map(p => ({ ...p, country: normalizeCountry(p.country) })));
+        all = all.concat(
+            data.map(p => ({ ...p, country: normalizeCountry(p.country) })).filter(isActivePosition)
+        );
         if (data.length < PAGE) break;
         from += PAGE;
     }
@@ -199,7 +214,9 @@ function loadStaticData() {
     try {
         const data = JSON.parse(el.textContent);
         if (data && Array.isArray(data.positions) && data.positions.length > 0) {
-            const positions = data.positions.map(p => ({ ...p, country: normalizeCountry(p.country) }));
+            const positions = data.positions
+                .map(p => ({ ...p, country: normalizeCountry(p.country) }))
+                .filter(isActivePosition);
             return { positions, total: data.total || positions.length };
         }
     } catch (e) { console.warn('static parse failed', e); }
@@ -306,6 +323,7 @@ function postHTML(p) {
     const tOpen = state.threadOpen.has(p.uri);
     const profileUrl = `https://bsky.app/profile/${encodeURIComponent(handle)}`;
     const postUrl = safeUrl(p.url) || profileUrl;
+    const applicationUrl = safeUrl(p.application_url);
 
     // Timestamp doubles as the permalink to the static /p/<slug> page. This is
     // the feed's only internal link to that page, so crawlers can reach the
@@ -342,7 +360,8 @@ function postHTML(p) {
       <div class="p-body">${escapeHtml(bodyText)}${moreLink}</div>
       ${threadHTML}
       <div class="p-actions">
-        <a class="p-act" href="${escapeHtml(postUrl)}" target="_blank" rel="noopener" data-stop style="margin-left:auto;color:var(--primary)">view on Bluesky →</a>
+        ${applicationUrl ? `<a class="p-act" href="${escapeHtml(applicationUrl)}" target="_blank" rel="noopener nofollow" data-stop style="margin-left:auto;color:var(--primary);font-weight:600">apply →</a>` : ''}
+        <a class="p-act" href="${escapeHtml(postUrl)}" target="_blank" rel="noopener nofollow" data-stop style="${applicationUrl ? '' : 'margin-left:auto;'}color:var(--fg-subtle)">source</a>
       </div>
     </article>`;
 }
@@ -628,6 +647,7 @@ function openFlyout(uri) {
     const reposts = (state.duplicateMap[uri] || []);
     const profileUrl = `https://bsky.app/profile/${encodeURIComponent(handle)}`;
     const postUrl = safeUrl(p.url) || profileUrl;
+    const applicationUrl = safeUrl(p.application_url);
     const date = p.created_at ? new Date(p.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : '';
 
     $('#flyout-body').innerHTML = `
@@ -650,7 +670,8 @@ function openFlyout(uri) {
         }).join('')}
       </div>` : ''}
       <div style="display:flex;gap:8px;margin-top:6px">
-        <a class="btn-primary" href="${escapeHtml(postUrl)}" target="_blank" rel="noopener">View on Bluesky →</a>
+        ${applicationUrl ? `<a class="btn-primary" href="${escapeHtml(applicationUrl)}" target="_blank" rel="noopener nofollow">Apply on the official site →</a>` : ''}
+        <a class="btn-secondary" href="${escapeHtml(postUrl)}" target="_blank" rel="noopener nofollow">View source</a>
       </div>`;
     $('#flyout').classList.add('open');
     $('#backdrop').classList.add('open');
@@ -732,7 +753,7 @@ function renderAuthModal() {
     $('#auth-card').innerHTML = `
       <button class="modal-close" data-close="1">${ICON_CLOSE}</button>
       <div class="modal-head">
-        <div class="auth-mark"><span class="gt">&gt;</span> PhD_Positions</div>
+        <div class="auth-mark">PhD Sky</div>
         <div class="auth-sub">${signup
             ? 'Create a free account to subscribe to filters and follow accounts.'
             : 'Welcome back. Sign in to manage your subscriptions.'}</div>

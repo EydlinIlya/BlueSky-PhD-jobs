@@ -3,27 +3,34 @@
 Produces:
 - Embedded static JSON in docs/index.html (50 newest positions)
 - <noscript> fallback with 30 positions as semantic HTML
-- docs/positions.html + docs/positions/<n>.html - paginated listing of the FULL
-  corpus, CollectionPage/ItemList JSON-LD. Pagination is what gives every
-  per-job page an internal link; the sitemap alone leaves the tail orphaned.
+- docs/positions.html + docs/positions/<n>.html - active positions only;
+  pagination pages after page one are crawlable but noindex.
 - docs/area/<slug>.html, docs/country/<slug>.html - facet hubs. These are the
   real ranking targets ("Biology PhD positions in Germany" beats 214 separate
   38-word pages competing with each other).
-- docs/p/<slug>.html - per-job pages carrying the JobPosting markup that makes
-  the site eligible for Google Jobs
-- docs/sitemap.xml
+- docs/p/<slug>.html - active and archived pages; only complete active jobs get
+  JobPosting markup and index permission
+- docs/sitemap.xml plus docs/sitemaps/core.xml and jobs.xml
 """
 
 import json
 import os
 import re
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from dotenv import load_dotenv
 from supabase import create_client
+
+from src.seo import (
+    is_position_active,
+    is_seo_eligible,
+    lifecycle_state,
+    normalize_http_url,
+    parse_deadline,
+)
 
 load_dotenv()
 
@@ -46,19 +53,23 @@ EMPLOYMENT_TYPE_MAP = {
     "Research Assistant": "FULL_TIME",
 }
 
-JOB_VALID_DAYS = 90  # default expiry; academic posts rarely state one
-
-# /positions listing. Paginated so every per-job page gets an internal link
-# (the sitemap alone leaves the tail effectively orphaned).
+# /positions listing. The listing contains active positions only. Pagination
+# still provides internal discovery, but pages after page one are noindex.
 POSITIONS_PER_PAGE = 200
-# Facet hubs list only their most recent slice — they exist to rank and to pass
-# links, not to mirror the whole corpus (pagination already covers that).
+# Facet hubs list only their most recent active slice — they exist to rank and
+# pass links, not to mirror the full active listing.
 FACET_MAX_ITEMS = 200
 FACET_MIN_POSITIONS = 5  # below this a hub is thin content; skip it
 # Catch-all discipline labels that make meaningless landing pages — nobody
 # searches "General call PhD positions". They stay as tags, just not as hubs.
 FACET_EXCLUDE_DISCIPLINES = {"General call", "Other"}
 LISTING_PREVIEW_CHARS = 300
+
+POSITION_SELECT_FIELDS = (
+    "uri,created_at,disciplines,country,position_type,user_handle,message,url,"
+    "is_verified_job,job_title,hiring_organization,application_url,"
+    "application_deadline,location_text,seo_enriched_at"
+)
 
 
 COUNTRY_ISO = {
@@ -134,6 +145,9 @@ def build_job_posting(pos, canonical_url=None):
     Skipping is preferable to emitting partial markup — Google's rich-results
     validator marks the whole page down on a single broken JobPosting.
     """
+    if not is_seo_eligible(pos):
+        return None
+
     country = pos.get("country") or ""
     iso = COUNTRY_ISO.get(country)
     if not iso:
@@ -143,39 +157,28 @@ def build_job_posting(pos, canonical_url=None):
     if not created:
         return None
 
-    disciplines = pos.get("disciplines") or []
     types = pos.get("position_type") or []
-    if not disciplines or not types:
-        return None
+    employment_type = EMPLOYMENT_TYPE_MAP.get(types[0]) if types else None
 
-    title = f"{disciplines[0]} {types[0]}"
-    employment_type = EMPLOYMENT_TYPE_MAP.get(types[0])
-
-    handle = pos.get("user_handle") or ""
+    title = pos["job_title"].strip()
+    organization = pos["hiring_organization"].strip()
     description = pos.get("message") or ""
-    fallback_url = pos.get("url") or ""
-    listing_url = canonical_url or fallback_url
-
-    try:
-        dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
-        valid_through = (dt + timedelta(days=JOB_VALID_DAYS)).isoformat()
-    except ValueError:
-        return None
+    listing_url = canonical_url or pos.get("application_url") or ""
 
     jp = {
         "@context": "https://schema.org",
         "@type": "JobPosting",
         "title": title,
-        "description": escape_html(description),
+        # JSON-LD is serialized safely below; schema text must remain identical
+        # to the visible posting instead of being HTML-entity encoded.
+        "description": description,
         "datePosted": created,
-        "validThrough": valid_through,
         "employmentType": employment_type,
         "directApply": False,
         "url": listing_url,
         "hiringOrganization": {
             "@type": "Organization",
-            "name": handle or "Bluesky poster",
-            "sameAs": f"https://bsky.app/profile/{handle}" if handle else "",
+            "name": organization,
         },
         "jobLocation": {
             "@type": "Place",
@@ -185,10 +188,14 @@ def build_job_posting(pos, canonical_url=None):
             },
         },
     }
+    deadline = parse_deadline(pos.get("application_deadline"))
+    if deadline:
+        jp["validThrough"] = f"{deadline.isoformat()}T23:59:59Z"
+    location_text = (pos.get("location_text") or "").strip()
+    if location_text and location_text.lower() != country.lower():
+        jp["jobLocation"]["address"]["addressLocality"] = location_text
     if not employment_type:
         jp.pop("employmentType")
-    if not jp["hiringOrganization"]["sameAs"]:
-        jp["hiringOrganization"].pop("sameAs")
     if not listing_url:
         jp.pop("url")
     return jp
@@ -197,7 +204,7 @@ def build_job_posting(pos, canonical_url=None):
 def fetch_positions(client, limit=500):
     result = (
         client.table("phd_positions")
-        .select("uri, created_at, disciplines, country, position_type, user_handle, message, url")
+        .select(POSITION_SELECT_FIELDS)
         .eq("is_verified_job", True)
         .is_("duplicate_of", "null")
         .gte("indexed_at", "2026-01-27")
@@ -219,7 +226,7 @@ def fetch_all_canonical_positions(client, page_size=1000):
     while True:
         result = (
             client.table("phd_positions")
-            .select("uri, created_at, disciplines, country, position_type, user_handle, message, url")
+            .select(POSITION_SELECT_FIELDS)
             .eq("is_verified_job", True)
             .is_("duplicate_of", "null")
             .gte("indexed_at", "2026-01-27")
@@ -276,23 +283,24 @@ def generate_noscript_html(positions):
         date = pos.get("created_at", "")[:10]
         country = pos.get("country") or ""
         country_html = f" | {escape_html(country)}" if country and country != "Unknown" else ""
-        disciplines = pos.get("disciplines") or []
-        disc_html = ", ".join(escape_html(d) for d in disciplines)
-        types = pos.get("position_type") or []
-        type_html = ", ".join(escape_html(t) for t in types)
+        job_title = escape_html(pos.get("job_title") or "Academic research position")
+        employer = escape_html(pos.get("hiring_organization") or "")
         message = escape_html((pos.get("message") or "")[:300])
         handle = escape_html(pos.get("user_handle") or "")
-        url = pos.get("url") or ""
+        url = normalize_http_url(pos.get("url"))
 
-        heading = f"{disc_html} &mdash; {type_html}"
+        heading = job_title + (f" &mdash; {employer}" if employer else "")
         if slug:
             heading = f'<a href="/p/{slug}">{heading}</a>'
 
         cta_parts = []
         if slug:
             cta_parts.append(f'<a href="/p/{slug}">Read more</a>')
+        application_url = normalize_http_url(pos.get("application_url"))
+        if application_url:
+            cta_parts.append(f'<a href="{escape_html(application_url)}">Apply on the official site</a>')
         if url:
-            cta_parts.append(f'<a href="{escape_html(url)}">View on Bluesky</a>')
+            cta_parts.append(f'<a href="{escape_html(url)}">Source post</a>')
         cta_html = " | ".join(cta_parts)
 
         items.append(
@@ -313,7 +321,9 @@ def generate_noscript_html(positions):
     )
 
 
-def update_index_html(positions, total_count):
+def update_index_html(positions, total_count, now=None):
+    positions = [p for p in positions if is_position_active(p, now=now)]
+    total_count = len(positions) if total_count is None else total_count
     index_path = os.path.join(DOCS_DIR, "index.html")
     with open(index_path, "r", encoding="utf-8") as f:
         html = f.read()
@@ -329,6 +339,12 @@ def update_index_html(positions, total_count):
             "user_handle": pos.get("user_handle", ""),
             "message": pos.get("message", ""),
             "url": pos.get("url", ""),
+            "is_verified_job": pos.get("is_verified_job") is True,
+            "job_title": pos.get("job_title"),
+            "hiring_organization": pos.get("hiring_organization"),
+            "application_url": pos.get("application_url"),
+            "application_deadline": pos.get("application_deadline"),
+            "location_text": pos.get("location_text"),
         })
 
     static_data = json_for_script(
@@ -393,6 +409,8 @@ def _collection_schema(name, description, canonical, positions):
     """
     items = []
     for pos in positions:
+        if not is_seo_eligible(pos):
+            continue
         slug = extract_slug(pos.get("uri"))
         if not slug:
             continue
@@ -417,31 +435,32 @@ def _collection_schema(name, description, canonical, positions):
 
 
 _LISTING_CSS = """
-:root{--bg:#0f172a;--card:#1e293b;--bd:#334155;--fg:#e2e8f0;--mut:#94a3b8;--pri:#6366f1;--acc:#10b981}
+:root{--paper:#f3f5f2;--card:#fff;--ink:#18201d;--mut:#55625c;--rule:#c8d0cb;--green:#18594a;--blue:#315f78;--red:#b54632}
 *{box-sizing:border-box}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--fg);margin:0;padding:2rem 1rem;line-height:1.55}
+body{font-family:Atkinson Hyperlegible,system-ui,sans-serif;background:var(--paper);color:var(--ink);margin:0;padding:2rem 1rem;line-height:1.6}
 .container{max-width:820px;margin:0 auto}
-h1{font-size:1.6rem;margin:0 0 .4rem}
-.subtitle{color:var(--mut);font-size:.9rem;margin:0 0 1.5rem}
-a{color:var(--pri)}a:hover{color:var(--acc)}
+h1,h2,h3{font-family:Literata,Georgia,serif}h1{font-size:1.75rem;margin:0 0 .4rem;line-height:1.25}
+.subtitle{color:var(--mut);font-size:.95rem;margin:0 0 1.5rem}
+a{color:var(--green);text-underline-offset:3px}a:hover{color:var(--red)}
 .back-link{display:inline-block;margin-bottom:1.25rem;font-size:.9rem}
-.facets{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.5rem}
+.facets{background:var(--card);border:1px solid var(--rule);padding:1rem 1.25rem;margin-bottom:1.5rem}
 .facets h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:0 0 .5rem}
 .facets ul{list-style:none;margin:0 0 1rem;padding:0;display:flex;flex-wrap:wrap;gap:.35rem .8rem}
 .facets ul:last-child{margin-bottom:0}
 .facets li{font-size:.85rem}
-article{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:1.25rem;margin-bottom:1rem}
+article{background:var(--card);border-top:3px solid var(--green);border-right:1px solid var(--rule);border-bottom:1px solid var(--rule);border-left:1px solid var(--rule);padding:1.25rem;margin-bottom:1rem}
 article h3{font-size:1rem;margin:0 0 .4rem}
-article h3 a{color:var(--fg);text-decoration:none}
-article h3 a:hover{color:var(--pri)}
+article h3 a{color:var(--ink);text-decoration:none}
+article h3 a:hover{color:var(--green)}
 .meta{font-size:.82rem;color:var(--mut);margin:0 0 .6rem}
 .msg{font-size:.94rem;margin:0 0 .6rem;white-space:pre-wrap}
 .cta{font-size:.85rem;margin:0}
 nav.pager{margin:2rem 0 1rem;font-size:.9rem}
 nav.pager .rel{display:flex;justify-content:space-between;gap:1rem;margin-bottom:.75rem}
 nav.pager .nums{display:flex;flex-wrap:wrap;gap:.3rem .6rem;color:var(--mut);font-size:.85rem}
-nav.pager .nums .cur{color:var(--fg);font-weight:600}
-footer{margin-top:2rem;padding-top:1.25rem;border-top:1px solid var(--bd);font-size:.85rem;color:var(--mut)}
+nav.pager .nums .cur{color:var(--ink);font-weight:600}
+footer{margin-top:2rem;padding-top:1.25rem;border-top:1px solid var(--rule);font-size:.85rem;color:var(--mut)}
+:focus-visible{outline:3px solid var(--red);outline-offset:3px}
 """
 
 
@@ -451,23 +470,30 @@ def _position_article(pos):
     date = (pos.get("created_at") or "")[:10]
     country = pos.get("country") or ""
     country_html = f" &middot; {escape_html(country)}" if country and country != "Unknown" else ""
-    disc_html = ", ".join(escape_html(d) for d in (pos.get("disciplines") or []))
-    type_html = ", ".join(escape_html(t) for t in (pos.get("position_type") or []))
+    title = pos.get("job_title") or "Academic research position"
+    organization = pos.get("hiring_organization") or ""
     full_message = pos.get("message") or ""
     preview = full_message[:LISTING_PREVIEW_CHARS] + (
         "..." if len(full_message) > LISTING_PREVIEW_CHARS else "")
     message = escape_html(preview)
     handle = escape_html(pos.get("user_handle") or "")
-    url = pos.get("url") or ""
+    url = normalize_http_url(pos.get("url"))
 
-    heading_inner = f"{disc_html} &mdash; {type_html}" if disc_html or type_html else "Position"
+    heading_inner = escape_html(title)
+    if organization:
+        heading_inner += f" &mdash; {escape_html(organization)}"
     heading = f'<a href="/p/{slug}">{heading_inner}</a>' if slug else heading_inner
 
     cta = []
     if slug:
         cta.append(f'<a href="/p/{slug}">Read full posting &rarr;</a>')
+    application_url = normalize_http_url(pos.get("application_url"))
+    if application_url:
+        cta.append(
+            f'<a href="{escape_html(application_url)}" rel="nofollow">Apply on the official site</a>'
+        )
     if url:
-        cta.append(f'<a href="{escape_html(url)}" rel="nofollow">View on Bluesky</a>')
+        cta.append(f'<a href="{escape_html(url)}" rel="nofollow">Source post</a>')
 
     return (
         "<article>\n"
@@ -643,13 +669,9 @@ def generate_facet_pages(disc_facets, country_facets, facet_nav):
     return urls
 
 
-def generate_positions_html(positions):
-    """Paginated /positions covering the WHOLE corpus.
-
-    The old version listed only the newest 500, which left the rest of the
-    per-job pages reachable from the sitemap alone. Sitemaps drive discovery;
-    internal links drive crawl priority, so the tail was effectively orphaned.
-    """
+def generate_positions_html(positions, now=None):
+    """Paginated /positions covering every active position."""
+    positions = [p for p in positions if is_position_active(p, now=now)]
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     total = len(positions)
     pages = max(1, (total + POSITIONS_PER_PAGE - 1) // POSITIONS_PER_PAGE)
@@ -673,8 +695,8 @@ def generate_positions_html(positions):
         suffix = "" if n == 1 else f" &middot; page {n} of {pages}"
         title = ("All PhD & Postdoc Positions | PhD Sky" if n == 1
                  else f"All PhD & Postdoc Positions — page {n} of {pages} | PhD Sky")
-        desc = (f"Complete listing of {total} PhD, postdoc and research positions "
-                f"aggregated from Bluesky. Updated daily.")
+        desc = (f"Current listing of {total} active PhD, postdoc and research positions "
+                f"from academic sources. Updated daily.")
 
         nums = " ".join(
             f'<span class="cur">{i}</span>' if i == n else f'<a href="{page_href(i)}">{i}</a>'
@@ -695,6 +717,7 @@ def generate_positions_html(positions):
             pager=pager,
             prev_url=page_url(n - 1) if n > 1 else None,
             next_url=page_url(n + 1) if n < pages else None,
+            robots="index, follow" if n == 1 else "noindex, follow",
         )
         if n == 1:
             _write_page("positions.html", html)
@@ -709,30 +732,35 @@ def generate_positions_html(positions):
     return urls + facet_urls
 
 
-def render_position_page(pos, slug):
-    """Render the standalone HTML page for a single position. Used by Google
-    Jobs as the canonical landing URL — must surface the title, message, and
-    a clear CTA back to the original Bluesky post.
-    """
+def render_position_page(pos, slug, now=None):
+    """Render one usable detail page with truthful indexing and schema state."""
     canonical = f"{BASE_URL}p/{slug}"
+    state = lifecycle_state(pos, now=now)
+    eligible = state == "eligible"
 
     disciplines = pos.get("disciplines") or []
     types = pos.get("position_type") or []
     country = pos.get("country") or ""
     handle = pos.get("user_handle") or ""
     full_message = pos.get("message") or ""
-    bsky_url = pos.get("url") or ""
+    source_url = normalize_http_url(pos.get("url"))
+    application_url = normalize_http_url(pos.get("application_url"))
     date = (pos.get("created_at") or "")[:10]
 
-    disc_primary = disciplines[0] if disciplines else "Academic"
-    type_primary = types[0] if types else "Position"
-    country_part = f" — {country}" if country and country != "Unknown" else ""
-    title = f"{disc_primary} {type_primary}{country_part}"
+    fallback_title = " ".join([*(disciplines[:1] or ["Academic"]), *(types[:1] or ["position"])])
+    job_title = (pos.get("job_title") or fallback_title).strip()
+    employer = (pos.get("hiring_organization") or "").strip()
+    location = (pos.get("location_text") or "").strip()
+    page_title = f"{job_title} — {employer}" if employer else job_title
+    with_location = f"{page_title} — {location}" if location else page_title
+    if location and len(with_location) <= 65:
+        page_title = with_location
 
     desc_source = " ".join(full_message.split())
     desc = desc_source[:155] + ("..." if len(desc_source) > 155 else "")
+    robots = "index, follow" if eligible else "noindex, follow"
 
-    jp = build_job_posting(pos, canonical_url=canonical)
+    jp = build_job_posting(pos, canonical_url=canonical) if eligible else None
     jp_script = ""
     if jp:
         jp_script = (
@@ -741,24 +769,48 @@ def render_position_page(pos, slug):
             + "</script>"
         )
 
-    tag_html = []
-    for d in disciplines:
-        tag_html.append(f'<span class="tag tag-disc">{escape_html(d)}</span>')
-    for t in types:
-        tag_html.append(f'<span class="tag tag-pos">{escape_html(t)}</span>')
+    tag_html = [f'<span class="tag">{escape_html(tag)}</span>' for tag in [*disciplines, *types]]
     if country and country != "Unknown":
-        tag_html.append(f'<span class="tag tag-country">{escape_html(country)}</span>')
+        tag_html.append(f'<span class="tag">{escape_html(country)}</span>')
 
     handle_link = (
         f'<a href="https://bsky.app/profile/{escape_html(handle)}">@{escape_html(handle)}</a>'
         if handle else ""
     )
 
-    cta = ""
-    if bsky_url:
-        cta = (
-            f'<a class="cta" href="{escape_html(bsky_url)}" '
-            f'target="_blank" rel="noopener">View original post on Bluesky &rarr;</a>'
+    notice = ""
+    if state == "archived":
+        notice = (
+            '<div class="notice expired"><strong>This position is archived.</strong> '
+            "Its stated deadline has passed or the source post is more than 90 days old. "
+            "The page remains available as a reference.</div>"
+        )
+    elif state == "weak":
+        notice = (
+            '<div class="notice"><strong>Application details are incomplete.</strong> '
+            "Check the source carefully before applying; this page is not included in search indexing.</div>"
+        )
+
+    deadline = parse_deadline(pos.get("application_deadline"))
+    details = []
+    if employer:
+        details.append(f"Hiring organization: {escape_html(employer)}")
+    if location:
+        details.append(f"Location: {escape_html(location)}")
+    if deadline:
+        details.append(f"Application deadline: {deadline.isoformat()}")
+    details_html = "".join(f"<li>{item}</li>" for item in details)
+
+    actions = []
+    if state != "archived" and application_url:
+        actions.append(
+            f'<a class="cta primary" href="{escape_html(application_url)}" '
+            'target="_blank" rel="noopener nofollow">Apply on the official site &rarr;</a>'
+        )
+    if source_url:
+        actions.append(
+            f'<a class="cta secondary" href="{escape_html(source_url)}" '
+            'target="_blank" rel="noopener nofollow">View source post</a>'
         )
 
     return f"""<!DOCTYPE html>
@@ -767,98 +819,84 @@ def render_position_page(pos, slug):
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<!-- Vercel Web Analytics -->
-<script>
-  window.va = window.va || function () {{ (window.vaq = window.vaq || []).push(arguments); }};
-</script>
-<script defer src="/_vercel/insights/script.js"></script>
-
-<title>{escape_html(title)} | PhD Sky</title>
+<title>{escape_html(page_title)} | PhD Sky</title>
 <meta name="description" content="{escape_html(desc)}">
-<meta name="robots" content="index, follow">
+<meta name="robots" content="{robots}">
 <link rel="canonical" href="{canonical}">
-<meta property="og:title" content="{escape_html(title)}">
+<meta property="og:title" content="{escape_html(page_title)}">
 <meta property="og:description" content="{escape_html(desc)}">
 <meta property="og:type" content="article">
 <meta property="og:url" content="{canonical}">
 <meta property="og:site_name" content="PhD Sky">
 <meta property="og:image" content="{BASE_URL}assets/og-image.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="{escape_html(title)}">
+<meta name="twitter:title" content="{escape_html(page_title)}">
 <meta name="twitter:description" content="{escape_html(desc)}">
 <meta name="twitter:image" content="{BASE_URL}assets/og-image.png">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-<link rel="stylesheet" href="/design-tokens.css">
 {jp_script}
 <style>
-  body {{ margin: 0; padding: 0; }}
-  .page {{ max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }}
-  .crumb {{ font-size: 13px; margin-bottom: 24px; font-family: var(--font-mono); }}
-  .crumb a {{ color: var(--primary); text-decoration: none; }}
-  .crumb a:hover {{ color: var(--accent); }}
-  h1 {{ font-family: var(--font-mono); font-size: 28px; font-weight: 700;
-        letter-spacing: -0.02em; line-height: 1.25; margin: 0 0 12px; color: var(--fg); }}
-  .meta {{ color: var(--fg-subtle); font-family: var(--font-mono);
-           font-size: 13px; margin: 0 0 16px; }}
-  .meta a {{ color: var(--primary); }}
-  .tags {{ display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; }}
-  .tag {{ display: inline-block; padding: 3px 10px; border-radius: 4px;
-          font-size: 12px; font-weight: 500; line-height: 1.5; color: white; }}
-  .tag-pos {{ background: var(--pos-type-bg); }}
-  .tag-country {{ background: var(--country-bg); }}
-  .tag-disc {{ background: var(--bg-elevated); color: var(--fg-muted);
-               border: 1px solid var(--border); }}
-  .message {{ white-space: pre-wrap; line-height: 1.65; font-size: 15px;
-              background: var(--bg-card); border: 1px solid var(--border);
-              border-radius: var(--r-lg); padding: 20px; margin: 0 0 24px;
-              word-wrap: break-word; overflow-wrap: anywhere; }}
-  .cta {{ display: inline-flex; align-items: center; gap: 8px;
-          padding: 12px 20px; background: var(--primary); color: white;
-          text-decoration: none; border-radius: var(--r-md); font-weight: 600;
-          font-size: 14px; transition: background var(--t-base); }}
-  .cta:hover {{ background: var(--primary-hover); color: white; }}
-  footer {{ margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border);
-            font-size: 13px; color: var(--fg-subtle); font-family: var(--font-mono); }}
-  footer a {{ color: var(--primary); }}
+  :root {{ --paper:#f3f5f2;--surface:#fff;--ink:#18201d;--muted:#55625c;--rule:#c8d0cb;--green:#18594a;--blue:#315f78;--red:#b54632; }}
+  * {{ box-sizing:border-box; }}
+  body {{ margin:0;background:var(--paper);color:var(--ink);font-family:Atkinson Hyperlegible,system-ui,sans-serif;line-height:1.65; }}
+  .page {{ max-width:760px;margin:0 auto;padding:36px 18px 72px; }}
+  .crumb {{ font-size:14px;margin-bottom:28px; }} .crumb a {{ color:var(--green); }}
+  h1 {{ font-family:Literata,Georgia,serif;font-size:clamp(28px,5vw,42px);line-height:1.16;margin:0 0 12px; }}
+  .citation {{ color:var(--muted);font-size:14px;margin:0 0 20px;padding-bottom:16px;border-bottom:3px solid var(--green); }}
+  .citation a {{ color:var(--blue); }}
+  .notice {{ background:var(--surface);border-left:4px solid var(--blue);padding:14px 16px;margin:20px 0; }}
+  .notice.expired {{ border-left-color:var(--red); }}
+  .facts {{ margin:18px 0;padding-left:22px;color:var(--muted); }}
+  .tags {{ display:flex;flex-wrap:wrap;gap:6px;margin:18px 0 24px; }}
+  .tag {{ border:1px solid var(--rule);background:var(--surface);padding:3px 8px;font-size:12px; }}
+  .message {{ white-space:pre-wrap;background:var(--surface);border:1px solid var(--rule);padding:22px;margin:0 0 24px;overflow-wrap:anywhere; }}
+  .actions {{ display:flex;flex-wrap:wrap;gap:10px; }}
+  .cta {{ display:inline-flex;min-height:44px;align-items:center;padding:10px 16px;font-weight:700;text-decoration:none;border:2px solid var(--green); }}
+  .cta.primary {{ background:var(--green);color:white; }} .cta.secondary {{ color:var(--green);background:transparent; }}
+  .cta:hover {{ border-color:var(--red); }} :focus-visible {{ outline:3px solid var(--red);outline-offset:3px; }}
+  footer {{ margin-top:48px;padding-top:20px;border-top:1px solid var(--rule);font-size:14px;color:var(--muted); }}
+  footer a {{ color:var(--green); }}
 </style>
 </head>
 <body>
-<div class="page">
-  <nav class="crumb"><a href="/">&larr; All positions</a></nav>
-  <h1>{escape_html(title)}</h1>
-  <p class="meta">Posted {date}{f" by {handle_link}" if handle_link else ""}</p>
+<main class="page">
+  <nav class="crumb" aria-label="Breadcrumb"><a href="/positions">&larr; Current positions</a></nav>
+  <h1>{escape_html(job_title)}</h1>
+  <p class="citation">Posted {date}{f" by {handle_link}" if handle_link else ""}</p>
+  {notice}
+  {f'<ul class="facts">{details_html}</ul>' if details_html else ''}
   <div class="tags">{"".join(tag_html)}</div>
   <div class="message">{escape_html(full_message)}</div>
-  {cta}
-  <footer>
-    <a href="/">Browse all PhD &amp; Postdoc positions</a>
-  </footer>
-</div>
+  <div class="actions">{"".join(actions)}</div>
+  <footer><a href="/">PhD Sky</a> &middot; <a href="/positions">Browse current positions</a></footer>
+</main>
 </body>
 </html>
 """
 
 
-def generate_position_pages(positions):
+def generate_position_pages(positions, now=None):
     """Write `docs/p/<slug>.html` for every canonical position; remove orphans."""
     pages_dir = os.path.join(DOCS_DIR, "p")
     os.makedirs(pages_dir, exist_ok=True)
 
-    # slug -> created_at[:10], used by sitemap to set per-page lastmod so
-    # Google doesn't recrawl 5k unchanged pages every cron run.
-    slug_to_lastmod = {}
+    all_slugs = set()
+    eligible_slug_to_lastmod = {}
     written = 0
 
     for pos in positions:
         slug = extract_slug(pos.get("uri"))
         if not slug:
             continue
-        if slug in slug_to_lastmod:
+        if slug in all_slugs:
             continue
-        slug_to_lastmod[slug] = (pos.get("created_at") or "")[:10]
+        all_slugs.add(slug)
+        if is_seo_eligible(pos, now=now):
+            content_date = pos.get("seo_enriched_at") or pos.get("created_at") or ""
+            eligible_slug_to_lastmod[slug] = content_date[:10]
 
         path = os.path.join(pages_dir, f"{slug}.html")
-        html = render_position_page(pos, slug)
+        html = render_position_page(pos, slug, now=now)
         with open(path, "w", encoding="utf-8") as f:
             f.write(html)
         written += 1
@@ -867,67 +905,91 @@ def generate_position_pages(positions):
     for filename in os.listdir(pages_dir):
         if not filename.endswith(".html"):
             continue
-        if filename[:-5] not in slug_to_lastmod:
+        if filename[:-5] not in all_slugs:
             os.remove(os.path.join(pages_dir, filename))
             removed += 1
 
     print(f"Generated per-job pages: {written} written, {removed} orphans cleaned")
-    return slug_to_lastmod
+    return eligible_slug_to_lastmod
 
 
 def generate_sitemap(slug_to_lastmod=None, listing_urls=None):
-    """Sitemap: static pages + paginated /positions + facet hubs + per-job pages.
-
-    `listing_urls` are the listing/hub URLs returned by generate_positions_html.
-    Page 1 of /positions is emitted from the static block, so it is filtered out
-    of `listing_urls` to avoid a duplicate <loc>.
-    """
+    """Write a sitemap index plus separate core and eligible-job URL sets."""
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    parts = [
+    def static_lastmod(filename):
+        path = os.path.join(DOCS_DIR, filename)
+        if not os.path.exists(path):
+            return today
+        return datetime.fromtimestamp(os.path.getmtime(path), timezone.utc).strftime("%Y-%m-%d")
+
+    core_parts = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
         f"  <url><loc>{BASE_URL}</loc><lastmod>{today}</lastmod>"
         f"<changefreq>daily</changefreq><priority>1.0</priority></url>",
         f"  <url><loc>{BASE_URL}positions</loc><lastmod>{today}</lastmod>"
         f"<changefreq>daily</changefreq><priority>0.8</priority></url>",
-        f"  <url><loc>{BASE_URL}about</loc><lastmod>{today}</lastmod>"
+        f"  <url><loc>{BASE_URL}about</loc><lastmod>{static_lastmod('about.html')}</lastmod>"
         f"<changefreq>monthly</changefreq><priority>0.4</priority></url>",
-        f"  <url><loc>{BASE_URL}privacy</loc><lastmod>{today}</lastmod>"
+        f"  <url><loc>{BASE_URL}privacy</loc><lastmod>{static_lastmod('privacy.html')}</lastmod>"
+        f"<changefreq>yearly</changefreq><priority>0.3</priority></url>",
+        f"  <url><loc>{BASE_URL}terms</loc><lastmod>{static_lastmod('terms.html')}</lastmod>"
         f"<changefreq>yearly</changefreq><priority>0.3</priority></url>",
     ]
 
-    listing = [u for u in (listing_urls or []) if u != f"{BASE_URL}positions"]
+    # Only durable area/country hubs belong in the core sitemap. Pagination
+    # remains crawlable through links but is intentionally noindex and omitted.
+    listing = [
+        u for u in (listing_urls or [])
+        if "/area/" in u or "/country/" in u
+    ]
     for url in listing:
-        # Facet hubs outrank paginated pages: they're the real ranking targets.
-        priority = "0.7" if ("/area/" in url or "/country/" in url) else "0.5"
-        parts.append(
+        core_parts.append(
             f"  <url><loc>{url}</loc><lastmod>{today}</lastmod>"
-            f"<changefreq>daily</changefreq><priority>{priority}</priority></url>"
+            f"<changefreq>daily</changefreq><priority>0.7</priority></url>"
         )
+    core_parts.append("</urlset>")
 
+    job_parts = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ]
     for slug in sorted(slug_to_lastmod or {}):
         lastmod = (slug_to_lastmod or {}).get(slug) or today
-        parts.append(
+        job_parts.append(
             f"  <url><loc>{BASE_URL}p/{slug}</loc><lastmod>{lastmod}</lastmod>"
             f"<changefreq>weekly</changefreq><priority>0.6</priority></url>"
         )
-    parts.append("</urlset>")
-    xml = "\n".join(parts)
+    job_parts.append("</urlset>")
 
-    path = os.path.join(DOCS_DIR, "sitemap.xml")
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(xml)
+    sitemap_dir = os.path.join(DOCS_DIR, "sitemaps")
+    os.makedirs(sitemap_dir, exist_ok=True)
+    with open(os.path.join(sitemap_dir, "core.xml"), "w", encoding="utf-8") as f:
+        f.write("\n".join(core_parts))
+    with open(os.path.join(sitemap_dir, "jobs.xml"), "w", encoding="utf-8") as f:
+        f.write("\n".join(job_parts))
+
+    sitemap_index = "\n".join([
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        f"  <sitemap><loc>{BASE_URL}sitemaps/core.xml</loc><lastmod>{today}</lastmod></sitemap>",
+        f"  <sitemap><loc>{BASE_URL}sitemaps/jobs.xml</loc><lastmod>{today}</lastmod></sitemap>",
+        "</sitemapindex>",
+    ])
+    with open(os.path.join(DOCS_DIR, "sitemap.xml"), "w", encoding="utf-8") as f:
+        f.write(sitemap_index)
     extra = len(slug_to_lastmod or {})
-    print(f"Generated sitemap.xml: 4 static + {len(listing)} listing/hub + {extra} per-job URLs")
+    print(f"Generated sitemap index: 5 core + {len(listing)} hubs + {extra} eligible jobs")
 
 
-def generate_positions_json(positions, duplicates):
+def generate_positions_json(positions, duplicates, now=None):
     """Write docs/positions.json — the static snapshot served from the CDN.
 
     Replaces the live Supabase query in docs/app.js. Schema matches what
     fetchSupabasePositions + fetchDuplicates produced, minus indexed_at
     (filtering already happened at generation time).
     """
+    positions = [p for p in positions if is_position_active(p, now=now)]
     pos_payload = [
         {
             "uri": pos.get("uri", ""),
@@ -938,6 +1000,12 @@ def generate_positions_json(positions, duplicates):
             "user_handle": pos.get("user_handle", ""),
             "message": pos.get("message", ""),
             "url": pos.get("url", ""),
+            "is_verified_job": pos.get("is_verified_job") is True,
+            "job_title": pos.get("job_title"),
+            "hiring_organization": pos.get("hiring_organization"),
+            "application_url": pos.get("application_url"),
+            "application_deadline": pos.get("application_deadline"),
+            "location_text": pos.get("location_text"),
         }
         for pos in positions
     ]
@@ -966,30 +1034,41 @@ def generate_positions_json(positions, duplicates):
     print(f"Generated positions.json: {len(pos_payload)} positions, {len(dup_payload)} duplicates, {size_kb:.0f}KB")
 
 
+def validate_generation_ready(active_positions):
+    """Refuse a partial rollout that would publish an incomplete jobs sitemap."""
+    unenriched = [p for p in active_positions if not p.get("seo_enriched_at")]
+    if unenriched:
+        raise RuntimeError(
+            f"Refusing SEO generation: {len(unenriched)} active positions have not "
+            "completed SEO enrichment. Apply migration 008 and finish "
+            "scripts/backfill_seo_metadata.py first."
+        )
+
+
 def main():
     client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-    print("Fetching positions from Supabase...")
-    positions = fetch_positions(client, limit=500)
-    total_count = get_total_count(client)
-    print(f"Fetched {len(positions)} positions for SEO (total canonical: {total_count})")
-
-    if not positions:
-        print("No positions found, skipping SEO generation")
-        return
-
-    print("Fetching full snapshot for static frontend data...")
+    print("Fetching canonical positions from Supabase...")
     all_positions = fetch_all_canonical_positions(client)
     all_duplicates = fetch_all_duplicates(client)
-    print(f"Snapshot: {len(all_positions)} canonical, {len(all_duplicates)} duplicates")
+    now = datetime.now(timezone.utc)
+    active_positions = [p for p in all_positions if is_position_active(p, now=now)]
+    validate_generation_ready(active_positions)
+    eligible_count = sum(is_seo_eligible(p, now=now) for p in active_positions)
+    active_uris = {p.get("uri") for p in active_positions}
+    active_duplicates = [
+        row for row in all_duplicates if row.get("duplicate_of") in active_uris
+    ]
+    print(
+        f"Snapshot: {len(all_positions)} canonical; {len(active_positions)} active; "
+        f"{eligible_count} SEO-eligible"
+    )
 
-    update_index_html(positions, total_count)
-    # The listing runs over the FULL corpus, not the newest 500 — pagination is
-    # what gives every per-job page an internal link.
-    listing_urls = generate_positions_html(all_positions)
-    slug_to_lastmod = generate_position_pages(all_positions)
-    generate_sitemap(slug_to_lastmod, listing_urls)
-    generate_positions_json(all_positions, all_duplicates)
+    update_index_html(active_positions[:500], len(active_positions), now=now)
+    listing_urls = generate_positions_html(active_positions, now=now)
+    eligible_slug_to_lastmod = generate_position_pages(all_positions, now=now)
+    generate_sitemap(eligible_slug_to_lastmod, listing_urls)
+    generate_positions_json(active_positions, active_duplicates, now=now)
 
     print("SEO generation complete!")
 

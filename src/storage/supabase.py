@@ -74,6 +74,16 @@ class SupabaseStorage(StorageBackend):
                 record["position_type"] = post["position_type"]
             if "duplicate_of" in post:
                 record["duplicate_of"] = post["duplicate_of"]
+            for field in (
+                "job_title",
+                "hiring_organization",
+                "application_url",
+                "application_deadline",
+                "location_text",
+                "seo_enriched_at",
+            ):
+                if field in post:
+                    record[field] = post[field]
 
             records.append(record)
 
@@ -261,6 +271,12 @@ class SupabaseStorage(StorageBackend):
                 "disciplines": post.get("disciplines"),
                 "country": post.get("country"),
                 "position_type": post.get("position_type"),
+                "job_title": post.get("job_title"),
+                "hiring_organization": post.get("hiring_organization"),
+                "application_url": post.get("application_url"),
+                "application_deadline": post.get("application_deadline"),
+                "location_text": post.get("location_text"),
+                "seo_enriched_at": post.get("seo_enriched_at"),
             }
             records.append(record)
         self.client.table("phd_positions_staging").upsert(
@@ -299,6 +315,12 @@ class SupabaseStorage(StorageBackend):
             "disciplines": result.get("disciplines"),
             "country": result.get("country"),
             "position_type": result.get("position_type"),
+            "job_title": result.get("job_title"),
+            "hiring_organization": result.get("hiring_organization"),
+            "application_url": result.get("application_url"),
+            "application_deadline": result.get("application_deadline"),
+            "location_text": result.get("location_text"),
+            "seo_enriched_at": result.get("seo_enriched_at"),
             "filter_completed": True,
         }
         self.client.table("phd_positions_staging").update(update_data).eq(

@@ -68,6 +68,12 @@ def _position(message):
         "user_handle": "attacker.bsky.social",
         "message": message,
         "url": "https://bsky.app/profile/attacker.bsky.social/post/3testslug000",
+        "is_verified_job": True,
+        "job_title": "Postdoctoral Fellow in Molecular Biology",
+        "hiring_organization": "Example University",
+        "application_url": "https://jobs.example.edu/postings/3testslug000",
+        "application_deadline": "2026-12-31",
+        "location_text": "Dublin, Ireland",
     }
 
 
@@ -117,10 +123,12 @@ def test_index_html_does_not_let_post_text_become_markup(tmp_path, monkeypatch):
 
 def test_job_posting_ld_json_is_script_safe():
     """The per-job page's JobPosting block is built from the same post text."""
-    page = gsp.render_position_page(_position(f"Postdoc role {BREAKOUT}"), "3testslug000")
+    message = f"Postdoc role {BREAKOUT} " + "Detailed research responsibilities. " * 5
+    page = gsp.render_position_page(_position(message), "3testslug000")
     collector = _TagCollector()
     collector.feed(page)
     assert collector.injected == []
+    assert '"@type":"JobPosting"' in page
 
 
 # ── /positions listing: pagination, facets, internal linking ────────────────
@@ -138,6 +146,12 @@ def _corpus(n=45):
             "user_handle": "lab.bsky.social",
             "message": f"Position number {i}. " + "detail " * 30,
             "url": f"https://bsky.app/profile/lab.bsky.social/post/3slug{i:05d}",
+            "is_verified_job": True,
+            "job_title": f"Doctoral Researcher in Test Topic {i}",
+            "hiring_organization": "Example University",
+            "application_url": f"https://jobs.example.edu/postings/{i}",
+            "application_deadline": "2026-12-31",
+            "location_text": "Berlin, Germany" if i % 3 else "Boston, USA",
         })
     return rows
 
@@ -180,6 +194,7 @@ def test_pagination_covers_corpus_with_prev_next(generated):
     last = (root / "positions" / "3.html").read_text(encoding="utf-8")
     assert 'rel="prev"' in last and 'rel="next"' not in last
     assert 'rel="canonical" href="https://phdsky.org/positions/3"' in last
+    assert '<meta name="robots" content="noindex, follow">' in last
 
 
 def test_listing_uses_collectionpage_not_dataset(generated):
@@ -234,15 +249,114 @@ def test_stale_pages_are_cleaned_up(tmp_path, monkeypatch):
     assert not (tmp_path / "positions" / "3.html").exists()
 
 
-def test_sitemap_lists_hubs_without_duplicating_page_one(tmp_path, monkeypatch):
+def test_sitemap_index_splits_core_and_eligible_jobs(tmp_path, monkeypatch):
     monkeypatch.setattr(gsp, "DOCS_DIR", str(tmp_path))
     monkeypatch.setattr(gsp, "POSITIONS_PER_PAGE", 20)
     urls = gsp.generate_positions_html(_corpus())
     gsp.generate_sitemap({"3slug00000": "2026-08-01"}, urls)
 
-    xml = (tmp_path / "sitemap.xml").read_text(encoding="utf-8")
-    locs = re.findall(r"<loc>(.*?)</loc>", xml)
-    assert len(locs) == len(set(locs)), "duplicate <loc> entries in sitemap"
-    assert "https://phdsky.org/positions" in locs
-    assert "https://phdsky.org/positions/2" in locs
-    assert any("/area/" in u for u in locs) and any("/country/" in u for u in locs)
+    index_xml = (tmp_path / "sitemap.xml").read_text(encoding="utf-8")
+    assert "<sitemapindex" in index_xml
+    assert "https://phdsky.org/sitemaps/core.xml" in index_xml
+    assert "https://phdsky.org/sitemaps/jobs.xml" in index_xml
+
+    core_xml = (tmp_path / "sitemaps" / "core.xml").read_text(encoding="utf-8")
+    core_locs = re.findall(r"<loc>(.*?)</loc>", core_xml)
+    assert len(core_locs) == len(set(core_locs))
+    assert "https://phdsky.org/positions" in core_locs
+    assert "https://phdsky.org/positions/2" not in core_locs
+    assert any("/area/" in u for u in core_locs)
+    assert any("/country/" in u for u in core_locs)
+
+    jobs_xml = (tmp_path / "sitemaps" / "jobs.xml").read_text(encoding="utf-8")
+    assert re.findall(r"<loc>(.*?)</loc>", jobs_xml) == [
+        "https://phdsky.org/p/3slug00000"
+    ]
+
+
+def test_archived_and_weak_pages_are_noindex_without_jobposting():
+    archived = _position("Detailed position description. " * 8)
+    archived["application_deadline"] = "2026-08-01"
+    archived_page = gsp.render_position_page(archived, "archived")
+    assert '<meta name="robots" content="noindex, follow">' in archived_page
+    assert "This position is archived" in archived_page
+    assert '"@type":"JobPosting"' not in archived_page
+
+    weak = _position("Detailed position description. " * 8)
+    weak["hiring_organization"] = None
+    weak_page = gsp.render_position_page(weak, "weak")
+    assert '<meta name="robots" content="noindex, follow">' in weak_page
+    assert "Application details are incomplete" in weak_page
+    assert '"@type":"JobPosting"' not in weak_page
+
+
+def test_eligible_page_has_truthful_schema_and_application_cta():
+    message = "Visible & exact <research> description. " * 5
+    pos = _position(message)
+    page = gsp.render_position_page(pos, "eligible")
+    assert '<meta name="robots" content="index, follow">' in page
+    assert '<link rel="canonical" href="https://phdsky.org/p/eligible">' in page
+    assert "Apply on the official site" in page
+    blocks = re.findall(r'<script type="application/ld\+json">(.*?)</script>', page, re.S)
+    schema = json.loads(blocks[0])
+    assert schema["title"] == pos["job_title"]
+    assert schema["hiringOrganization"]["name"] == pos["hiring_organization"]
+    assert schema["description"] == message
+    assert schema["validThrough"].startswith(pos["application_deadline"])
+
+
+def test_jobs_sitemap_excludes_archived_and_weak_pages(tmp_path, monkeypatch):
+    monkeypatch.setattr(gsp, "DOCS_DIR", str(tmp_path))
+    eligible = _position("Detailed eligible position description. " * 6)
+    weak = {**eligible, "uri": "at://x/y/3weak", "hiring_organization": None}
+    archived = {
+        **eligible,
+        "uri": "at://x/y/3archived",
+        "application_deadline": "2026-01-01",
+    }
+    eligible_map = gsp.generate_position_pages([eligible, weak, archived])
+    gsp.generate_sitemap(eligible_map, [])
+
+    jobs_xml = (tmp_path / "sitemaps" / "jobs.xml").read_text(encoding="utf-8")
+    assert "/p/3testslug000" in jobs_xml
+    assert "/p/3weak" not in jobs_xml
+    assert "/p/3archived" not in jobs_xml
+    assert 'content="noindex, follow"' in (tmp_path / "p" / "3weak.html").read_text(encoding="utf-8")
+    assert "This position is archived" in (tmp_path / "p" / "3archived.html").read_text(encoding="utf-8")
+
+
+def test_archived_position_is_absent_from_active_listing(tmp_path, monkeypatch):
+    monkeypatch.setattr(gsp, "DOCS_DIR", str(tmp_path))
+    rows = _corpus(10)
+    archived = {**rows[0], "uri": "at://x/y/3archived", "application_deadline": "2026-01-01"}
+    gsp.generate_positions_html(rows + [archived])
+    combined = "".join(f.read_text(encoding="utf-8") for f in _all_listing_html(tmp_path))
+    assert "/p/3archived" not in combined
+
+
+def test_active_detail_titles_are_not_template_duplicates():
+    titles = []
+    for row in _corpus(50):
+        page = gsp.render_position_page(row, gsp.extract_slug(row["uri"]))
+        titles.append(re.search(r"<title>(.*?)</title>", page).group(1))
+    duplicate_rate = 1 - (len(set(titles)) / len(titles))
+    assert duplicate_rate < 0.20
+
+
+def test_homepage_identity_has_visible_h1_and_no_dataset_claim():
+    html = (REPO / "docs" / "index.html").read_text(encoding="utf-8")
+    assert re.search(r"<h1>[^<]+</h1>", html)
+    assert '"@type": "Dataset"' not in html
+    assert "creativecommons.org/publicdomain/zero" not in html
+    assert "BlueSky PhD Jobs" not in html
+    assert "PhD_Positions" not in html
+
+
+def test_generator_refuses_partially_enriched_active_corpus():
+    active = _corpus(2)
+    active[0]["seo_enriched_at"] = "2026-09-16T10:00:00Z"
+    with pytest.raises(RuntimeError, match="finish scripts/backfill_seo_metadata.py"):
+        gsp.validate_generation_ready(active)
+
+    active[1]["seo_enriched_at"] = "2026-09-16T10:01:00Z"
+    gsp.validate_generation_ready(active)
