@@ -552,8 +552,9 @@ the homepage snapshot, `positions.json`, listings, and hub counts. Detail titles
 use the extracted role and employer; the primary CTA uses the verified
 application URL and Bluesky remains a secondary source. JSON-LD descriptions
 remain plain text identical to the visible source text.
-`validate_generation_ready()` aborts before any file writes while an active row
-still has a null `seo_enriched_at`; do not remove this rollout guard.
+The generator reports active rows with null `seo_enriched_at` but does not block
+the whole site refresh. Existing eligibility rules keep those rows out of the
+jobs sitemap and `JobPosting` markup until enrichment completes.
 
 SEO rollout order: apply `008_seo_job_metadata.sql`; run the enrichment benchmark;
 run the resumable active-row backfill; regenerate static output; deploy; delete
