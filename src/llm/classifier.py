@@ -7,6 +7,15 @@ from .base import LLMProvider
 from .config import DISCIPLINES, POSITION_TYPES, IS_REAL_JOB_PROMPT, METADATA_PROMPT_TEMPLATE
 
 
+def _default_metadata() -> dict:
+    """Return a fresh, safe metadata fallback for malformed model output."""
+    return {
+        "disciplines": ["Other"],
+        "country": "Unknown",
+        "position_type": ["PhD Student"],
+    }
+
+
 class JobClassifier:
     """Classifier for filtering and categorizing academic job postings."""
 
@@ -51,17 +60,23 @@ class JobClassifier:
         try:
             data = json.loads(response)
         except (json.JSONDecodeError, ValueError):
-            return {
-                "disciplines": ["Other"],
-                "country": "Unknown",
-                "position_type": ["PhD Student"],
-            }
+            return _default_metadata()
+
+        # Some models occasionally wrap the requested object in a one-item
+        # JSON array. Accept that harmless shape, but fail safely for arbitrary
+        # arrays or JSON scalars instead of calling dict methods on them.
+        if isinstance(data, list) and len(data) == 1 and isinstance(data[0], dict):
+            data = data[0]
+        if not isinstance(data, dict):
+            return _default_metadata()
 
         # Validate and extract disciplines (limit input length to prevent memory issues)
         raw_disciplines = data.get("disciplines", [])
         if isinstance(raw_disciplines, str):
             raw_disciplines = raw_disciplines[:500]  # Limit string length
             raw_disciplines = [d.strip() for d in raw_disciplines.split(",")]
+        elif not isinstance(raw_disciplines, list):
+            raw_disciplines = []
         raw_disciplines = raw_disciplines[:20]  # Limit array length
         matched = []
         for part in raw_disciplines:

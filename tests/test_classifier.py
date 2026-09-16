@@ -129,6 +129,50 @@ class TestGetMetadata:
         assert result["country"] == "Unknown"
         assert result["position_type"] == ["PhD Student"]
 
+    def test_single_object_array_is_unwrapped(self):
+        response = json.dumps([{
+            "disciplines": ["Biology"],
+            "country": "Germany",
+            "position_type": ["Postdoc"]
+        }])
+        llm = MockLLM([response])
+        classifier = JobClassifier(llm)
+
+        result = classifier.get_metadata("Postdoc in biology")
+
+        assert result == {
+            "disciplines": ["Biology"],
+            "country": "Germany",
+            "position_type": ["Postdoc"],
+        }
+
+    def test_arbitrary_top_level_array_uses_defaults(self):
+        llm = MockLLM(['["Biology", "Germany", "Postdoc"]'])
+        classifier = JobClassifier(llm)
+
+        result = classifier.get_metadata("Postdoc in biology")
+
+        assert result == {
+            "disciplines": ["Other"],
+            "country": "Unknown",
+            "position_type": ["PhD Student"],
+        }
+
+    def test_non_array_disciplines_use_default(self):
+        response = json.dumps({
+            "disciplines": {"primary": "Biology"},
+            "country": "Germany",
+            "position_type": ["Postdoc"]
+        })
+        llm = MockLLM([response])
+        classifier = JobClassifier(llm)
+
+        result = classifier.get_metadata("Postdoc in biology")
+
+        assert result["disciplines"] == ["Other"]
+        assert result["country"] == "Germany"
+        assert result["position_type"] == ["Postdoc"]
+
     def test_fenced_json(self):
         response = '```json\n' + json.dumps({
             "disciplines": ["Physics"],
