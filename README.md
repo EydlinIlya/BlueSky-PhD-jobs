@@ -417,7 +417,10 @@ deduplication (dedup strips the `[Bio: ...]` prefix before TF-IDF comparison).
 
 ### Static pages for search engines
 
-The interactive board is a JS app, so the crawlable surface is generated
+The interactive board has Latest, My feed, and a lazy-loaded Archive tab for
+closed or older-than-90-day positions. Archived records remain reference-only:
+they are excluded from active listings, sitemaps, and `JobPosting` markup.
+The board is a JS app, so the crawlable surface is generated
 alongside it by `scripts/generate_seo_pages.py`:
 
 | URL | What it is |

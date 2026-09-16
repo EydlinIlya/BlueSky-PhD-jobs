@@ -138,6 +138,9 @@ body { padding-bottom: 34px; }
   .mark { font-size: 16px; }
   .cmd-kbd { display: none; }                 /* no ⌘K hint on touch */
   .river-head { position: static; }           /* topbar is two rows tall here */
+  .river-tabs { width: 100%; justify-content: space-between; }
+  .river-tab { padding-inline: 8px; }
+  #river-meta { display: none; }
   .lbl-full { display: none; }                /* use the short tab label */
   .lbl-short { display: inline; }
 }
