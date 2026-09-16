@@ -345,7 +345,7 @@ def test_active_detail_titles_are_not_template_duplicates():
 
 def test_homepage_identity_has_visible_h1_and_no_dataset_claim():
     html = (REPO / "docs" / "index.html").read_text(encoding="utf-8")
-    assert re.search(r"<h1>[^<]+</h1>", html)
+    assert re.search(r"<h1(?:\s[^>]*)?>[^<]+</h1>", html)
     assert '"@type": "Dataset"' not in html
     assert "creativecommons.org/publicdomain/zero" not in html
     assert "BlueSky PhD Jobs" not in html
@@ -360,6 +360,17 @@ def test_generator_reports_partially_enriched_active_corpus(capsys):
 
     active[1]["seo_enriched_at"] = "2026-09-16T10:01:00Z"
     assert gsp.report_generation_readiness(active) == 0
+
+
+def test_archive_snapshot_contains_only_inactive_positions(tmp_path, monkeypatch):
+    monkeypatch.setattr(gsp, "DOCS_DIR", str(tmp_path))
+    active = _position("Detailed active position description. " * 5)
+    archived = dict(active, uri="at://test/archived", application_deadline="2026-08-01")
+    now = gsp.datetime(2026, 9, 16, tzinfo=gsp.timezone.utc)
+    gsp.generate_archive_json([active, archived], [], now=now)
+    payload = json.loads((tmp_path / "archive.json").read_text(encoding="utf-8"))
+    assert payload["total"] == 1
+    assert [row["uri"] for row in payload["positions"]] == ["at://test/archived"]
 
 
 def test_active_filter_is_not_passed_directly_as_array_callback():

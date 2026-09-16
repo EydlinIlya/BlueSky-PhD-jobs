@@ -101,6 +101,10 @@ function isActivePosition(position, now = new Date()) {
 /* ───────────────────────── STATE ───────────────────────── */
 const state = {
     all: [],                 // all positions (canonical, verified)
+    archive: [],             // expired or older than the 90-day active window
+    archiveLoaded: false,
+    archiveLoading: false,
+    archiveError: null,
     duplicateMap: {},        // canonical uri -> [{uri, url, user_handle, created_at}]
     total: 0,                // total open positions
     view: 'feed',            // 'feed' | 'subs'
@@ -143,6 +147,46 @@ async function fetchStaticSnapshot() {
         const dupMap = buildDuplicateMap(data.duplicates || []);
         return { positions, duplicates: dupMap, total: data.total || positions.length };
     } catch (e) { console.warn('snapshot fetch failed', e); return null; }
+}
+
+async function fetchArchiveSnapshot() {
+    if (USE_MOCK) {
+        const positions = (await fetchMockPositions())
+            .map(p => ({ ...p, country: normalizeCountry(p.country) }))
+            .filter(position => !isActivePosition(position));
+        return { positions, duplicates: {}, total: positions.length };
+    }
+    const r = await fetch('archive.json', { cache: 'default' });
+    if (!r.ok) throw new Error(`archive snapshot ${r.status}`);
+    const data = await r.json();
+    if (!data || !Array.isArray(data.positions)) throw new Error('invalid archive snapshot');
+    const positions = data.positions
+        .map(p => ({ ...p, country: normalizeCountry(p.country) }))
+        .filter(position => !isActivePosition(position));
+    return {
+        positions,
+        duplicates: buildDuplicateMap(data.duplicates || []),
+        total: data.total || positions.length,
+    };
+}
+
+async function loadArchive() {
+    if (state.archiveLoaded || state.archiveLoading) return;
+    state.archiveLoading = true;
+    state.archiveError = null;
+    $('#feed-stream').innerHTML = '<div class="feed-empty"><div class="ee-t">Loading archive…</div><div class="ee-d">Retrieving closed and older positions.</div></div>';
+    $('#loader').classList.add('hidden');
+    try {
+        const data = await fetchArchiveSnapshot();
+        state.archive = data.positions;
+        state.archiveLoaded = true;
+        Object.assign(state.duplicateMap, data.duplicates || {});
+    } catch (error) {
+        state.archiveError = error;
+        console.error('archive load failed', error);
+    } finally {
+        state.archiveLoading = false;
+    }
 }
 
 function buildDuplicateMap(rows) {
@@ -299,8 +343,9 @@ function passesFilters(p) {
 }
 
 function visiblePositions() {
+    const source = state.tab === 'archive' ? state.archive : state.all;
     const following = state.tab === 'following';
-    return state.all.filter(p => passesFilters(p) && (!following || matchesFollowing(p)));
+    return source.filter(p => passesFilters(p) && (!following || matchesFollowing(p)));
 }
 
 /* ───────────────────────── FEED RENDER ───────────────────────── */
@@ -369,6 +414,12 @@ function postHTML(p) {
 }
 
 function emptyStateHTML() {
+    if (state.tab === 'archive') {
+        if (state.archiveError) {
+            return '<div class="feed-error">The archive could not be loaded. Please try again later.</div>';
+        }
+        return '<div class="feed-empty"><div class="ee-mark">—</div><div class="ee-t">No archived positions match</div><div class="ee-d">Try clearing the current search or filters.</div><button class="btn-primary" id="empty-clear">Clear filters</button></div>';
+    }
     if (state.tab === 'following') {
         if (followingCount() === 0) {
             return `<div class="feed-empty"><div class="ee-mark">—</div><div class="ee-t">Build your Following feed</div><div class="ee-d">Tap <b>+ follow</b> on any poster, follow a discipline/country from <b>Top areas/countries</b>, or <b>save a search</b> — they all show up here together.</div><button class="btn-primary" data-tab-go="latest">Browse all positions</button></div>`;
@@ -422,6 +473,7 @@ function updateCounts() {
     const set = (sel, v) => { const el = $(sel); if (el) el.textContent = v; };
     set('#tab-latest-ct', latest.toLocaleString());
     set('#tab-following-ct', state.user ? followingMatched.toLocaleString() : '');
+    set('#tab-archive-ct', state.archiveLoaded ? state.archive.length.toLocaleString() : '');
 }
 
 /* ───────────────────────── INFINITE SCROLL ───────────────────────── */
@@ -638,7 +690,7 @@ function renderTrendCard(sel, counts, kind) {
 
 /* ───────────────────────── POST FLYOUT ───────────────────────── */
 function openFlyout(uri) {
-    const p = state.all.find(x => x.uri === uri); if (!p) return;
+    const p = state.all.find(x => x.uri === uri) || state.archive.find(x => x.uri === uri); if (!p) return;
     const handle = p.user_handle || 'unknown';
     const aggr = isAggregator(handle);
     const meta = [
@@ -693,7 +745,11 @@ function setActiveNav() {
     else if (state.view === 'followlist') railKey = 'followlist';
     else railKey = state.tab === 'latest' ? 'all' : '';   // My feed has no rail link
     $$('.rail-link').forEach(x => x.classList.toggle('active', x.dataset.stream === railKey));
-    $$('.river-tab').forEach(x => x.classList.toggle('active', state.view === 'feed' && x.dataset.tab === state.tab));
+    $$('.river-tab').forEach(x => {
+        const active = state.view === 'feed' && x.dataset.tab === state.tab;
+        x.classList.toggle('active', active);
+        x.setAttribute('aria-selected', String(active));
+    });
     const mnavKey = state.view === 'subs' ? 'saved'
         : state.view === 'followlist' ? ''
         : (state.tab === 'following' ? 'following' : 'all');
@@ -1243,14 +1299,29 @@ function setupCookieBanner() {
 }
 
 /* ───────────────────────── EVENT WIRING ───────────────────────── */
-function selectTab(tab) {                          // 'latest' | 'following' (My feed)
+function updateFeedContext() {
+    const archived = state.tab === 'archive';
+    $('#river-title').textContent = archived
+        ? 'Archived PhD and postdoctoral positions'
+        : 'Current PhD and postdoctoral positions';
+    $('#river-description').textContent = archived
+        ? 'Closed opportunities and posts older than 90 days, retained for reference.'
+        : 'Research opportunities gathered from academic sources and checked daily.';
+    $('#river-meta').innerHTML = archived
+        ? 'Historical record · applications may be closed'
+        : '<span class="live-dot"></span> AI-filtered · updated daily';
+}
+
+async function selectTab(tab) {                    // 'latest' | 'following' | 'archive'
     if (tab === 'following' && !state.user) { openAuth('signup'); return; }
     state.tab = tab;
     state.view = 'feed';
     $('#view-feed').classList.remove('hidden');
     $('#view-subs').classList.add('hidden');
     $('#view-following').classList.add('hidden');
+    updateFeedContext();
     setActiveNav();
+    if (tab === 'archive' && !state.archiveLoaded) await loadArchive();
     renderFeedReset();
     window.scrollTo({ top: 0 });
 }

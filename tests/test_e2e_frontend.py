@@ -82,6 +82,14 @@ class TestFrontendLoads:
         assert page.locator("#chips-level .chip").count() > 0
         assert page.locator("#tab-latest-ct").inner_text().strip()
 
+    def test_archive_tab_loads_historical_positions(self, server_url, page):
+        open_feed(page, server_url)
+        page.locator('[data-tab="archive"]').click()
+        page.wait_for_selector("article.post", timeout=15000)
+        assert "Archived" in page.locator("#river-title").inner_text()
+        assert "older than 90 days" in page.locator("#river-description").inner_text()
+        assert page.locator('[data-tab="archive"]').get_attribute("aria-selected") == "true"
+
     def test_keyboard_shortcut_focuses_search(self, server_url, page):
         open_feed(page, server_url)
         page.keyboard.press("Control+k")

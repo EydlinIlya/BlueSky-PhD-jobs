@@ -436,6 +436,9 @@ onboarding, subscriptions page, toasts).
 - Renders the feed with day separators + infinite scroll (IntersectionObserver,
   `BATCH_SIZE=30`); posts are non-interactive containers with explicit detail,
   permalink, and source actions
+- The Archive tab lazy-loads `archive.json`, generated from expired/older
+  canonical rows. It reuses feed filters and presentation while preserving the
+  archive `noindex`/no-`JobPosting` policy.
 - Filter chips: Level / Country (top-N dynamic) / Area, plus the "Hide aggregator
   reposts" toggle (`isAggregator()` against the inlined aggregator handle set)
 - The repost/earlier-posts thread reuses the existing `duplicate_of` dedup graph

@@ -982,56 +982,67 @@ def generate_sitemap(slug_to_lastmod=None, listing_urls=None):
     print(f"Generated sitemap index: 5 core + {len(listing)} hubs + {extra} eligible jobs")
 
 
+def _snapshot_position(pos):
+    return {
+        "uri": pos.get("uri", ""),
+        "created_at": pos.get("created_at", ""),
+        "disciplines": pos.get("disciplines") or [],
+        "country": pos.get("country") or "",
+        "position_type": pos.get("position_type") or [],
+        "user_handle": pos.get("user_handle", ""),
+        "message": pos.get("message", ""),
+        "url": pos.get("url", ""),
+        "is_verified_job": pos.get("is_verified_job") is True,
+        "job_title": pos.get("job_title"),
+        "hiring_organization": pos.get("hiring_organization"),
+        "application_url": pos.get("application_url"),
+        "application_deadline": pos.get("application_deadline"),
+        "location_text": pos.get("location_text"),
+    }
+
+
+def _snapshot_duplicate(row):
+    return {
+        "uri": row.get("uri", ""),
+        "url": row.get("url", ""),
+        "user_handle": row.get("user_handle", ""),
+        "created_at": row.get("created_at", ""),
+        "duplicate_of": row.get("duplicate_of", ""),
+    }
+
+
+def _write_snapshot(filename, positions, duplicates):
+    snapshot = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "total": len(positions),
+        "positions": [_snapshot_position(pos) for pos in positions],
+        "duplicates": [_snapshot_duplicate(row) for row in duplicates],
+    }
+    path = os.path.join(DOCS_DIR, filename)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(snapshot, f, separators=(",", ":"), ensure_ascii=False)
+    size_kb = os.path.getsize(path) / 1024
+    print(
+        f"Generated {filename}: {len(positions)} positions, "
+        f"{len(duplicates)} duplicates, {size_kb:.0f}KB"
+    )
+
+
 def generate_positions_json(positions, duplicates, now=None):
-    """Write docs/positions.json — the static snapshot served from the CDN.
+    """Write docs/positions.json — the active snapshot served from the CDN.
 
     Replaces the live Supabase query in docs/app.js. Schema matches what
     fetchSupabasePositions + fetchDuplicates produced, minus indexed_at
     (filtering already happened at generation time).
     """
     positions = [p for p in positions if is_position_active(p, now=now)]
-    pos_payload = [
-        {
-            "uri": pos.get("uri", ""),
-            "created_at": pos.get("created_at", ""),
-            "disciplines": pos.get("disciplines") or [],
-            "country": pos.get("country") or "",
-            "position_type": pos.get("position_type") or [],
-            "user_handle": pos.get("user_handle", ""),
-            "message": pos.get("message", ""),
-            "url": pos.get("url", ""),
-            "is_verified_job": pos.get("is_verified_job") is True,
-            "job_title": pos.get("job_title"),
-            "hiring_organization": pos.get("hiring_organization"),
-            "application_url": pos.get("application_url"),
-            "application_deadline": pos.get("application_deadline"),
-            "location_text": pos.get("location_text"),
-        }
-        for pos in positions
-    ]
+    _write_snapshot("positions.json", positions, duplicates)
 
-    dup_payload = [
-        {
-            "uri": d.get("uri", ""),
-            "url": d.get("url", ""),
-            "user_handle": d.get("user_handle", ""),
-            "created_at": d.get("created_at", ""),
-            "duplicate_of": d.get("duplicate_of", ""),
-        }
-        for d in duplicates
-    ]
 
-    snapshot = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "positions": pos_payload,
-        "duplicates": dup_payload,
-    }
-
-    path = os.path.join(DOCS_DIR, "positions.json")
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(snapshot, f, separators=(",", ":"), ensure_ascii=False)
-    size_kb = os.path.getsize(path) / 1024
-    print(f"Generated positions.json: {len(pos_payload)} positions, {len(dup_payload)} duplicates, {size_kb:.0f}KB")
+def generate_archive_json(positions, duplicates, now=None):
+    """Write the lazy-loaded archive snapshot without changing SEO exposure."""
+    positions = [p for p in positions if not is_position_active(p, now=now)]
+    _write_snapshot("archive.json", positions, duplicates)
 
 
 def report_generation_readiness(active_positions):
@@ -1060,6 +1071,11 @@ def main():
     active_duplicates = [
         row for row in all_duplicates if row.get("duplicate_of") in active_uris
     ]
+    archived_positions = [p for p in all_positions if not is_position_active(p, now=now)]
+    archived_uris = {p.get("uri") for p in archived_positions}
+    archived_duplicates = [
+        row for row in all_duplicates if row.get("duplicate_of") in archived_uris
+    ]
     print(
         f"Snapshot: {len(all_positions)} canonical; {len(active_positions)} active; "
         f"{eligible_count} SEO-eligible"
@@ -1070,6 +1086,7 @@ def main():
     eligible_slug_to_lastmod = generate_position_pages(all_positions, now=now)
     generate_sitemap(eligible_slug_to_lastmod, listing_urls)
     generate_positions_json(active_positions, active_duplicates, now=now)
+    generate_archive_json(archived_positions, archived_duplicates, now=now)
 
     print("SEO generation complete!")
 
