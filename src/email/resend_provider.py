@@ -27,11 +27,20 @@ class ResendProvider(EmailProvider):
         self.api_key = api_key or os.environ.get("RESEND_API_KEY")
         self.sender = sender or os.environ.get("EMAIL_FROM") or DEFAULT_FROM
 
-    def send(self, to: str, subject: str, html: str, headers: dict | None = None) -> bool:
+    def send(
+        self,
+        to: str,
+        subject: str,
+        html: str,
+        headers: dict | None = None,
+        text: str | None = None,
+    ) -> bool:
         if not self.api_key:
             print("ResendProvider: RESEND_API_KEY not set — skipping send")
             return False
         payload = {"from": self.sender, "to": [to], "subject": subject, "html": html}
+        if text:
+            payload["text"] = text
         if headers:
             # Resend passes these through as email headers (e.g. List-Unsubscribe).
             payload["headers"] = headers

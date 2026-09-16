@@ -69,6 +69,7 @@ SUPABASE_SERVICE_KEY=service-role-key # For subscription digest cron (bypasses R
 RESEND_API_KEY=your-resend-key        # For subscription email digests
 EMAIL_FROM=PhD Sky <alerts@phdsky.org># Digest sender (verified Resend domain)
 EMAIL_PROVIDER=resend                 # Email backend (default: resend)
+DIGEST_RECIPIENT=you@example.com      # Sole recipient in manual operator mode
 SUPABASE_ANON_KEY=your-anon-key       # Vercel unsubscribe function (public key)
 ```
 
@@ -388,8 +389,9 @@ Required secrets:
 - `GROQ_API_KEY` (optional — enables Groq fallback for filter and dedup)
 - `SUPABASE_URL`, `SUPABASE_KEY`
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID` (optional — skipped if not set)
-- Weekly email workflow: `SUPABASE_SERVICE_KEY`, `RESEND_API_KEY`, and a verified
-  `EMAIL_FROM`. These must be Actions secrets; there are no plaintext Variable fallbacks.
+- Manual operator email workflow: `RESEND_API_KEY`, a verified `EMAIL_FROM`, and
+  `DIGEST_RECIPIENT`; it reuses privileged `SUPABASE_KEY` when a separately named
+  `SUPABASE_SERVICE_KEY` secret is absent. No plaintext Variable fallbacks.
 - Vercel unsubscribe function: `SUPABASE_URL` and public `SUPABASE_ANON_KEY`.
 
 ## Frontend (`docs/`)
@@ -479,14 +481,17 @@ Backend pieces:
 - **`src/email/`** — provider-agnostic email (`EmailProvider` ABC +
   `get_email_provider()`/`send_email()`, chosen by `EMAIL_PROVIDER`, default
   `resend`). Providers accept both HTML and optional plain-text bodies.
-- **`scripts/send_subscription_digests.py`** — standalone cron (mirrors
-  `post_to_telegram.py`). It requires `SUPABASE_SERVICE_KEY`, matches from
-  `last_processed_at`, advances successful no-match scans, and advances neither
-  watermark on send failure. Successful messages include escaped HTML, plain text,
-  verified sender identity, and exact RFC 8058 one-click headers.
-- **`.github/workflows/subscription-digests.yml`** — runs hourly for instant,
-  daily at 06:00 UTC, and weekly Monday at 07:00 UTC. It also supports manual
-  cadence selection.
+- **`scripts/send_subscription_digests.py`** — operator mode resolves exactly the
+  profile matching `DIGEST_RECIPIENT`, aggregates its enabled saved searches into
+  one message, displays at most three positions, and advances only that profile's
+  matching subscription watermarks after a successful send. Zero new matches
+  means no email and no write; failures leave watermarks unchanged.
+- **`.github/workflows/subscription-digests.yml`** — manual dispatch only. There
+  is no schedule and no subscriber-wide send path in the workflow. It reads only
+  Actions secrets and calls `--operator-to "$DIGEST_RECIPIENT"`.
+- Digest HTML uses the academic light palette and a **See more in your feed**
+  button linking to `/#following`; `docs/app.js` resolves `/#following` and
+  `/#subscriptions` after session restoration.
 - Tests: `tests/test_email.py` (mock provider) + `tests/test_digest.py`
   (matching/formatting).
 

@@ -71,6 +71,11 @@ SUPABASE_KEY=your-secret-key
 # Optional dedicated alias for maintenance/email jobs
 SUPABASE_SERVICE_KEY=your-secret-key
 
+# Manual operator email digest
+RESEND_API_KEY=your-resend-key
+EMAIL_FROM=PhD Sky <alerts@phdsky.org>
+DIGEST_RECIPIENT=you@example.com
+
 # Optional - Telegram channel
 TELEGRAM_BOT_TOKEN=your-bot-token
 TELEGRAM_CHANNEL_ID=@your_channel
@@ -295,6 +300,10 @@ Two workflows run on cron:
   `reposted_to_bluesky_at IS NULL` from a dedicated account, tagged with level,
   country, and subjects. Runs **every 6h**. Uses the same `BLUESKY_HANDLE`/
   `BLUESKY_PASSWORD` account as search (which excludes its own reposts).
+- **`subscription-digests.yml`** — manual dispatch only. It sends one compact
+  digest exclusively to `DIGEST_RECIPIENT`, using that profile's saved searches.
+  At most three positions are shown, with a link to the personalized feed. With
+  no new matches it sends nothing. Subscriber-wide and scheduled sending are disabled.
 
 To enable:
 
@@ -302,7 +311,8 @@ To enable:
 2. Go to Settings → Secrets and variables → Actions
 3. Add secrets: `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`, `MISTRAL_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY`
 4. (Optional) Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHANNEL_ID` for Telegram posting
-5. The workflows run automatically or can be triggered manually from the Actions tab
+5. For the manual email digest, add `RESEND_API_KEY`, verified `EMAIL_FROM`, and `DIGEST_RECIPIENT`
+6. The workflows run automatically or can be triggered manually from the Actions tab
 
 Publish is fail-safe: repeated staging URIs are collapsed to the newest row
 before the Supabase upsert, and staging/checkpoint rows are deleted only after
