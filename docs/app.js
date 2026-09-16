@@ -1266,6 +1266,12 @@ function selectStream(stream) {                     // rail / bottom-nav / profi
     selectTab(stream === 'following' ? 'following' : 'latest');
 }
 
+function applyHashRoute() {
+    const route = window.location.hash.replace(/^#/, '').toLowerCase();
+    if (route === 'following') selectStream('following');
+    else if (route === 'subscriptions') selectStream('saved');
+}
+
 function wireEvents() {
     $('#backdrop').onclick = closeOverlays;
     $('#flyout-close').onclick = closeOverlays;
@@ -1291,6 +1297,7 @@ function wireEvents() {
     // close fixed filter dropdowns on scroll (page or rail) so they don't drift
     const closeDropdowns = () => $$('.chip-dropdown.open').forEach(d => d.classList.remove('open'));
     window.addEventListener('scroll', closeDropdowns);
+    window.addEventListener('hashchange', applyHashRoute);
     const railEl = document.querySelector('.left-rail');
     if (railEl) railEl.addEventListener('scroll', closeDropdowns);
 
@@ -1432,6 +1439,7 @@ async function init() {
     wireEvents();
     setActiveNav();
     await setupAuth();
+    applyHashRoute();
     setupInfiniteScroll();
 
     const staticData = loadStaticData();

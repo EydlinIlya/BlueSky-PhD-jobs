@@ -72,17 +72,16 @@ def test_digest_discloses_matches_beyond_the_display_cap():
     body = digest.format_digest_html({"disciplines": ["Biology"]}, positions)
 
     assert f"{n} new positions" in body
-    assert f"Showing the {digest.MAX_POSITIONS_PER_DIGEST} most recent" in body
-    assert "Browse the other 12 on PhD Sky" in body
+    assert "See more in your feed" in body
+    assert "https://phdsky.org/#following" in body
     # Only the capped number of entries are actually rendered.
-    assert body.count("View position →") == digest.MAX_POSITIONS_PER_DIGEST
+    assert body.count(">View position</a>") == digest.MAX_POSITIONS_PER_DIGEST
 
 
 def test_no_overflow_note_when_everything_fits():
     body = digest.format_digest_html({}, [pos(), pos(uri="at://y")])
-    assert "Showing the" not in body
-    assert "Browse the other" not in body
-    assert body.count("View position →") == 2
+    assert "See more in your feed" in body
+    assert body.count(">View position</a>") == 2
 
 
 class _FakeTable:
@@ -114,8 +113,8 @@ class _FakeClient:
 
 
 def _fake_send(captured):
-    def send(to, subject, html, headers=None):
-        captured.append({"to": to, "subject": subject, "html": html, "headers": headers})
+    def send(to, subject, html, headers=None, text=None):
+        captured.append({"to": to, "subject": subject, "html": html, "headers": headers, "text": text})
         return True
     return send
 
@@ -157,6 +156,61 @@ def test_test_send_still_sends_with_no_matches(monkeypatch):
     assert digest.run_test("tester@example.com") == 1
     assert len(captured) == 1
     assert "0 new positions" in captured[0]["html"]
+    assert client.writes == []
+
+
+def test_operator_digest_sends_one_email_with_three_positions_and_updates_watermark(monkeypatch):
+    positions = [
+        pos(uri=f"at://x{i}", created_at=f"2026-09-{10 + i:02d}T00:00:00+00:00")
+        for i in range(5)
+    ]
+    client = _FakeClient({
+        "profiles": [{"id": "operator", "email": "owner@example.com"}],
+        "subscriptions": [{
+            "id": "sub-1", "user_id": "operator", "disciplines": ["Biology"],
+            "countries": [], "position_types": [], "query_text": None,
+            "hide_aggregators": False, "unsubscribe_token": "tok-123",
+            "last_notified_at": "2026-09-01T00:00:00+00:00",
+            "created_at": "2026-08-01T00:00:00+00:00",
+            "deliver_email": True,
+        }],
+        "phd_positions": positions,
+    })
+    monkeypatch.setattr(digest, "get_client", lambda: client)
+    monkeypatch.setattr(digest, "report_email_config", lambda: True)
+    captured = []
+    monkeypatch.setattr(digest, "send_email", _fake_send(captured))
+
+    assert digest.run_operator("owner@example.com") == 1
+    assert len(captured) == 1
+    assert captured[0]["to"] == "owner@example.com"
+    assert captured[0]["html"].count(">View position</a>") == 3
+    assert "See more in your feed" in captured[0]["html"]
+    assert "https://phdsky.org/#following" in captured[0]["html"]
+    assert "See more in your feed" in captured[0]["text"]
+    assert client.writes == [{"last_notified_at": "2026-09-14T00:00:00+00:00"}]
+
+
+def test_operator_digest_sends_nothing_when_no_new_matches(monkeypatch):
+    client = _FakeClient({
+        "profiles": [{"id": "operator", "email": "owner@example.com"}],
+        "subscriptions": [{
+            "id": "sub-1", "user_id": "operator", "disciplines": ["Biology"],
+            "countries": [], "position_types": [], "query_text": None,
+            "hide_aggregators": False, "unsubscribe_token": "tok-123",
+            "last_notified_at": "2026-09-15T00:00:00+00:00",
+            "created_at": "2026-08-01T00:00:00+00:00",
+            "deliver_email": True,
+        }],
+        "phd_positions": [pos(created_at="2026-09-14T00:00:00+00:00")],
+    })
+    monkeypatch.setattr(digest, "get_client", lambda: client)
+    monkeypatch.setattr(digest, "report_email_config", lambda: True)
+    captured = []
+    monkeypatch.setattr(digest, "send_email", _fake_send(captured))
+
+    assert digest.run_operator("owner@example.com") == 0
+    assert captured == []
     assert client.writes == []
 
 
