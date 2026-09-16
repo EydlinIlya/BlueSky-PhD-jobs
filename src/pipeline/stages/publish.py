@@ -28,6 +28,12 @@ def _staging_to_save_dict(row: dict) -> dict:
         "position_type": row.get("position_type"),
         "is_verified_job": row.get("is_verified_job"),
         "duplicate_of": row.get("duplicate_of"),
+        "job_title": row.get("job_title"),
+        "hiring_organization": row.get("hiring_organization"),
+        "application_url": row.get("application_url"),
+        "application_deadline": row.get("application_deadline"),
+        "location_text": row.get("location_text"),
+        "seo_enriched_at": row.get("seo_enriched_at"),
     }
     if row.get("quoted_uri"):
         post["quoted_uri"] = row["quoted_uri"]

@@ -140,11 +140,10 @@ class TestGetMetadata:
 
         result = classifier.get_metadata("Postdoc in biology")
 
-        assert result == {
-            "disciplines": ["Biology"],
-            "country": "Germany",
-            "position_type": ["Postdoc"],
-        }
+        assert result["disciplines"] == ["Biology"]
+        assert result["country"] == "Germany"
+        assert result["position_type"] == ["Postdoc"]
+        assert result["job_title"] is None
 
     def test_arbitrary_top_level_array_uses_defaults(self):
         llm = MockLLM(['["Biology", "Germany", "Postdoc"]'])
@@ -152,11 +151,43 @@ class TestGetMetadata:
 
         result = classifier.get_metadata("Postdoc in biology")
 
-        assert result == {
-            "disciplines": ["Other"],
-            "country": "Unknown",
+        assert result["disciplines"] == ["Other"]
+        assert result["country"] == "Unknown"
+        assert result["position_type"] == ["PhD Student"]
+        assert result["application_url"] is None
+
+    def test_extracts_evidence_backed_seo_fields(self):
+        response = json.dumps({
+            "disciplines": ["Ecology"],
+            "country": "Israel",
+            "position_type": ["Postdoc"],
+            "job_title": "Postdoctoral Fellow in Coastal Ecology",
+            "hiring_organization": "University of Haifa",
+            "application_url": "https://jobs.example.edu/postings/123",
+            "application_deadline": "2026-11-30",
+            "location_text": "Haifa, Israel",
+        })
+        result = JobClassifier(MockLLM([response])).get_metadata("explicit listing")
+        assert result["job_title"] == "Postdoctoral Fellow in Coastal Ecology"
+        assert result["hiring_organization"] == "University of Haifa"
+        assert result["application_url"] == "https://jobs.example.edu/postings/123"
+        assert result["application_deadline"] == "2026-11-30"
+        assert result["location_text"] == "Haifa, Israel"
+
+    def test_invalid_or_social_urls_and_dates_become_null(self):
+        response = json.dumps({
+            "disciplines": ["Biology"],
+            "country": "UK",
             "position_type": ["PhD Student"],
-        }
+            "job_title": "PhD Student",
+            "hiring_organization": "Example University",
+            "application_url": "https://bsky.app/profile/example/post/abc",
+            "application_deadline": "next Friday",
+            "location_text": "London",
+        })
+        result = JobClassifier(MockLLM([response])).get_metadata("listing")
+        assert result["application_url"] is None
+        assert result["application_deadline"] is None
 
     def test_non_array_disciplines_use_default(self):
         response = json.dumps({
@@ -309,6 +340,11 @@ class TestClassifyPost:
         assert result["disciplines"] is None
         assert result["country"] is None
         assert result["position_type"] is None
+        assert result["job_title"] is None
+        assert result["hiring_organization"] is None
+        assert result["application_url"] is None
+        assert result["application_deadline"] is None
+        assert result["location_text"] is None
 
     def test_real_job_with_metadata_text(self):
         metadata_json = json.dumps({

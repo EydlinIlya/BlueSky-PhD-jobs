@@ -100,7 +100,19 @@ METADATA_PROMPT_TEMPLATE = (
     "Return a JSON object with these fields:\n"
     '  "disciplines": array of 1-3 disciplines from this list: {disciplines}\n'
     '  "country": country where the position is located (standard name, or "Unknown")\n'
-    '  "position_type": array of position types from: PhD Student, Postdoc, Master Student, Research Assistant\n\n'
+    '  "position_type": array of position types from: PhD Student, Postdoc, Master Student, Research Assistant\n'
+    '  "job_title": exact advertised role title, or null\n'
+    '  "hiring_organization": exact hiring university, institute, or company, or null\n'
+    '  "application_url": exact HTTP(S) application or official vacancy URL, or null\n'
+    '  "application_deadline": exact deadline as YYYY-MM-DD, or null\n'
+    '  "location_text": exact city/region/campus wording, or null\n\n'
+    "EVIDENCE rules for the five job fields:\n"
+    "- Copy facts only when they are explicitly present in the post or linked-page preview.\n"
+    "- Never infer an employer from the author's handle or bio.\n"
+    "- Never invent or normalize a vague role into a more specific job title.\n"
+    "- application_url must be an explicit application/official vacancy URL, never a Bluesky URL.\n"
+    "- A month/day without an unambiguous year is not an exact deadline; return null.\n"
+    "- Return null for every uncertain or missing value.\n\n"
     "DISCIPLINE rules:\n"
     "- Pick 1-3 that best match. For cross-disciplinary work, list all (e.g., bioinformatics = Biology + Computer Science).\n"
     "- Remote sensing of forests, vegetation, crop fields, or ecosystems = Ecology (primary). "
@@ -123,20 +135,20 @@ METADATA_PROMPT_TEMPLATE = (
     "those should not reach this step\n\n"
     "Examples:\n"
     'Input: "PhD position at University of Oxford in computational biology"\n'
-    'Output: {{"disciplines": ["Biology", "Computer Science"], "country": "UK", "position_type": ["PhD Student"]}}\n\n'
+    'Output: {{"disciplines": ["Biology", "Computer Science"], "country": "UK", "position_type": ["PhD Student"], "job_title": "PhD position in computational biology", "hiring_organization": "University of Oxford", "application_url": null, "application_deadline": null, "location_text": "Oxford"}}\n\n'
     'Input: "Postdoc and PhD positions at MIT in physics"\n'
-    'Output: {{"disciplines": ["Physics"], "country": "USA", "position_type": ["PhD Student", "Postdoc"]}}\n\n'
+    'Output: {{"disciplines": ["Physics"], "country": "USA", "position_type": ["PhD Student", "Postdoc"], "job_title": null, "hiring_organization": "MIT", "application_url": null, "application_deadline": null, "location_text": null}}\n\n'
     'Input: "Doctoral Research Position at Friedrich-Schiller-Universitat Jena in archaeology"\n'
-    'Output: {{"disciplines": ["History"], "country": "Germany", "position_type": ["PhD Student"]}}\n\n'
+    'Output: {{"disciplines": ["History"], "country": "Germany", "position_type": ["PhD Student"], "job_title": "Doctoral Research Position in archaeology", "hiring_organization": "Friedrich Schiller University Jena", "application_url": null, "application_deadline": null, "location_text": "Jena"}}\n\n'
     'Input: "Research assistant at Aarhus University, Denmark in microbial biology"\n'
-    'Output: {{"disciplines": ["Biology"], "country": "Denmark", "position_type": ["Research Assistant"]}}\n\n'
+    'Output: {{"disciplines": ["Biology"], "country": "Denmark", "position_type": ["Research Assistant"], "job_title": "Research assistant", "hiring_organization": "Aarhus University", "application_url": null, "application_deadline": null, "location_text": null}}\n\n'
     'Input: "MS opportunity in machine learning, apply via link"\n'
-    'Output: {{"disciplines": ["Computer Science"], "country": "Unknown", "position_type": ["Master Student"]}}\n\n'
+    'Output: {{"disciplines": ["Computer Science"], "country": "Unknown", "position_type": ["Master Student"], "job_title": "MS opportunity in machine learning", "hiring_organization": null, "application_url": null, "application_deadline": null, "location_text": null}}\n\n'
     'Input: "Hiring one postdoctoral and two predoctoral researchers in neuroscience"\n'
-    'Output: {{"disciplines": ["Psychology"], "country": "Unknown", "position_type": ["PhD Student", "Postdoc"]}}\n\n'
+    'Output: {{"disciplines": ["Psychology"], "country": "Unknown", "position_type": ["PhD Student", "Postdoc"], "job_title": null, "hiring_organization": null, "application_url": null, "application_deadline": null, "location_text": null}}\n\n'
     'Input: "Assistant Professor (tenure-track) in Computational Biology at MIT"\n'
-    'Output: {{"disciplines": ["Biology", "Computer Science"], "country": "USA", "position_type": ["Postdoc"]}}\n\n'
+    'Output: {{"disciplines": ["Biology", "Computer Science"], "country": "USA", "position_type": ["Postdoc"], "job_title": "Assistant Professor (tenure-track) in Computational Biology", "hiring_organization": "MIT", "application_url": null, "application_deadline": null, "location_text": null}}\n\n'
     'Input: "PhD position in satellite remote sensing of boreal forest carbon dynamics, University of Helsinki"\n'
-    'Output: {{"disciplines": ["Ecology", "Computer Science"], "country": "Finland", "position_type": ["PhD Student"]}}\n\n'
+    'Output: {{"disciplines": ["Ecology", "Computer Science"], "country": "Finland", "position_type": ["PhD Student"], "job_title": "PhD position in satellite remote sensing of boreal forest carbon dynamics", "hiring_organization": "University of Helsinki", "application_url": null, "application_deadline": null, "location_text": null}}\n\n'
     "Return ONLY the JSON object, no other text."
 )

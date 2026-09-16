@@ -147,7 +147,7 @@ def format_digest_html(
     ) if overflow else ""
     return (
         f'<div style="max-width:640px;margin:0 auto;background:#0f172a;padding:24px;border-radius:10px">'
-        f'<div style="font:700 18px monospace;color:#e2e8f0">&gt; PhD_Positions</div>'
+        f'<div style="font:700 18px system-ui;color:#18201d">PhD Sky</div>'
         f'<div style="font:13px sans-serif;color:#a8b8c8;margin:8px 0 18px">'
         f'{n} new position{"s" if n != 1 else ""} matching <b style="color:#e2e8f0">{label}</b></div>'
         f'{shown_note}'

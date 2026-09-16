@@ -28,25 +28,25 @@
             gtag('consent', 'update', { analytics_storage: 'granted' });
         }
     </script>
-    <title>PhD &amp; Postdoc Positions from Bluesky | Academic Job Board</title>
-    <meta name="description" content="Browse PhD, postdoc, and research positions aggregated from Bluesky social network. AI-powered filtering updated daily. Find academic jobs in STEM, humanities, and social sciences worldwide.">
+    <title>Current PhD &amp; Postdoc Positions | PhD Sky</title>
+    <meta name="description" content="Browse current PhD, postdoc, and research positions from academic sources worldwide. Updated daily with direct links to available application pages.">
     <meta name="author" content="PhD Sky">
     <meta name="robots" content="index, follow">
     <link rel="canonical" href="https://phdsky.org/">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
 
     <!-- Open Graph -->
-    <meta property="og:title" content="PhD &amp; Postdoc Positions from Bluesky | Academic Job Board">
-    <meta property="og:description" content="Browse PhD, postdoc, and research positions aggregated from Bluesky social network. AI-powered filtering updated daily.">
+    <meta property="og:title" content="Current PhD &amp; Postdoc Positions | PhD Sky">
+    <meta property="og:description" content="Browse current PhD, postdoc, and research positions from academic sources worldwide.">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://phdsky.org/">
-    <meta property="og:site_name" content="BlueSky PhD Jobs">
+    <meta property="og:site_name" content="PhD Sky">
     <meta property="og:image" content="https://phdsky.org/assets/og-image.png">
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="PhD &amp; Postdoc Positions from Bluesky | Academic Job Board">
-    <meta name="twitter:description" content="Browse PhD, postdoc, and research positions aggregated from Bluesky social network. AI-powered filtering updated daily.">
+    <meta name="twitter:title" content="Current PhD &amp; Postdoc Positions | PhD Sky">
+    <meta name="twitter:description" content="Browse current PhD, postdoc, and research positions from academic sources worldwide.">
     <meta name="twitter:image" content="https://phdsky.org/assets/og-image.png">
 
     <!-- JSON-LD Structured Data -->
@@ -54,12 +54,12 @@
     {
         "@context": "https://schema.org",
         "@type": "WebSite",
-        "name": "BlueSky PhD Jobs",
+        "name": "PhD Sky",
         "url": "https://phdsky.org/",
-        "description": "Browse PhD, postdoc, and research positions aggregated from Bluesky social network. AI-powered filtering updated daily.",
+        "description": "Browse current PhD, postdoc, and research positions from academic sources worldwide.",
         "publisher": {
-            "@type": "Organization",
-            "name": "BlueSky PhD Jobs"
+            "@type": "Person",
+            "name": "Eli Eydlin"
         },
         "potentialAction": {
             "@type": "SearchAction",
@@ -68,29 +68,6 @@
         }
     }
     </script>
-    <script type="application/ld+json">
-    {
-        "@context": "https://schema.org",
-        "@type": "Dataset",
-        "name": "PhD & Postdoc Positions from Bluesky",
-        "description": "Daily-updated dataset of academic job postings aggregated from Bluesky social network, filtered by AI. Covers PhD studentships, postdoctoral fellowships, research assistant roles, and faculty positions worldwide.",
-        "url": "https://phdsky.org/",
-        "creator": {
-            "@type": "Organization",
-            "name": "BlueSky PhD Jobs",
-            "url": "https://phdsky.org/"
-        },
-        "keywords": ["PhD positions", "postdoc jobs", "academic jobs", "research positions", "Bluesky", "university jobs", "doctoral research", "STEM careers"],
-        "isAccessibleForFree": true,
-        "license": "https://creativecommons.org/publicdomain/zero/1.0/",
-        "distribution": [{
-            "@type": "DataDownload",
-            "encodingFormat": "text/html",
-            "contentUrl": "https://phdsky.org/positions"
-        }]
-    }
-    </script>
-
     <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
@@ -108,7 +85,7 @@
 <!-- ========== TOP BAR ========== -->
 <header class="topbar">
   <div class="topbar-inner">
-    <div class="mark" id="mark"><span class="gt">&gt;</span> PhD_Positions</div>
+    <div class="mark" id="mark">PhD Sky</div>
     <div class="command-bar">
       <span class="cmd-prefix">_</span>
       <input id="cmd-input" class="cmd-input" placeholder="search positions by keyword, author, discipline, country…" autocomplete="off">
@@ -174,6 +151,10 @@
   <main style="min-width:0">
     <!-- FEED VIEW -->
     <div class="river" id="view-feed">
+      <section class="river-intro">
+        <h1>Current PhD and postdoctoral positions</h1>
+        <p>Research opportunities gathered from academic sources and checked daily.</p>
+      </section>
       <div class="river-head">
         <div class="river-tabs">
           <button class="river-tab active" data-tab="latest">Latest <span class="ct" id="tab-latest-ct"></span></button>

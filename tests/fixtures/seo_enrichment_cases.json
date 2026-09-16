@@ -1,0 +1,68 @@
+[
+  {
+    "name": "explicit_full_listing",
+    "text": "University of Haifa is hiring a Postdoctoral Fellow in Coastal Ecology. Location: Haifa, Israel. Apply at https://jobs.example.edu/postings/123. Application deadline: 2026-11-30.",
+    "expected": {
+      "job_title": "Postdoctoral Fellow in Coastal Ecology",
+      "hiring_organization": "University of Haifa",
+      "application_url": "https://jobs.example.edu/postings/123",
+      "application_deadline": "2026-11-30",
+      "location_text": ["Haifa", "Haifa, Israel"]
+    }
+  },
+  {
+    "name": "missing_application_link",
+    "text": "The Weizmann Institute of Science seeks a PhD Student in Computational Biology in Rehovot, Israel. Contact the lab for details.",
+    "expected": {
+      "job_title": "PhD Student in Computational Biology",
+      "hiring_organization": "Weizmann Institute of Science",
+      "application_url": null,
+      "application_deadline": null,
+      "location_text": ["Rehovot", "Rehovot, Israel"]
+    }
+  },
+  {
+    "name": "linked_preview_evidence",
+    "text": "New role in our department.\n\n[Linked page - Research Assistant in Cognitive Neuroscience | University College London | London, UK | Apply: https://jobs.ucl.example/ra-22 | Closing date: 2026-10-04]",
+    "expected": {
+      "job_title": "Research Assistant in Cognitive Neuroscience",
+      "hiring_organization": "University College London",
+      "application_url": "https://jobs.ucl.example/ra-22",
+      "application_deadline": "2026-10-04",
+      "location_text": ["London", "London, UK"]
+    }
+  },
+  {
+    "name": "ambiguous_deadline_has_no_year",
+    "text": "Aarhus University invites applications for a PhD Fellowship in Marine Genomics in Aarhus, Denmark. Apply at https://phd.au.example/marine. Deadline: 2 October.",
+    "expected": {
+      "job_title": "PhD Fellowship in Marine Genomics",
+      "hiring_organization": "Aarhus University",
+      "application_url": "https://phd.au.example/marine",
+      "application_deadline": null,
+      "location_text": ["Aarhus", "Aarhus, Denmark"]
+    }
+  },
+  {
+    "name": "social_link_is_not_application_url",
+    "text": "ETH Zurich is recruiting a Postdoctoral Researcher in Quantum Materials in Zurich, Switzerland. More information in our Bluesky post: https://bsky.app/profile/example/post/abc.",
+    "expected": {
+      "job_title": "Postdoctoral Researcher in Quantum Materials",
+      "hiring_organization": "ETH Zurich",
+      "application_url": null,
+      "application_deadline": null,
+      "location_text": ["Zurich", "Zurich, Switzerland"]
+    }
+  },
+  {
+    "name": "unknown_employer_stays_null",
+    "text": "Fully funded PhD position in mathematical modelling. Applications: https://apply.example.org/doctoral/778. Based in Berlin, Germany. Deadline 2026-12-01.",
+    "expected": {
+      "job_title": ["PhD position in mathematical modelling", "Fully funded PhD position in mathematical modelling"],
+      "hiring_organization": null,
+      "application_url": "https://apply.example.org/doctoral/778",
+      "application_deadline": "2026-12-01",
+      "location_text": ["Berlin", "Berlin, Germany"]
+    }
+  }
+]

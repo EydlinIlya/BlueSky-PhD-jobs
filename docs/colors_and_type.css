@@ -27,7 +27,7 @@
     --fs-nano: 10px;         /* aggregator chip */
 
     /* ── Mono sizes (terminal voice) ───────────────────────── */
-    --fs-mono-prompt: 24px;  /* > PhD_Positions title */
+    --fs-mono-prompt: 24px;  /* site wordmark */
     --fs-mono-label:  11px;  /* uppercase filter labels */
     --fs-mono-meta:   12px;  /* card meta */
     --fs-mono-code:   13px;  /* search input, badges */

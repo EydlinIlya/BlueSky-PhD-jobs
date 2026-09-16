@@ -23,6 +23,12 @@ class Post:
     reply_parent_uri: str | None = None
     raw_text: str | None = None       # populated by BlueskySource only
     metadata_text: str | None = None  # populated by BlueskySource only
+    job_title: str | None = None
+    hiring_organization: str | None = None
+    application_url: str | None = None
+    application_deadline: str | None = None
+    location_text: str | None = None
+    seo_enriched_at: str | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for storage."""
@@ -36,6 +42,12 @@ class Post:
             "disciplines": self.disciplines,
             "position_type": self.position_type,
             "is_verified_job": self.is_verified_job,
+            "job_title": self.job_title,
+            "hiring_organization": self.hiring_organization,
+            "application_url": self.application_url,
+            "application_deadline": self.application_deadline,
+            "location_text": self.location_text,
+            "seo_enriched_at": self.seo_enriched_at,
         }
         if self.quoted_uri is not None:
             d["quoted_uri"] = self.quoted_uri

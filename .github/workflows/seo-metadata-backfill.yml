@@ -1,0 +1,70 @@
+name: SEO Metadata Backfill
+
+# One-time/resumable enrichment for active canonical positions. Apply
+# migrations/008_seo_job_metadata.sql before running this workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Maximum rows to process (0 = all remaining active rows)"
+        required: true
+        default: "20"
+        type: string
+      dry_run:
+        description: "Preview model output without updating Supabase"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seo-metadata-backfill
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Validate row limit
+        env:
+          ROW_LIMIT: ${{ inputs.limit }}
+        run: |
+          python - <<'PY'
+          import os
+
+          value = os.environ["ROW_LIMIT"]
+          if not value.isdigit():
+              raise SystemExit("limit must be a non-negative integer")
+          PY
+
+      - name: Backfill active position metadata
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          # Prefer a dedicated name, but existing deployments already store the
+          # privileged server-side key as SUPABASE_KEY. Secrets only: never vars.
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          ROW_LIMIT: ${{ inputs.limit }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=(--limit "$ROW_LIMIT")
+          if [[ "$DRY_RUN" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+          python scripts/backfill_seo_metadata.py "${args[@]}"

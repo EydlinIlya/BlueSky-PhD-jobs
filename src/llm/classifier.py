@@ -2,9 +2,11 @@
 
 import json
 import re
+from urllib.parse import urlparse
 
 from .base import LLMProvider
 from .config import DISCIPLINES, POSITION_TYPES, IS_REAL_JOB_PROMPT, METADATA_PROMPT_TEMPLATE
+from src.seo import normalize_http_url, parse_deadline
 
 
 def _default_metadata() -> dict:
@@ -13,7 +15,20 @@ def _default_metadata() -> dict:
         "disciplines": ["Other"],
         "country": "Unknown",
         "position_type": ["PhD Student"],
+        "job_title": None,
+        "hiring_organization": None,
+        "application_url": None,
+        "application_deadline": None,
+        "location_text": None,
     }
+
+
+def _nullable_text(value, max_length: int = 300) -> str | None:
+    """Accept a bounded, non-empty string and normalize all other values to null."""
+    if not isinstance(value, str):
+        return None
+    value = " ".join(value.split()).strip()
+    return value[:max_length] or None
 
 
 class JobClassifier:
@@ -40,13 +55,14 @@ class JobClassifier:
         return "YES" in response.upper()
 
     def get_metadata(self, text: str) -> dict:
-        """Extract disciplines, country, and position type from a job posting.
+        """Extract classification and evidence-backed SEO metadata.
 
         Args:
             text: The post text to analyze (bio + post + embed context)
 
         Returns:
-            Dict with 'disciplines' (list), 'country' (str), 'position_type' (list)
+            Dict containing the classification fields plus nullable title,
+            employer, application URL, deadline, and location fields.
         """
         disciplines_str = ", ".join(DISCIPLINES)
         prompt = METADATA_PROMPT_TEMPLATE.format(disciplines=disciplines_str)
@@ -126,10 +142,26 @@ class JobClassifier:
         if not position_type:
             position_type = ["PhD Student"]
 
+        job_title = _nullable_text(data.get("job_title"))
+        hiring_organization = _nullable_text(data.get("hiring_organization"))
+        location_text = _nullable_text(data.get("location_text"))
+
+        application_url = normalize_http_url(data.get("application_url"))
+        if application_url and "bsky.app" in urlparse(application_url).netloc.lower():
+            application_url = None
+
+        deadline = parse_deadline(data.get("application_deadline"))
+        application_deadline = deadline.isoformat() if deadline else None
+
         return {
             "disciplines": disciplines,
             "country": country,
             "position_type": position_type,
+            "job_title": job_title,
+            "hiring_organization": hiring_organization,
+            "application_url": application_url,
+            "application_deadline": application_deadline,
+            "location_text": location_text,
         }
 
     def classify_post(self, text: str, metadata_text: str | None = None) -> dict:
@@ -141,8 +173,8 @@ class JobClassifier:
                 extraction). Falls back to text if not provided.
 
         Returns:
-            Dict with 'is_verified_job', 'disciplines', 'country', 'position_type'.
-            Non-jobs have is_verified_job=False and None for other fields.
+            Dict with classification and SEO metadata. Non-jobs have
+            is_verified_job=False and None for all metadata fields.
         """
         is_job = self.is_real_job(text)
 
@@ -152,6 +184,11 @@ class JobClassifier:
                 "disciplines": None,
                 "country": None,
                 "position_type": None,
+                "job_title": None,
+                "hiring_organization": None,
+                "application_url": None,
+                "application_deadline": None,
+                "location_text": None,
             }
 
         metadata = self.get_metadata(metadata_text or text)
@@ -160,4 +197,9 @@ class JobClassifier:
             "disciplines": metadata["disciplines"],
             "country": metadata["country"],
             "position_type": metadata["position_type"],
+            "job_title": metadata["job_title"],
+            "hiring_organization": metadata["hiring_organization"],
+            "application_url": metadata["application_url"],
+            "application_deadline": metadata["application_deadline"],
+            "location_text": metadata["location_text"],
         }

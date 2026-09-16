@@ -222,6 +222,9 @@ body { padding-bottom: 34px; }
    ════════════════════════════════════════════════ */
 .river { display: flex; flex-direction: column; min-width: 0; }
 .river-head { position: sticky; top: var(--topbar-h); z-index: 5; background: rgba(247,249,252,.97); padding: 11px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border); }
+.river-intro { padding: 22px 0 18px; border-bottom: 1px solid var(--border); }
+.river-intro h1 { margin: 0 0 5px; font-family: var(--font-display); font-size: clamp(22px, 3vw, 30px); line-height: 1.2; letter-spacing: -.02em; }
+.river-intro p { margin: 0; color: var(--fg-subtle); font-size: 14px; }
 .river-tabs { display: flex; gap: 2px; }
 .river-tab { padding: 6px 13px; font-family: var(--font-mono); font-size: 12px; color: var(--fg-muted); background: transparent; border: none; cursor: pointer; border-bottom: 2px solid transparent; transition: color .15s; }
 .river-tab.active { color: var(--fg); border-bottom-color: var(--primary); }

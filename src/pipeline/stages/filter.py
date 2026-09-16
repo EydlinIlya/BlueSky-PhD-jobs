@@ -32,6 +32,12 @@ def run(run_date, storage, classifier) -> None:
             "disciplines": row.get("disciplines"),
             "country": row.get("country"),
             "position_type": row.get("position_type"),
+            "job_title": row.get("job_title"),
+            "hiring_organization": row.get("hiring_organization"),
+            "application_url": row.get("application_url"),
+            "application_deadline": row.get("application_deadline"),
+            "location_text": row.get("location_text"),
+            "seo_enriched_at": row.get("seo_enriched_at"),
         })
     if scholarshipdb_rows:
         logger.info(f"Auto-completed {len(scholarshipdb_rows)} ScholarshipDB rows")
@@ -50,6 +56,12 @@ def run(run_date, storage, classifier) -> None:
                 "disciplines": row.get("disciplines") or [],
                 "country": row.get("country"),
                 "position_type": row.get("position_type") or [],
+                "job_title": row.get("job_title"),
+                "hiring_organization": row.get("hiring_organization"),
+                "application_url": row.get("application_url"),
+                "application_deadline": row.get("application_deadline"),
+                "location_text": row.get("location_text"),
+                "seo_enriched_at": row.get("seo_enriched_at"),
             })
     else:
         logger.info(f"Classifying {len(bluesky_rows)} Bluesky rows...")
@@ -58,6 +70,8 @@ def run(run_date, storage, classifier) -> None:
             metadata_text = row.get("metadata_text") or raw_text
             try:
                 result = classifier.classify_post(raw_text, metadata_text=metadata_text)
+                if result.get("is_verified_job"):
+                    result["seo_enriched_at"] = datetime.now(timezone.utc).isoformat()
             except LLMUnavailableError as e:
                 logger.error(
                     f"LLM unavailable after {i - 1}/{len(bluesky_rows)} rows classified. "

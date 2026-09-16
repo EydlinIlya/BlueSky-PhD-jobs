@@ -1,5 +1,6 @@
 [
   {
+    "uri": "at://did:plc:mock/app.bsky.feed.post/abc123",
     "created_at": "2025-01-20T14:30:00Z",
     "disciplines": ["Computer Science"],
     "user_handle": "cs-dept.bsky.social",
@@ -7,6 +8,7 @@
     "url": "https://bsky.app/profile/cs-dept.bsky.social/post/abc123"
   },
   {
+    "uri": "at://did:plc:mock/app.bsky.feed.post/def456",
     "created_at": "2025-01-19T09:15:00Z",
     "disciplines": ["Biology", "Computer Science"],
     "user_handle": "bioinfo-lab.bsky.social",
@@ -14,6 +16,7 @@
     "url": "https://bsky.app/profile/bioinfo-lab.bsky.social/post/def456"
   },
   {
+    "uri": "at://did:plc:mock/app.bsky.feed.post/ghi789",
     "created_at": "2025-01-18T16:45:00Z",
     "disciplines": ["Physics", "Mathematics"],
     "user_handle": "quantum-group.bsky.social",
@@ -21,6 +24,7 @@
     "url": "https://bsky.app/profile/quantum-group.bsky.social/post/ghi789"
   },
   {
+    "uri": "at://did:plc:mock/app.bsky.feed.post/jkl012",
     "created_at": "2025-01-17T11:00:00Z",
     "disciplines": ["Medicine", "Biology", "Chemistry & Materials Science"],
     "user_handle": "pharma-research.bsky.social",
@@ -28,6 +32,7 @@
     "url": "https://bsky.app/profile/pharma-research.bsky.social/post/jkl012"
   },
   {
+    "uri": "at://did:plc:mock/app.bsky.feed.post/mno345",
     "created_at": "2025-01-16T08:20:00Z",
     "disciplines": ["Economics"],
     "user_handle": "econ-dept.bsky.social",
@@ -35,6 +40,7 @@
     "url": "https://bsky.app/profile/econ-dept.bsky.social/post/mno345"
   },
   {
+    "uri": "at://did:plc:mock/app.bsky.feed.post/pqr678",
     "created_at": "2025-01-15T13:30:00Z",
     "disciplines": ["Linguistics", "Computer Science"],
     "user_handle": "nlp-lab.bsky.social",
@@ -42,6 +48,7 @@
     "url": "https://bsky.app/profile/nlp-lab.bsky.social/post/pqr678"
   },
   {
+    "uri": "at://did:plc:mock/app.bsky.feed.post/stu901",
     "created_at": "2025-01-14T10:00:00Z",
     "disciplines": ["Psychology"],
     "user_handle": "cog-sci.bsky.social",
@@ -49,6 +56,7 @@
     "url": "https://bsky.app/profile/cog-sci.bsky.social/post/stu901"
   },
   {
+    "uri": "at://did:plc:mock/app.bsky.feed.post/vwx234",
     "created_at": "2025-01-13T15:45:00Z",
     "disciplines": ["General call"],
     "user_handle": "university-wide.bsky.social",
@@ -56,6 +64,7 @@
     "url": "https://bsky.app/profile/university-wide.bsky.social/post/vwx234"
   },
   {
+    "uri": "at://did:plc:mock/app.bsky.feed.post/yza567",
     "created_at": "2025-01-12T09:30:00Z",
     "disciplines": ["History", "Arts & Humanities"],
     "user_handle": "humanities-dept.bsky.social",
@@ -63,6 +72,7 @@
     "url": "https://bsky.app/profile/humanities-dept.bsky.social/post/yza567"
   },
   {
+    "uri": "at://did:plc:mock/app.bsky.feed.post/bcd890",
     "created_at": "2025-01-11T12:15:00Z",
     "disciplines": ["Sociology & Political Science", "Education"],
     "user_handle": "social-research.bsky.social",

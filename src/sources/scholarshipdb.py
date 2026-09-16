@@ -194,6 +194,9 @@ class ScholarshipDBSource(DataSource):
                 disciplines=[discipline],
                 position_type=position_type,
                 is_verified_job=True,  # Pre-verified from job site
+                job_title=title,
+                application_url=link,
+                location_text=country if country != "Unknown" else None,
             )
             posts.append(post)
 

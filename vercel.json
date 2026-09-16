@@ -31,7 +31,7 @@
       ]
     },
     {
-      "source": "/(sitemap\\.xml|robots\\.txt|llms\\.txt)",
+      "source": "/(sitemap\\.xml|sitemaps/.*\\.xml|robots\\.txt|llms\\.txt)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, s-maxage=600, stale-while-revalidate=120" }
       ]
