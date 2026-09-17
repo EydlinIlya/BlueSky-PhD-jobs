@@ -35,6 +35,8 @@ body { padding-bottom: 34px; }
 .cmd-kbd { font-family: var(--font-mono); font-size: 10px; color: var(--fg-subtle); padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; }
 
 .top-actions { display: flex; align-items: center; gap: 10px; }
+.auth-placeholder { width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 50%; background: var(--bg-card); }
+.rail-auth-pending { min-height: 64px; padding: 12px 4px; color: var(--fg-subtle); font-family: var(--font-ui); font-size: 12px; }
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: transparent; border: 1px solid var(--border); border-radius: 7px; color: var(--fg-muted); cursor: pointer; transition: color .15s, background .15s, border-color .15s; position: relative; }
 .icon-btn:hover { color: var(--fg); background: var(--bg-card); border-color: var(--border-strong); }
 .icon-btn.has-dot::after { content: ''; position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 0 2px var(--bg); }

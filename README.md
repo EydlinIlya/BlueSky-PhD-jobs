@@ -184,6 +184,11 @@ title, employer, external application URL, known country, and substantive
 visible description. Passing that gate makes a page eligible for markup; it
 does not guarantee that Google will crawl, index, or show it.
 
+Deadline years must be explicit in the source text. A stored deadline from a
+calendar year before its source post is treated as invalid and falls back to
+the 90-day window; it is also omitted from generated snapshots and structured
+data.
+
 Google Jobs additionally expects:
 
 - one real vacancy on the detail page;

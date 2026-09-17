@@ -91,7 +91,10 @@ function isActivePosition(position, now = new Date()) {
     const rawDeadline = position && position.application_deadline;
     if (typeof rawDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDeadline)) {
         const deadline = new Date(`${rawDeadline}T23:59:59Z`);
-        if (!Number.isNaN(deadline.getTime())) return deadline >= now;
+        const created = new Date(position && position.created_at);
+        const impossible = !Number.isNaN(created.getTime())
+            && deadline.getUTCFullYear() < created.getUTCFullYear();
+        if (!Number.isNaN(deadline.getTime()) && !impossible) return deadline >= now;
     }
     const created = new Date(position && position.created_at);
     if (Number.isNaN(created.getTime())) return false;
@@ -115,6 +118,7 @@ const state = {
     filters: { level: new Set(), country: new Set(), area: new Set() },
     threadOpen: new Set(),
     user: null,              // Supabase auth user | null
+    authReady: false,        // false until the persisted session has been checked
     authMode: 'signup',      // 'signup' | 'signin'
     follows: new Set(),      // followed Bluesky handles (account_follows)
     topics: new Set(),       // followed topic tokens — disciplines/countries (topic_follows)
@@ -894,6 +898,12 @@ async function signOut() {
 function renderTopbar() {
     const u = state.user;
     const wrap = $('#top-account');
+    if (!state.authReady) {
+        wrap.setAttribute('aria-busy', 'true');
+        wrap.innerHTML = '<div class="auth-placeholder" role="status" aria-label="Checking sign-in status"></div>';
+        return;
+    }
+    wrap.removeAttribute('aria-busy');
     if (u) {
         wrap.innerHTML = `
           <div class="profile-wrap">
@@ -933,6 +943,12 @@ function renderTopbar() {
 function renderRailSubs() {
     const u = state.user;
     const sec = $('#rail-subs-section');
+    if (!state.authReady) {
+        sec.setAttribute('aria-busy', 'true');
+        sec.innerHTML = '<div class="rail-auth-pending" role="status">Loading account…</div>';
+        return;
+    }
+    sec.removeAttribute('aria-busy');
     if (u) {
         const list = state.subs.length ? state.subs.map(s => `
           <div class="sub-row" data-open-subs="1">
@@ -1489,17 +1505,24 @@ function onDataReady(positions, duplicates, total) {
 }
 
 async function setupAuth() {
-    if (!authEnabled()) { renderTopbar(); renderRailSubs(); return; }
+    if (!authEnabled()) {
+        state.authReady = true;
+        renderTopbar();
+        renderRailSubs();
+        return;
+    }
     try {
         const { data } = await supabaseClient.auth.getSession();
         state.user = data.session ? data.session.user : null;
         if (state.user) { await loadFollows(); await loadSubs(); }
     } catch (e) { console.warn('auth session load failed', e); }
+    state.authReady = true;
     renderTopbar();
     renderRailSubs();
     refreshFollowUI();
     supabaseClient.auth.onAuthStateChange(async (_event, session) => {
         const wasUser = !!state.user;
+        state.authReady = true;
         state.user = session ? session.user : null;
         if (state.user) { await loadFollows(); await loadSubs(); }
         else {

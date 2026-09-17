@@ -139,6 +139,10 @@ substantive description. Invalid dates/URLs fail conservatively. This local
 gate is necessary but not sufficient for Google Jobs: Google expects the visible
 page to contain a complete vacancy description, so a short social post may pass
 the schema gate while still being unsuitable for the job-search experience.
+Deadline years must be explicit in model input, and `effective_deadline()`
+rejects stored deadlines whose calendar year predates the source post; those
+rows fall back to the 90-day rule and generated surfaces omit the impossible
+date.
 
 **SEO enrichment tools:**
 - `scripts/benchmark_seo_enrichment.py` evaluates Ministral 14B against the
@@ -446,6 +450,9 @@ onboarding, subscriptions page, toasts).
   keyword/area/country/level/aggregator filters and opens the Latest feed.
 - **Follows** are live: "+ follow" on a post toggles an `account_follows` row;
   "follow" on a right-rail Top-area/country toggles a `topic_follows` row.
+- Initial account chrome stays in a neutral `authReady=false` pending state
+  until `getSession()` resolves, so reloads never flash logged-out controls for
+  an authenticated visitor.
 - The river's **Following** tab is a combined personalized feed:
   followed accounts ∪ followed topics ∪ saved-search subscriptions
   (`matchesFollowing()` / `subMatchesPosition()` in `app.js`). The left-rail
