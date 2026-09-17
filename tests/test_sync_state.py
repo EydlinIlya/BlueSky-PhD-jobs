@@ -40,23 +40,23 @@ class TestSyncStateManager:
         manager = SyncStateManager(temp_state_file)
 
         manager.update_source_state("bluesky", "2026-01-01T00:00:00Z", {"uri1"})
-        manager.update_source_state("scholarshipdb", "2026-02-01T00:00:00Z", {"uri2"})
+        manager.update_source_state("secondary", "2026-02-01T00:00:00Z", {"uri2"})
 
         bluesky_state = manager.get_source_state("bluesky")
-        scholarshipdb_state = manager.get_source_state("scholarshipdb")
+        secondary_state = manager.get_source_state("secondary")
 
         assert bluesky_state["last_timestamp"] == "2026-01-01T00:00:00Z"
-        assert scholarshipdb_state["last_timestamp"] == "2026-02-01T00:00:00Z"
+        assert secondary_state["last_timestamp"] == "2026-02-01T00:00:00Z"
 
     def test_get_all_sources(self, temp_state_file):
         """Test getting list of all sources."""
         manager = SyncStateManager(temp_state_file)
         manager.update_source_state("bluesky", "2026-01-01T00:00:00Z", set())
-        manager.update_source_state("scholarshipdb", "2026-02-01T00:00:00Z", set())
+        manager.update_source_state("secondary", "2026-02-01T00:00:00Z", set())
 
         sources = manager.get_all_sources()
         assert "bluesky" in sources
-        assert "scholarshipdb" in sources
+        assert "secondary" in sources
 
     def test_clear_source(self, temp_state_file):
         """Test clearing a source's state."""

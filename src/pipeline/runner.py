@@ -21,10 +21,10 @@ def run_pipeline(run_date, sources: list[str], storage, classifier, args) -> Non
 
     Args:
         run_date: datetime.date for today's run (used as pipeline_runs key)
-        sources: List of enabled source names (e.g. ['bluesky', 'scholarshipdb'])
+        sources: List of enabled source names (currently only ``bluesky``)
         storage: SupabaseStorage instance
         classifier: JobClassifier instance, or None if --no-llm
-        args: Parsed CLI args (query, limit, scholarshipdb_pages, full_sync, stage, …)
+        args: Parsed CLI args (query, limit, full_sync, stage, …)
     """
     stop_after = getattr(args, "stage", "all")
     run = storage.get_or_create_run(run_date)

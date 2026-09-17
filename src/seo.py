@@ -51,6 +51,24 @@ def parse_deadline(value) -> date | None:
         return None
 
 
+def effective_deadline(position: dict) -> date | None:
+    """Return a usable deadline, rejecting years older than the source post.
+
+    Yearless dates are intentionally stored as null by the extractor, but older
+    model output sometimes attached a default year (notably 2024). A deadline
+    from a prior calendar year cannot describe a newly advertised vacancy, so
+    it must not force the position into the archive or appear in structured
+    data. Same-year expired reposts remain archived.
+    """
+    deadline = parse_deadline(position.get("application_deadline"))
+    if deadline is None:
+        return None
+    created = parse_datetime(position.get("created_at") or position.get("created"))
+    if created is not None and deadline.year < created.year:
+        return None
+    return deadline
+
+
 def normalize_http_url(value) -> str | None:
     """Return a valid absolute HTTP(S) URL, otherwise ``None``."""
     if not isinstance(value, str):
@@ -75,7 +93,7 @@ def is_position_active(position: dict, now: datetime | None = None) -> bool:
     kept open indefinitely.
     """
     current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    deadline = parse_deadline(position.get("application_deadline"))
+    deadline = effective_deadline(position)
     if deadline is not None:
         return deadline >= current.date()
 

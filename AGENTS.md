@@ -18,16 +18,13 @@ When making changes:
 
 ## Project Overview
 
-PhD Position Finder aggregates PhD position announcements from multiple sources:
-- **Bluesky** - Social network posts via AT Protocol SDK with LLM filtering
-- **ScholarshipDB** - Academic job listings via web scraping
+PhD Sky aggregates public PhD and academic-position posts from **Bluesky** via
+the AT Protocol and filters them with an LLM.
 
 Features include:
-- Multi-source aggregation with unified data format
 - LLM-based filtering for Bluesky posts (Mistral/Ministral 14B → Gemini/Gemma → NVIDIA NIM → Groq failover)
-- Pre-classified positions from ScholarshipDB (no LLM needed)
 - Single JSON metadata extraction: disciplines (1-3), country, and position type
-- Per-source incremental sync state
+- Incremental sync state for Bluesky collection
 - Multiple storage backends (CSV, Supabase)
 - Deduplication of reposted positions (TF-IDF + LLM verification)
 - GitHub Actions for automated daily updates
@@ -79,14 +76,8 @@ SUPABASE_ANON_KEY=your-anon-key       # Vercel unsubscribe function (public key)
 # Default: Bluesky only, CSV storage
 python bluesky_search.py
 
-# Both sources
-python bluesky_search.py --sources bluesky,scholarshipdb
-
-# ScholarshipDB only
-python bluesky_search.py --sources scholarshipdb --scholarshipdb-pages 5
-
-# Supabase storage with both sources
-python bluesky_search.py --storage supabase --sources bluesky,scholarshipdb
+# Supabase storage
+python bluesky_search.py --storage supabase
 
 # Full sync (ignore previous state)
 python bluesky_search.py --full-sync
@@ -100,7 +91,6 @@ python bluesky_search.py --no-llm
 ### Main Script (`bluesky_search.py`)
 - `get_classifier()` - Creates LLM classifier if API key available
 - `get_storage()` - Creates storage backend (CSV or Supabase)
-- `parse_sources()` - Validates source selection
 - `main()` - Routes to 4-stage pipeline (Supabase) or simplified single-pass flow (CSV)
 
 ### Modules
@@ -110,10 +100,9 @@ python bluesky_search.py --no-llm
   (includes raw/metadata text plus nullable title, employer, application URL,
   deadline, location, and enrichment timestamp fields)
 - `bluesky.py` - Bluesky source; stores `raw_text`/`metadata_text` on Post; returns posts unclassified (`is_verified_job=None`)
-- `scholarshipdb.py` - ScholarshipDB web scraper
 
-**`src/sync_state.py`** - Multi-source sync state management
-- `SyncStateManager` class for per-source state tracking (CSV backend only)
+**`src/sync_state.py`** - Bluesky sync-state management
+- `SyncStateManager` class for incremental CSV-backend tracking
 
 **`src/logger.py`** - Logging configuration
 
@@ -146,7 +135,14 @@ per-row calls so its checkpoint/resume semantics remain simple.
 **`src/seo.py`** - Shared active/archive/eligibility policy. A valid explicit
 deadline overrides the 90-day posting-age fallback. SEO eligibility additionally
 requires a verified title, employer, external application URL, country, and a
-substantive description. Invalid dates/URLs fail conservatively.
+substantive description. Invalid dates/URLs fail conservatively. This local
+gate is necessary but not sufficient for Google Jobs: Google expects the visible
+page to contain a complete vacancy description, so a short social post may pass
+the schema gate while still being unsuitable for the job-search experience.
+Deadline years must be explicit in model input, and `effective_deadline()`
+rejects stored deadlines whose calendar year predates the source post; those
+rows fall back to the 90-day rule and generated surfaces omit the impossible
+date.
 
 **SEO enrichment tools:**
 - `scripts/benchmark_seo_enrichment.py` evaluates Ministral 14B against the
@@ -228,7 +224,12 @@ Each stage writes persistent state before proceeding. A restart on the same
 | 3 Dedup | verified staging rows + existing canonical posts in `phd_positions` | `duplicate_of` set on staging rows |
 | 4 Publish | all staging rows | upserted into `phd_positions`; staging + `pipeline_runs` row deleted |
 
-The ingest workflow (`.github/workflows/scheduled-search.yml`) runs **4×/day** (05:00, 11:00, 17:00, 23:00 UTC). After each successful publish the `pipeline_runs` row is deleted, so subsequent runs within the same day fetch only posts newer than the last publish (incremental via `phd_positions.created_at`).
+The ingest workflow (`.github/workflows/scheduled-search.yml`) runs **4×/day**
+(05:00, 11:00, 17:00, 23:00 UTC). Only the 05:00 UTC run regenerates and commits
+the static site, limiting routine Vercel production deployments to one per day.
+Manual non-recovery runs also regenerate it. After each successful publish the
+`pipeline_runs` row is deleted, so later runs fetch only posts newer than the
+last publish (incremental via `phd_positions.created_at`).
 
 The Telegram digest runs separately on its own 3×/day schedule — see the post_to_telegram entry above.
 
@@ -238,14 +239,9 @@ The Telegram digest runs separately on its own 3×/day schedule — see the post
 3. Prepend author bio; build `raw_text` + `metadata_text`
 4. Return all posts with `is_verified_job=None` (classification happens in Stage 2)
 
-**ScholarshipDB Source (fetch stage):**
-1. Query each discipline field separately
-2. Parse HTML listings for title, country, date, link
-3. All positions are `is_verified_job=True` (Stage 2 passes them through immediately)
-
 ### Data Flow (CSV — Single-Pass)
 
-1. Fetch from all sources (BlueskySource returns unclassified posts)
+1. Fetch Bluesky posts (BlueskySource returns unclassified posts)
 2. Inline LLM classification per Bluesky post (if classifier available)
 3. Save directly to CSV; update sync state
 
@@ -263,18 +259,15 @@ Test files:
 - `tests/test_csv_storage.py` - CSV storage with array serialization
 - `tests/test_mock_storage.py` - Mock storage backend behavior
 - `tests/test_integration.py` - End-to-end classifier → storage pipeline
-- `tests/test_scholarshipdb_source.py` - ScholarshipDB source
 - `tests/test_seo_lifecycle.py` - active/archive boundaries and strict eligibility
 - `tests/test_seo_pipeline.py` - source-to-staging-to-publish SEO field contract
 - `tests/test_seo_escaping.py` - generated pages, split sitemaps, indexing/schema invariants, and script safety
 - `tests/test_e2e_frontend.py` - offline `?mock` Playwright smoke tests for the current feed selectors
-- `tests/test_sync_state.py` - Multi-source sync state management
+- `tests/test_sync_state.py` - Incremental sync-state management
 
 ## Key Dependencies
 
 - `atproto` - AT Protocol SDK (Bluesky)
-- `httpx` - HTTP client (ScholarshipDB scraping)
-- `beautifulsoup4` - HTML parsing
 - `python-dotenv` - Environment variables
 - `requests` - Hosted LLM APIs and web requests
 - `scikit-learn` - TF-IDF similarity (deduplication)
@@ -396,13 +389,12 @@ Required secrets:
 
 ## Frontend (`docs/`)
 
-Static Vercel/GitHub Pages site for browsing PhD positions. The UI is the
-**scientific terminal** feed: a light interface with monospace controls, Fira
-Code / Fira Sans typography, and explicit post actions. No build step; plain
-HTML + CSS + vanilla JS.
+Static Vercel/GitHub Pages site for browsing PhD positions. The UI is a light
+academic feed with explicit post actions. No build step; plain HTML + CSS +
+vanilla JS.
 
 **`docs/index.html`** - Single-page feed shell:
-- Top bar (wordmark + command/search bar + auth slot), left rail (streams +
+- Top bar (wordmark + desktop focus-expanding search bar + auth slot), left rail (streams +
   filter chips + subscriptions nudge), center river feed, right activity rail,
   post-detail flyout, auth modal container, toasts, sticky footer
 - Supabase JS and CookieConsent load from jsDelivr; fonts load from Google Fonts.
@@ -424,6 +416,9 @@ go through `json_for_script()` in `scripts/generate_seo_pages.py`, never bare
 
 **`docs/colors_and_type.css`** - Light scientific-terminal tokens and the Fira
 Code / Fira Sans type system. Loads before `styles.css`.
+
+**Brand assets:** `docs/favicon.svg` is the mineral-paper open-book/sky-star
+mark; `docs/site.webmanifest` carries matching theme metadata.
 
 **`docs/styles.css`** - v3 feed styles (topbar, rails, river/post, flyout, modal,
 onboarding, subscriptions page, toasts).
@@ -455,6 +450,9 @@ onboarding, subscriptions page, toasts).
   keyword/area/country/level/aggregator filters and opens the Latest feed.
 - **Follows** are live: "+ follow" on a post toggles an `account_follows` row;
   "follow" on a right-rail Top-area/country toggles a `topic_follows` row.
+- Initial account chrome stays in a neutral `authReady=false` pending state
+  until `getSession()` resolves, so reloads never flash logged-out controls for
+  an authenticated visitor.
 - The river's **Following** tab is a combined personalized feed:
   followed accounts ∪ followed topics ∪ saved-search subscriptions
   (`matchesFollowing()` / `subMatchesPosition()` in `app.js`). The left-rail
@@ -567,6 +565,11 @@ and resubmit `sitemap.xml` in Search Console; then inspect the homepage,
 Indexing API until the structured-data cohort is clean.
 
 **`vercel.json`** - Static deploy config for Vercel (serves `docs/`). The site is canonical at **<https://phdsky.org/>** (Vercel from `main:/docs`). The legacy GitHub Pages URL redirects here from the `gh-pages` branch (its `docs/` contains only a meta-refresh + JS redirect to `phdsky.org`). `scripts/generate_seo_pages.py` defaults `BASE_URL` to `https://phdsky.org/`; override with `SITE_BASE_URL` env if you need a different host.
+
+Vercel Deployment Retention is configured in the project dashboard, not in
+`vercel.json`. Recommended Hobby policy: production 7 days, previews 3 days,
+errored/cancelled 1 day. Remove merged remote branches so their latest preview
+is no longer protected from retention.
 
 ### RLS Policy Required
 

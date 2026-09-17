@@ -31,6 +31,12 @@ def _nullable_text(value, max_length: int = 300) -> str | None:
     return value[:max_length] or None
 
 
+def _deadline_year_is_explicit(text: str, year: int) -> bool:
+    """Require the model's deadline year to exist in non-URL source text."""
+    without_urls = re.sub(r"https?://\S+", " ", text or "", flags=re.IGNORECASE)
+    return re.search(rf"(?<!\d){year}(?!\d)", without_urls) is not None
+
+
 class JobClassifier:
     """Classifier for filtering and categorizing academic job postings."""
 
@@ -151,6 +157,8 @@ class JobClassifier:
             application_url = None
 
         deadline = parse_deadline(data.get("application_deadline"))
+        if deadline and not _deadline_year_is_explicit(text, deadline.year):
+            deadline = None
         application_deadline = deadline.isoformat() if deadline else None
 
         return {

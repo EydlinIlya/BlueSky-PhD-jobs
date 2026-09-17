@@ -167,12 +167,26 @@ class TestGetMetadata:
             "application_deadline": "2026-11-30",
             "location_text": "Haifa, Israel",
         })
-        result = JobClassifier(MockLLM([response])).get_metadata("explicit listing")
+        result = JobClassifier(MockLLM([response])).get_metadata(
+            "Explicit listing. Application deadline: 2026-11-30."
+        )
         assert result["job_title"] == "Postdoctoral Fellow in Coastal Ecology"
         assert result["hiring_organization"] == "University of Haifa"
         assert result["application_url"] == "https://jobs.example.edu/postings/123"
         assert result["application_deadline"] == "2026-11-30"
         assert result["location_text"] == "Haifa, Israel"
+
+    def test_model_cannot_invent_year_for_yearless_deadline(self):
+        response = json.dumps({
+            "disciplines": ["Psychology"],
+            "country": "UK",
+            "position_type": ["Postdoc"],
+            "application_deadline": "2024-10-16",
+        })
+        result = JobClassifier(MockLLM([response])).get_metadata(
+            "Postdoc at Oxford. Deadline noon 16th Oct."
+        )
+        assert result["application_deadline"] is None
 
     def test_invalid_or_social_urls_and_dates_become_null(self):
         response = json.dumps({

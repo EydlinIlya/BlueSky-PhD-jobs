@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from src.seo import is_position_active, is_seo_eligible, lifecycle_state
+from src.seo import effective_deadline, is_position_active, is_seo_eligible, lifecycle_state
 
 
 NOW = datetime(2026, 9, 16, 12, 0, tzinfo=timezone.utc)
@@ -49,6 +49,17 @@ def test_malformed_deadline_falls_back_to_post_age():
         ),
         now=NOW,
     )
+
+
+def test_deadline_before_source_post_is_ignored_as_impossible():
+    row = position(
+        created_at="2026-09-16T22:32:59+00:00",
+        application_deadline="2024-10-16",
+    )
+
+    assert effective_deadline(row) is None
+    assert is_position_active(row, now=NOW + timedelta(days=1))
+    assert is_seo_eligible(row, now=NOW + timedelta(days=1))
 
 
 def test_missing_or_malformed_post_date_is_archived():

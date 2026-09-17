@@ -1,4 +1,4 @@
-"""Search for PhD positions from multiple sources."""
+"""Search Bluesky for PhD and academic research positions."""
 
 import argparse
 import os
@@ -21,15 +21,12 @@ from src.llm import (
 )
 from src.storage import StorageBackend, CSVStorage, SupabaseStorage
 from src.sync_state import SyncStateManager
-from src.sources import BlueskySource, ScholarshipDBSource
+from src.sources import BlueskySource
 
 # Fix Windows console encoding
 sys.stdout.reconfigure(encoding="utf-8")
 
 logger = setup_logger()
-
-# Available sources
-AVAILABLE_SOURCES = ["bluesky", "scholarshipdb"]
 
 
 def get_classifier() -> JobClassifier | None:
@@ -79,31 +76,10 @@ def get_storage(backend: str, output: str) -> StorageBackend:
     return CSVStorage(output)
 
 
-def parse_sources(sources_arg: str | None) -> list[str]:
-    """Parse and validate the sources argument.
-
-    Args:
-        sources_arg: Comma-separated list of sources, or None for default
-
-    Returns:
-        List of validated source names
-    """
-    if not sources_arg:
-        return ["bluesky"]  # Default to Bluesky only
-
-    sources = [s.strip().lower() for s in sources_arg.split(",")]
-    invalid = [s for s in sources if s not in AVAILABLE_SOURCES]
-    if invalid:
-        raise ValueError(
-            f"Invalid sources: {invalid}. Available: {AVAILABLE_SOURCES}"
-        )
-    return sources
-
-
 def main():
     """Run PhD position search."""
     parser = argparse.ArgumentParser(
-        description="Search for PhD positions from multiple sources"
+        description="Search Bluesky for PhD and academic research positions"
     )
     parser.add_argument(
         "-q", "--query",
@@ -138,18 +114,6 @@ def main():
         help="Storage backend (default: csv)",
     )
     parser.add_argument(
-        "--sources",
-        type=str,
-        default=None,
-        help=f"Comma-separated list of sources (default: bluesky). Available: {', '.join(AVAILABLE_SOURCES)}",
-    )
-    parser.add_argument(
-        "--scholarshipdb-pages",
-        type=int,
-        default=2,
-        help="Max pages to fetch per field from ScholarshipDB (default: 2)",
-    )
-    parser.add_argument(
         "--stage",
         choices=["fetch", "filter", "dedup", "publish", "all"],
         default="all",
@@ -157,13 +121,8 @@ def main():
     )
     args = parser.parse_args()
 
-    # Parse sources
-    try:
-        sources = parse_sources(args.sources)
-        logger.info(f"Using sources: {', '.join(sources)}")
-    except ValueError as e:
-        logger.error(str(e))
-        return
+    sources = ["bluesky"]
+    logger.info("Using Bluesky source")
 
     # Set up storage backend
     try:
@@ -201,7 +160,7 @@ def main():
 
     for source_name in sources:
         logger.info(f"\n{'='*40}")
-        logger.info(f"Fetching from {source_name}")
+        logger.info("Fetching from Bluesky")
         logger.info("=" * 40)
 
         since_timestamp = None
@@ -222,13 +181,7 @@ def main():
             logger.info("Full sync (--full-sync specified)")
 
         try:
-            if source_name == "bluesky":
-                source = BlueskySource(queries=args.query, limit=args.limit)
-            elif source_name == "scholarshipdb":
-                source = ScholarshipDBSource(max_pages=args.scholarshipdb_pages)
-            else:
-                logger.warning(f"Unknown source: {source_name}")
-                continue
+            source = BlueskySource(queries=args.query, limit=args.limit)
 
             posts, seen_uris = source.fetch_posts(
                 since_timestamp=since_timestamp,

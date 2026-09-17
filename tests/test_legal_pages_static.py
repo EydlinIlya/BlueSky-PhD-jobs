@@ -16,7 +16,7 @@ def test_about_restores_service_identity_and_methodology():
     assert "operated by <strong>Eli Eydlin</strong>" in about
     assert "in Israel" not in about
     assert "free, independent, non-commercial service" in about
-    assert "ScholarshipDB" in about
+    assert "through the AT Protocol" in about
     assert "Automation can be wrong" in about
     assert "/_vercel/insights/script.js" not in about
 

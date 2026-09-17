@@ -25,11 +25,11 @@ from dotenv import load_dotenv
 from supabase import create_client
 
 from src.seo import (
+    effective_deadline,
     is_position_active,
     is_seo_eligible,
     lifecycle_state,
     normalize_http_url,
-    parse_deadline,
 )
 
 load_dotenv()
@@ -124,8 +124,8 @@ def extract_slug(uri):
     """Return a URL-safe slug from a position URI, or None if not derivable.
 
     Bluesky URIs look like `at://did:plc:abc/app.bsky.feed.post/3mldoq7ee5k2s`,
-    so the post ID lives in the trailing segment. ScholarshipDB URLs follow
-    the same pattern. Sanitize defensively to keep it filename-safe.
+    so the post ID lives in the trailing segment. Sanitize defensively to keep
+    it filename-safe.
     """
     if not uri:
         return None
@@ -188,7 +188,7 @@ def build_job_posting(pos, canonical_url=None):
             },
         },
     }
-    deadline = parse_deadline(pos.get("application_deadline"))
+    deadline = effective_deadline(pos)
     if deadline:
         jp["validThrough"] = f"{deadline.isoformat()}T23:59:59Z"
     location_text = (pos.get("location_text") or "").strip()
@@ -343,7 +343,9 @@ def update_index_html(positions, total_count, now=None):
             "job_title": pos.get("job_title"),
             "hiring_organization": pos.get("hiring_organization"),
             "application_url": pos.get("application_url"),
-            "application_deadline": pos.get("application_deadline"),
+            "application_deadline": (
+                effective_deadline(pos).isoformat() if effective_deadline(pos) else None
+            ),
             "location_text": pos.get("location_text"),
         })
 
@@ -386,7 +388,7 @@ def update_index_html(positions, total_count, now=None):
             f"    {noscript_block}\n\n    <!-- App script -->",
         )
 
-    with open(index_path, "w", encoding="utf-8") as f:
+    with open(index_path, "w", encoding="utf-8", newline="\n") as f:
         f.write(html)
 
     print(f"Updated index.html: {len(static_positions)} embedded positions, total={total_count}")
@@ -583,7 +585,7 @@ def _listing_page(*, title, description, canonical, h1, lead, articles, jsonld,
 def _write_page(rel_path, html):
     path = os.path.join(DOCS_DIR, rel_path)
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write(html)
 
 
@@ -791,7 +793,7 @@ def render_position_page(pos, slug, now=None):
             "Check the source carefully before applying; this page is not included in search indexing.</div>"
         )
 
-    deadline = parse_deadline(pos.get("application_deadline"))
+    deadline = effective_deadline(pos)
     details = []
     if employer:
         details.append(f"Hiring organization: {escape_html(employer)}")
@@ -897,7 +899,7 @@ def generate_position_pages(positions, now=None):
 
         path = os.path.join(pages_dir, f"{slug}.html")
         html = render_position_page(pos, slug, now=now)
-        with open(path, "w", encoding="utf-8") as f:
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
             f.write(html)
         written += 1
 
@@ -964,9 +966,9 @@ def generate_sitemap(slug_to_lastmod=None, listing_urls=None):
 
     sitemap_dir = os.path.join(DOCS_DIR, "sitemaps")
     os.makedirs(sitemap_dir, exist_ok=True)
-    with open(os.path.join(sitemap_dir, "core.xml"), "w", encoding="utf-8") as f:
+    with open(os.path.join(sitemap_dir, "core.xml"), "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(core_parts))
-    with open(os.path.join(sitemap_dir, "jobs.xml"), "w", encoding="utf-8") as f:
+    with open(os.path.join(sitemap_dir, "jobs.xml"), "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(job_parts))
 
     sitemap_index = "\n".join([
@@ -976,7 +978,7 @@ def generate_sitemap(slug_to_lastmod=None, listing_urls=None):
         f"  <sitemap><loc>{BASE_URL}sitemaps/jobs.xml</loc><lastmod>{today}</lastmod></sitemap>",
         "</sitemapindex>",
     ])
-    with open(os.path.join(DOCS_DIR, "sitemap.xml"), "w", encoding="utf-8") as f:
+    with open(os.path.join(DOCS_DIR, "sitemap.xml"), "w", encoding="utf-8", newline="\n") as f:
         f.write(sitemap_index)
     extra = len(slug_to_lastmod or {})
     print(f"Generated sitemap index: 5 core + {len(listing)} hubs + {extra} eligible jobs")
@@ -996,7 +998,9 @@ def _snapshot_position(pos):
         "job_title": pos.get("job_title"),
         "hiring_organization": pos.get("hiring_organization"),
         "application_url": pos.get("application_url"),
-        "application_deadline": pos.get("application_deadline"),
+        "application_deadline": (
+            effective_deadline(pos).isoformat() if effective_deadline(pos) else None
+        ),
         "location_text": pos.get("location_text"),
     }
 
@@ -1019,7 +1023,7 @@ def _write_snapshot(filename, positions, duplicates):
         "duplicates": [_snapshot_duplicate(row) for row in duplicates],
     }
     path = os.path.join(DOCS_DIR, filename)
-    with open(path, "w", encoding="utf-8") as f:
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(snapshot, f, separators=(",", ":"), ensure_ascii=False)
     size_kb = os.path.getsize(path) / 1024
     print(

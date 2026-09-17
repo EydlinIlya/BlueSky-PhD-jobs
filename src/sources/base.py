@@ -66,7 +66,7 @@ class DataSource(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        """Return the source name (e.g., 'bluesky', 'scholarshipdb')."""
+        """Return the source name (for example, ``bluesky``)."""
         pass
 
     @abstractmethod

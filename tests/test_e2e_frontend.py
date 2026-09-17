@@ -60,6 +60,28 @@ class TestFrontendLoads:
         page.wait_for_timeout(250)
         assert errors == []
 
+    def test_auth_pending_state_never_renders_signed_out_actions(self, server_url, page):
+        open_feed(page, server_url)
+        page.evaluate("""() => {
+          state.user = null;
+          state.authReady = false;
+          renderTopbar();
+          renderRailSubs();
+        }""")
+        assert page.locator("#top-account").get_attribute("aria-busy") == "true"
+        assert page.locator("#top-account .auth-placeholder").count() == 1
+        assert page.locator("#top-account .btn-signin").count() == 0
+        assert page.locator("#top-account .btn-signup").count() == 0
+        assert page.locator("#rail-subs-section .rail-nudge").count() == 0
+
+    def test_impossible_old_deadline_falls_back_to_post_age(self, server_url, page):
+        open_feed(page, server_url)
+        active = page.evaluate("""() => isActivePosition({
+          created_at: '2026-09-16T22:32:59.414+00:00',
+          application_deadline: '2024-10-16'
+        }, new Date('2026-09-17T12:00:00Z'))""")
+        assert active is True
+
     def test_post_has_explicit_content_and_actions(self, server_url, page):
         open_feed(page, server_url)
         first = page.locator("article.post").first
@@ -94,6 +116,17 @@ class TestFrontendLoads:
         open_feed(page, server_url)
         page.keyboard.press("Control+k")
         assert page.locator("#cmd-input").evaluate("el => el === document.activeElement")
+
+    def test_desktop_search_expands_when_focused(self, server_url, page):
+        page.set_viewport_size({"width": 1440, "height": 900})
+        open_feed(page, server_url)
+        search = page.locator(".command-bar")
+        before = search.bounding_box()
+        page.locator("#cmd-input").focus()
+        page.wait_for_timeout(300)
+        after = search.bounding_box()
+        assert before is not None and after is not None
+        assert after["width"] >= before["width"] + 150
 
     def test_subscription_show_matches_restores_saved_filters(self, server_url, page):
         open_feed(page, server_url)
