@@ -364,8 +364,9 @@ The browse-positions site is at **<https://phdsky.org/>** (Vercel, served from
 The UI is a light academic **feed**: a chronological river of active positions
 with day separators and infinite scroll, a left rail of filter chips
 (Level / Country / Area + "Hide aggregator reposts"), a command/search bar, and a
-post-detail flyout. Saved subscriptions can be edited in place without recreating
-them. Plain HTML + CSS + vanilla JS, no build step. Data loads from
+post-detail flyout. Saved subscriptions can be edited in place or reopened as
+their exact matching feed without recreating them. Plain HTML + CSS + vanilla
+JS, no build step. Data loads from
 an embedded snapshot → `positions.json` → live Supabase. Open it locally with
 `python -m http.server --directory docs` (add `?mock` to use bundled sample data).
 The About and Terms pages identify the service's operator, non-commercial status,

@@ -36,7 +36,7 @@ load_dotenv()
 
 SITE_URL = os.environ.get("SITE_BASE_URL", "https://phdsky.org/")
 MAX_POSITIONS_PER_DIGEST = 3
-OPERATOR_LINE = "PhD Sky · operated by Eli Eydlin in Israel"
+OPERATOR_LINE = "PhD Sky · operated by Eli Eydlin"
 CONTACT_EMAIL = "eli.eydlin@gmail.com"
 # mailto fallback for List-Unsubscribe (works even if the URL flow is down).
 UNSUB_MAILTO = os.environ.get("UNSUB_MAILTO", "eli.eydlin@gmail.com")

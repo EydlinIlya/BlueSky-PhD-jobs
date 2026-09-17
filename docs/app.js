@@ -1070,6 +1070,19 @@ function currentFilterPayload() {
     };
 }
 
+function showSubscriptionMatches(subscription) {
+    state.search = subscription.query_text || '';
+    state.filters.area = new Set(subscription.disciplines || []);
+    state.filters.country = new Set(subscription.countries || []);
+    state.filters.level = new Set(subscription.position_types || []);
+    state.hideAggr = Boolean(subscription.hide_aggregators);
+    $('#cmd-input').value = state.search;
+    $('#chip-hideaggr').classList.toggle('on', state.hideAggr);
+    renderFilterChips();
+    selectTab('latest');
+    toast(`Showing matches for ${subLabel(subscription)}`, true);
+}
+
 async function loadSubs() {
     if (!state.user) { state.subs = []; return; }
     const { data, error } = await supabaseClient
@@ -1255,8 +1268,11 @@ function renderSubsPage() {
           <div class="sub-card-tags">${tags}</div>
           <div class="sub-delivery">
             <span class="del-static">Weekly email digest → <span class="em">${escapeHtml(u.email || '')}</span></span>
-            <button class="sub-edit" data-edit-sub="${escapeHtml(s.id)}">Edit filters</button>
-            <button class="sub-delete" data-del-sub="${escapeHtml(s.id)}">delete</button>
+            <div class="sub-card-actions">
+              <button class="sub-view" data-view-sub="${escapeHtml(s.id)}">Show matches</button>
+              <button class="sub-edit" data-edit-sub="${escapeHtml(s.id)}">Edit filters</button>
+              <button class="sub-delete" data-del-sub="${escapeHtml(s.id)}">Delete</button>
+            </div>
           </div>
         </div>`;
     }).join('') : `
@@ -1306,10 +1322,10 @@ function updateFeedContext() {
         : 'Current PhD and postdoctoral positions';
     $('#river-description').textContent = archived
         ? 'Closed opportunities and posts older than 90 days, retained for reference.'
-        : 'Research opportunities gathered from academic sources and checked daily.';
+        : 'Research opportunities gathered from Bluesky with help from artificial intelligence.';
     $('#river-meta').innerHTML = archived
         ? 'Historical record · applications may be closed'
-        : '<span class="live-dot"></span> AI-filtered · updated daily';
+        : 'Updated daily';
 }
 
 async function selectTab(tab) {                    // 'latest' | 'following' | 'archive'
@@ -1439,6 +1455,12 @@ function wireEvents() {
     // subscriptions page interactions (delegated)
     $('#view-subs').addEventListener('click', e => {
         if (e.target.closest('#subs-add') || e.target.closest('#subs-empty-add')) { saveCurrentSearch(); return; }
+        const view = e.target.closest('[data-view-sub]');
+        if (view) {
+            const subscription = state.subs.find(item => String(item.id) === view.dataset.viewSub);
+            if (subscription) showSubscriptionMatches(subscription);
+            return;
+        }
         const edit = e.target.closest('[data-edit-sub]');
         if (edit) {
             const subscription = state.subs.find(item => String(item.id) === edit.dataset.editSub);

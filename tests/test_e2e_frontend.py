@@ -94,3 +94,21 @@ class TestFrontendLoads:
         open_feed(page, server_url)
         page.keyboard.press("Control+k")
         assert page.locator("#cmd-input").evaluate("el => el === document.activeElement")
+
+    def test_subscription_show_matches_restores_saved_filters(self, server_url, page):
+        open_feed(page, server_url)
+        page.evaluate("""() => {
+          state.user = {id: 'test-user', email: 'reader@example.com'};
+          state.subs = [{
+            id: 'sub-1', query_text: 'Machine Learning',
+            disciplines: ['Computer Science'], countries: [], position_types: [],
+            hide_aggregators: false, cadence: 'weekly'
+          }];
+          setView('subs');
+        }""")
+        page.locator('[data-view-sub="sub-1"]').click()
+        page.wait_for_timeout(250)
+        assert page.locator("#cmd-input").input_value() == "Machine Learning"
+        assert page.locator('[data-tab="latest"]').get_attribute("aria-selected") == "true"
+        assert "on" in page.locator('#chips-area .chip[data-area="Computer Science"]').get_attribute("class")
+        assert page.locator("article.post").count() > 0
