@@ -124,8 +124,8 @@ def extract_slug(uri):
     """Return a URL-safe slug from a position URI, or None if not derivable.
 
     Bluesky URIs look like `at://did:plc:abc/app.bsky.feed.post/3mldoq7ee5k2s`,
-    so the post ID lives in the trailing segment. ScholarshipDB URLs follow
-    the same pattern. Sanitize defensively to keep it filename-safe.
+    so the post ID lives in the trailing segment. Sanitize defensively to keep
+    it filename-safe.
     """
     if not uri:
         return None

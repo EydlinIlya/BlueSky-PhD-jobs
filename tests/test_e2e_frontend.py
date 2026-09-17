@@ -95,6 +95,17 @@ class TestFrontendLoads:
         page.keyboard.press("Control+k")
         assert page.locator("#cmd-input").evaluate("el => el === document.activeElement")
 
+    def test_desktop_search_expands_when_focused(self, server_url, page):
+        page.set_viewport_size({"width": 1440, "height": 900})
+        open_feed(page, server_url)
+        search = page.locator(".command-bar")
+        before = search.bounding_box()
+        page.locator("#cmd-input").focus()
+        page.wait_for_timeout(300)
+        after = search.bounding_box()
+        assert before is not None and after is not None
+        assert after["width"] >= before["width"] + 150
+
     def test_subscription_show_matches_restores_saved_filters(self, server_url, page):
         open_feed(page, server_url)
         page.evaluate("""() => {

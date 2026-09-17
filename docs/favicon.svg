@@ -1,6 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="10" fill="#0f172a"/>
-  <text x="32" y="44" text-anchor="middle"
-        font-family="'Fira Code', ui-monospace, monospace"
-        font-size="34" font-weight="700" fill="#3b82f6">&gt;_</text>
+  <rect x="2" y="2" width="60" height="60" rx="13" fill="#f3f5f2" stroke="#c8d0cb" stroke-width="3"/>
+  <path d="M12 21c8-2 14 0 20 6v25c-6-6-12-8-20-6V21Z" fill="#fff" stroke="#18594a" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M52 21c-8-2-14 0-20 6v25c6-6 12-8 20-6V21Z" fill="#fff" stroke="#18594a" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M32 27v25" stroke="#18594a" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="m46 10 1.8 4.2L52 16l-4.2 1.8L46 22l-1.8-4.2L40 16l4.2-1.8L46 10Z" fill="#b54632"/>
 </svg>

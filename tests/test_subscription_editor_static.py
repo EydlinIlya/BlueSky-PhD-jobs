@@ -47,3 +47,28 @@ def test_original_ui_uses_flat_colors_instead_of_gradients():
     styles = read("docs/styles.css")
 
     assert "linear-gradient" not in styles
+
+
+def test_desktop_search_uses_semantic_control_and_expands_on_focus():
+    index = read("docs/index.html")
+    styles = read("docs/styles.css")
+
+    assert '<div class="command-bar" role="search">' in index
+    assert 'type="search" aria-label="Search positions"' in index
+    assert 'class="cmd-search-icon" aria-hidden="true"' in index
+    assert ".command-bar:focus-within { max-width: 720px;" in styles
+    assert ".command-bar:focus-within { max-width: none;" in styles
+    assert "cmd-prefix" not in index + styles
+
+
+def test_academic_brand_assets_are_linked_from_homepage():
+    index = read("docs/index.html")
+    favicon = read("docs/favicon.svg")
+    manifest = read("docs/site.webmanifest")
+
+    assert 'href="/favicon.svg"' in index
+    assert 'href="/site.webmanifest"' in index
+    assert 'name="theme-color" content="#f3f5f2"' in index
+    assert "#18594a" in favicon
+    assert "#b54632" in favicon
+    assert '"name": "PhD Sky"' in manifest

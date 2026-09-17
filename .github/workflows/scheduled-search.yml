@@ -1,10 +1,10 @@
 name: Daily Job Board Update
 
 # Ingests new Bluesky posts into Supabase and regenerates the static
-# frontend snapshot (positions.json + SEO pages). Runs 4x/day for fresher
-# website data — Telegram posting was extracted to its own workflow
-# (telegram-digest.yml) which still runs 3x/day so channel cadence is
-# unchanged.
+# frontend snapshot (positions.json + SEO pages). Ingestion runs 4x/day; the
+# static site is regenerated only on the 05:00 UTC run to avoid retaining four
+# large Vercel production deployments every day. Manual non-recovery runs also
+# regenerate the site.
 
 on:
   workflow_dispatch:
@@ -57,14 +57,14 @@ jobs:
             echo "fetch_limit must be an integer from 1 to 100" >&2
             exit 2
           fi
-          args=(--storage supabase --sources bluesky --stage fetch --limit "$FETCH_LIMIT")
+          args=(--storage supabase --stage fetch --limit "$FETCH_LIMIT")
           if [[ "$FULL_SYNC" == "true" ]]; then
             args+=(--full-sync)
           fi
           python bluesky_search.py "${args[@]}"
 
       - name: Stage 2 - Filter (LLM classification)
-        run: python bluesky_search.py --storage supabase --sources bluesky --stage filter
+        run: python bluesky_search.py --storage supabase --stage filter
         env:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -74,7 +74,7 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
 
       - name: Stage 3 - Deduplicate
-        run: python bluesky_search.py --storage supabase --sources bluesky --stage dedup
+        run: python bluesky_search.py --storage supabase --stage dedup
         env:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -84,20 +84,20 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
 
       - name: Stage 4 - Publish
-        run: python bluesky_search.py --storage supabase --sources bluesky --stage publish
+        run: python bluesky_search.py --storage supabase --stage publish
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
 
-      - name: Generate SEO pages
-        if: ${{ github.event_name != 'workflow_dispatch' || !inputs.full_sync }}
+      - name: Generate daily frontend and SEO pages
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 5 * * *') || (github.event_name == 'workflow_dispatch' && !inputs.full_sync) }}
         run: python scripts/generate_seo_pages.py
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
 
-      - name: Commit and push SEO updates
-        if: ${{ github.event_name != 'workflow_dispatch' || !inputs.full_sync }}
+      - name: Commit and push daily frontend and SEO updates
+        if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 5 * * *') || (github.event_name == 'workflow_dispatch' && !inputs.full_sync) }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

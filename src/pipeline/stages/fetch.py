@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 from src.logger import setup_logger
-from src.sources import BlueskySource, ScholarshipDBSource
+from src.sources import BlueskySource
 
 logger = setup_logger()
 
@@ -189,10 +189,6 @@ def run(run_date, sources: list[str], storage, args) -> None:
                 source = BlueskySource(
                     queries=args.query,
                     limit=args.limit,
-                )
-            elif source_name == "scholarshipdb":
-                source = ScholarshipDBSource(
-                    max_pages=args.scholarshipdb_pages,
                 )
             else:
                 logger.warning(f"Unknown source: {source_name}")

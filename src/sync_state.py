@@ -55,7 +55,7 @@ class SyncStateManager:
         """Get sync state for a specific source.
 
         Args:
-            source: Source name (e.g., 'bluesky', 'scholarshipdb')
+            source: Source name (for example, ``bluesky``)
 
         Returns:
             Dict with 'last_timestamp' and 'seen_uris' keys

@@ -26,9 +26,10 @@ body { padding-bottom: 34px; }
 .mark .gt { color: var(--blue-400); }
 .mark .v { color: var(--accent); font-size: 11px; font-weight: 500; margin-left: 6px; vertical-align: 2px; letter-spacing: 0; }
 
-.command-bar { display: flex; align-items: center; background: var(--bg-card); border: 1px solid var(--border); border-radius: 7px; padding: 7px 11px; gap: 9px; max-width: 480px; transition: border-color .15s, box-shadow .15s; }
-.command-bar:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(54,95,145,.15); }
-.cmd-prefix { font-family: var(--font-mono); font-size: 13px; color: var(--accent); font-weight: 600; }
+.command-bar { width: 100%; max-width: 480px; justify-self: center; display: flex; align-items: center; background: var(--bg-card); border: 1px solid var(--border); border-radius: 7px; padding: 7px 11px; gap: 9px; transition: max-width .22s ease, border-color .15s, box-shadow .15s; }
+.command-bar:focus-within { max-width: 720px; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(54,95,145,.15); }
+.cmd-search-icon { width: 17px; height: 17px; flex: 0 0 auto; fill: none; stroke: var(--fg-muted); stroke-width: 1.8; stroke-linecap: round; }
+.command-bar:focus-within .cmd-search-icon { stroke: var(--primary); }
 .cmd-input { flex: 1; min-width: 0; background: transparent; border: none; outline: none; color: var(--fg); font-family: var(--font-mono); font-size: 13px; padding: 3px 0; }
 .cmd-input::placeholder { color: var(--fg-muted); }
 .cmd-kbd { font-family: var(--font-mono); font-size: 10px; color: var(--fg-subtle); padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; }
@@ -134,6 +135,7 @@ body { padding-bottom: 34px; }
   /* Top bar: wordmark + auth on row 1, full-width search on row 2 */
   .topbar-inner { grid-template-columns: auto 1fr; row-gap: 9px; height: auto; padding: 9px 14px; }
   .command-bar { grid-column: 1 / -1; order: 3; max-width: none; }
+  .command-bar:focus-within { max-width: none; }
   .top-actions { justify-self: end; }
   .mark { font-size: 16px; }
   .cmd-kbd { display: none; }                 /* no ⌘K hint on touch */
