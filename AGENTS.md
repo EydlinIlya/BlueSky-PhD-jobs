@@ -450,8 +450,9 @@ onboarding, subscriptions page, toasts).
   ORCID provider buttons are **hidden** for now (kept in `PROVIDERS` with
   `soon:true`, filtered out at render) until the academic-OAuth branch.
 - Saved searches create weekly email subscriptions (`cadence='weekly'`,
-  `deliver_email=true`). The Subscriptions page lists, toggles, deletes, and edits
-  alert filters under owner-only RLS.
+  `deliver_email=true`). The Subscriptions page lists, deletes, and edits alert
+  filters under owner-only RLS. “Show matches” restores one subscription's
+  keyword/area/country/level/aggregator filters and opens the Latest feed.
 - **Follows** are live: "+ follow" on a post toggles an `account_follows` row;
   "follow" on a right-rail Top-area/country toggles a `topic_follows` row.
 - The river's **Following** tab is a combined personalized feed:
@@ -502,10 +503,10 @@ Backend pieces:
 `unsubscribe_by_token` RPC. `docs/unsubscribe.html` reads the token from the URL
 and invokes that RPC through the public Supabase client.
 
-**Legal pages:** `docs/privacy.html` contains the Israel Section 11 collection
+**Legal pages:** `docs/privacy.html` contains the applicable Section 11 collection
 notice, controller/contact, purposes, recipients, international processing,
 retention, and access/correction/export/deletion rights. `docs/terms.html`
-identifies Eli Eydlin as the Israel-based operator and uses Israeli law. Both
+identifies Eli Eydlin as operator and keeps the Israeli governing-law clause. Both
 state that the service is free/non-commercial and has no sales, ads, profiling,
 or account-data AI training. Both are linked from the footer; signup shows a
 "By creating an account you agree to Terms & Privacy" line.

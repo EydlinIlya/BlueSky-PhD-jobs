@@ -235,9 +235,6 @@ body { padding-bottom: 34px; }
 .river-tab .ct { color: var(--fg-subtle); margin-left: 4px; font-size: 10px; }
 .river-tab.active .ct { color: var(--accent); }
 .river-meta { font-family: var(--font-mono); font-size: 11px; color: var(--fg-subtle); display: flex; align-items: center; gap: 8px; white-space: nowrap; }
-.live-dot { width: 6px; height: 6px; background: var(--green-600); border-radius: 50%; animation: pulse 2s infinite; }
-@keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
-
 .new-banner { margin: 11px 0 0; padding: 9px 12px; background: var(--primary); color: #fff; border-radius: 7px; font-family: var(--font-mono); font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: background .15s; }
 .new-banner:hover { background: var(--primary-hover); }
 
@@ -475,11 +472,14 @@ a.p-time:hover { color: var(--primary); text-decoration: underline; }
 .del-toggle .em { color: var(--fg-subtle); }
 .del-static { font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); }
 .del-static .em { color: var(--fg-subtle); }
-.sub-delete { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--fg-subtle); background: none; border: none; cursor: pointer; }
+.sub-card-actions { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.sub-view, .sub-edit, .sub-delete { font-family: var(--font-mono); font-size: 11px; background: none; border: none; cursor: pointer; padding: 2px 0; }
+.sub-view { color: var(--primary); font-weight: 600; }
+.sub-view:hover { color: var(--accent); }
+.sub-delete { color: var(--fg-subtle); }
 .sub-delete:hover { color: var(--red-500); }
-.sub-edit { margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--primary); background: none; border: none; cursor: pointer; }
-.sub-edit:hover { color: var(--accent); }
-.sub-edit + .sub-delete { margin-left: 0; }
+.sub-edit { color: var(--fg-muted); }
+.sub-edit:hover { color: var(--fg); }
 
 .edit-sub-body { max-height: min(68vh, 620px); overflow-y: auto; }
 .edit-filter-group { margin: 0; padding: 0; border: 0; }

@@ -13,7 +13,8 @@ def page(name: str) -> str:
 def test_about_restores_service_identity_and_methodology():
     about = page("about.html")
 
-    assert "Eli Eydlin in Israel" in about
+    assert "operated by <strong>Eli Eydlin</strong>" in about
+    assert "in Israel" not in about
     assert "free, independent, non-commercial service" in about
     assert "ScholarshipDB" in about
     assert "Automation can be wrong" in about
@@ -23,7 +24,7 @@ def test_about_restores_service_identity_and_methodology():
 def test_terms_restore_operator_disclaimers_and_governing_law():
     terms = page("terms.html")
 
-    assert "Eli Eydlin, an individual in Israel" in terms
+    assert "operated by <strong>Eli Eydlin</strong>" in terms
     assert "Listings and automated classification" in terms
     assert "Saving a search enables weekly email delivery" in terms
     assert "State of Israel" in terms
