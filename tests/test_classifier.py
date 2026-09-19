@@ -188,6 +188,30 @@ class TestGetMetadata:
         )
         assert result["application_deadline"] is None
 
+    def test_job_id_date_is_not_accepted_as_deadline(self):
+        response = json.dumps({
+            "disciplines": ["Biology"],
+            "country": "Germany",
+            "position_type": ["Postdoc"],
+            "application_deadline": "2026-06-28",
+        })
+        result = JobClassifier(MockLLM([response])).get_metadata(
+            "Postdoctoral researcher in crop science. Job ID: 28/06/2026."
+        )
+        assert result["application_deadline"] is None
+
+    def test_full_date_requires_deadline_context(self):
+        response = json.dumps({
+            "disciplines": ["Biology"],
+            "country": "Germany",
+            "position_type": ["Postdoc"],
+            "application_deadline": "2026-09-15",
+        })
+        result = JobClassifier(MockLLM([response])).get_metadata(
+            "Vacancy announcement published September 15, 2026."
+        )
+        assert result["application_deadline"] is None
+
     def test_invalid_or_social_urls_and_dates_become_null(self):
         response = json.dumps({
             "disciplines": ["Biology"],

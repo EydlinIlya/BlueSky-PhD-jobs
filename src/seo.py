@@ -9,12 +9,29 @@ the required facts are present and valid.
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+import re
 from urllib.parse import urlparse
 
 
 ACTIVE_FALLBACK_DAYS = 90
 MIN_DESCRIPTION_CHARS = 100
 UNKNOWN_COUNTRIES = {"", "unknown", "remote", "worldwide"}
+MONTH_NAMES = (
+    "jan(?:uary)?", "feb(?:ruary)?", "mar(?:ch)?", "apr(?:il)?", "may",
+    "jun(?:e)?", "jul(?:y)?", "aug(?:ust)?", "sep(?:t(?:ember)?)?",
+    "oct(?:ober)?", "nov(?:ember)?", "dec(?:ember)?",
+)
+DEADLINE_CONTEXT_RE = re.compile(
+    r"\bdeadline\b|"
+    r"\bclosing\s+date\b|"
+    r"\b(?:applications?|submissions?)\s+(?:close|closes|closed|closing|due)\b|"
+    r"\b(?:apply|submit)\b.{0,40}\b(?:by|before|no\s+later\s+than)\b|"
+    r"\b(?:applications?|submissions?)\b.{0,32}\b(?:accepted|open)\b.{0,20}\buntil\b|"
+    r"\bno\s+later\s+than\b|"
+    r"[⏳⌛]|"
+    "\N{LATIN SMALL LETTER A WITH CIRCUMFLEX}\udc8f\N{SUPERSCRIPT THREE}",
+    flags=re.IGNORECASE | re.DOTALL,
+)
 
 
 def parse_datetime(value) -> datetime | None:
@@ -51,22 +68,102 @@ def parse_deadline(value) -> date | None:
         return None
 
 
-def effective_deadline(position: dict) -> date | None:
-    """Return a usable deadline, rejecting years older than the source post.
+def resolve_deadline_evidence(
+    text: str,
+    candidate: date,
+    posted_at=None,
+) -> date | None:
+    """Resolve a candidate only when the source labels its month/day as a deadline.
 
-    Yearless dates are intentionally stored as null by the extractor, but older
-    model output sometimes attached a default year (notably 2024). A deadline
-    from a prior calendar year cannot describe a newly advertised vacancy, so
-    it must not force the position into the archive or appear in structured
-    data. Same-year expired reposts remain archived.
+    A source year wins when present. A genuinely yearless deadline may be
+    anchored to the post year (or the next year when its month/day has passed).
+    Publication dates, URL paths, and identifiers such as ``Job ID: 28/06/26``
+    have no deadline context and therefore return ``None``.
     """
+    source = re.sub(r"https?://\S+", " ", text or "", flags=re.IGNORECASE)
+    day = str(candidate.day)
+    month = str(candidate.month)
+    month_name = MONTH_NAMES[candidate.month - 1]
+    full_patterns = (
+        rf"(?<!\d)(?P<year>\d{{4}})[./-]0?{month}[./-]0?{day}(?!\d)",
+        rf"(?<!\d)0?{day}[./-]0?{month}[./-](?P<year>\d{{4}})(?!\d)",
+        rf"(?<!\d)0?{month}[./-]0?{day}[./-](?P<year>\d{{4}})(?!\d)",
+        rf"\b(?:{month_name})\.?\s+(?:the\s+)?0?{day}(?:st|nd|rd|th)?(?:,)?\s+(?P<year>\d{{4}})\b",
+        rf"\b0?{day}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:{month_name})\.?(?:,)?\s+(?P<year>\d{{4}})\b",
+    )
+    full_dates = []
+    for pattern in full_patterns:
+        for match in re.finditer(pattern, source, flags=re.IGNORECASE):
+            nearby = source[max(0, match.start() - 96):match.end() + 96]
+            if DEADLINE_CONTEXT_RE.search(nearby):
+                try:
+                    resolved = date(
+                        int(match.group("year")), candidate.month, candidate.day
+                    )
+                except ValueError:
+                    continue
+                if resolved.year == candidate.year:
+                    return resolved
+                full_dates.append(resolved)
+    if full_dates:
+        return max(full_dates)
+
+    short_year_patterns = (
+        rf"(?<!\d)0?{day}[./-]0?{month}[./-](?P<year>\d{{2}})(?!\d)",
+        rf"(?<!\d)0?{month}[./-]0?{day}[./-](?P<year>\d{{2}})(?!\d)",
+    )
+    for pattern in short_year_patterns:
+        for match in re.finditer(pattern, source, flags=re.IGNORECASE):
+            nearby = source[max(0, match.start() - 96):match.end() + 96]
+            if DEADLINE_CONTEXT_RE.search(nearby):
+                return date(2000 + int(match.group("year")), candidate.month, candidate.day)
+
+    yearless_patterns = (
+        rf"(?<![\d./-])0?{month}[./-]0?{day}(?![\d./-])",
+        rf"(?<![\d./-])0?{day}[./-]0?{month}(?![\d./-])",
+        rf"\b(?:{month_name})\.?\s+(?:the\s+)?0?{day}(?:st|nd|rd|th)?\b",
+        rf"\b0?{day}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:{month_name})\.?\b",
+    )
+    for pattern in yearless_patterns:
+        for match in re.finditer(pattern, source, flags=re.IGNORECASE):
+            nearby = source[max(0, match.start() - 96):match.end() + 96]
+            if not DEADLINE_CONTEXT_RE.search(nearby):
+                continue
+            posted = parse_datetime(posted_at)
+            if posted is None:
+                return None
+            year = posted.year
+            if (candidate.month, candidate.day) < (posted.month, posted.day):
+                year += 1
+            try:
+                return date(year, candidate.month, candidate.day)
+            except ValueError:
+                return None
+    return None
+
+
+def effective_deadline(position: dict) -> date | None:
+    """Return a supported deadline, with a conservative legacy fallback."""
     deadline = parse_deadline(position.get("application_deadline"))
     if deadline is None:
         return None
+    message = str(position.get("message") or "")
+    resolved = resolve_deadline_evidence(
+        message,
+        deadline,
+        position.get("created_at") or position.get("created"),
+    )
+    if resolved is not None:
+        return resolved
+
+    # Existing rows may have been enriched from a linked-page preview that is
+    # no longer retained in the canonical message. Trust a plausible future
+    # date from that extraction, but never a same-day/past value that could be
+    # a publication date, event date, or job/reference identifier.
     created = parse_datetime(position.get("created_at") or position.get("created"))
-    if created is not None and deadline.year < created.year:
-        return None
-    return deadline
+    if created is not None and deadline > created.date():
+        return deadline
+    return None
 
 
 def normalize_http_url(value) -> str | None:

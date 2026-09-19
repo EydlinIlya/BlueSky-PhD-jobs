@@ -78,9 +78,53 @@ class TestFrontendLoads:
         open_feed(page, server_url)
         active = page.evaluate("""() => isActivePosition({
           created_at: '2026-09-16T22:32:59.414+00:00',
-          application_deadline: '2024-10-16'
+          application_deadline: '2024-10-16',
+          message: 'Applications close on October 16.'
         }, new Date('2026-09-17T12:00:00Z'))""")
         assert active is True
+
+    def test_only_contextual_deadlines_override_post_age(self, server_url, page):
+        open_feed(page, server_url)
+        result = page.evaluate("""() => ({
+          jobIdDate: isActivePosition({
+            created_at: '2026-07-02T11:24:34Z',
+            application_deadline: '2026-06-28',
+            message: 'Postdoctoral researcher. Job ID: 28/06/26.'
+          }, new Date('2026-09-18T12:00:00Z')),
+          explicitDeadline: isActivePosition({
+            created_at: '2026-07-02T11:24:34Z',
+            application_deadline: '2026-06-28',
+            message: 'Application deadline: June 28, 2026.'
+          }, new Date('2026-09-18T12:00:00Z')),
+          shortYearDeadline: isActivePosition({
+            created_at: '2026-08-25T06:13:54Z',
+            application_deadline: '2026-09-01',
+            message: 'One more week to apply (deadline 01.09.26).'
+          }, new Date('2026-09-18T12:00:00Z')),
+          mojibakeHourglass: isActivePosition({
+            created_at: '2026-08-29T07:10:18Z',
+            application_deadline: '2026-09-11',
+            message: String.fromCharCode(0x00e2, 0xdc8f, 0x00b3) + ' 11 Sep 2026'
+          }, new Date('2026-09-18T12:00:00Z')),
+          linkedPreviewDeadline: isActivePosition({
+            created_at: '2026-09-02T10:00:00Z',
+            application_deadline: '2026-09-15',
+            message: 'PhD position. See the official vacancy page.'
+          }, new Date('2026-09-18T12:00:00Z')),
+          deadlineRange: isActivePosition({
+            created_at: '2026-07-23T09:00:36Z',
+            application_deadline: '2027-02-01',
+            message: 'Applications are accepted from 1 February 2024 to 1 February 2027.'
+          }, new Date('2026-09-18T12:00:00Z'))
+        })""")
+        assert result == {
+            "jobIdDate": True,
+            "explicitDeadline": False,
+            "shortYearDeadline": False,
+            "mojibakeHourglass": False,
+            "linkedPreviewDeadline": False,
+            "deadlineRange": True,
+        }
 
     def test_post_has_explicit_content_and_actions(self, server_url, page):
         open_feed(page, server_url)

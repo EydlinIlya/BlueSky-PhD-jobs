@@ -111,6 +111,7 @@ METADATA_PROMPT_TEMPLATE = (
     "- Never infer an employer from the author's handle or bio.\n"
     "- Never invent or normalize a vague role into a more specific job title.\n"
     "- application_url must be an explicit application/official vacancy URL, never a Bluesky URL.\n"
+    "- A deadline must be labelled as a deadline, closing date, or apply-by date. Never use a publication date, URL date, event date, or job/reference ID.\n"
     "- A month/day without an unambiguous year is not an exact deadline; return null.\n"
     "- Return null for every uncertain or missing value.\n\n"
     "DISCIPLINE rules:\n"

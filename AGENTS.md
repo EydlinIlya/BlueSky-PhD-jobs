@@ -139,10 +139,16 @@ substantive description. Invalid dates/URLs fail conservatively. This local
 gate is necessary but not sufficient for Google Jobs: Google expects the visible
 page to contain a complete vacancy description, so a short social post may pass
 the schema gate while still being unsuitable for the job-search experience.
-Deadline years must be explicit in model input, and `effective_deadline()`
-rejects stored deadlines whose calendar year predates the source post; those
-rows fall back to the 90-day rule and generated surfaces omit the impossible
-date.
+`effective_deadline()` accepts a stored deadline only when the source labels the
+same month/day as a deadline, closing date, or apply-by date. Explicit years are
+preserved; genuinely yearless deadlines are anchored to the posting year or,
+when that month/day has passed, the next year. Dates found only in URLs,
+publication text, event text, or job IDs are ignored. Existing rows may have
+deadline evidence from a linked-page preview that was not retained in the
+canonical message, so `effective_deadline()` continues to trust a stored date
+strictly later than the post date; unsupported same-day or past values fall
+back to the 90-day rule. The classifier uses stricter evidence before a new
+deadline reaches storage and still requires an explicit year.
 
 **SEO enrichment tools:**
 - `scripts/benchmark_seo_enrichment.py` evaluates Ministral 14B against the

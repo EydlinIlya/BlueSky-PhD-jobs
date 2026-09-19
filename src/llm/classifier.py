@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 
 from .base import LLMProvider
 from .config import DISCIPLINES, POSITION_TYPES, IS_REAL_JOB_PROMPT, METADATA_PROMPT_TEMPLATE
-from src.seo import normalize_http_url, parse_deadline
+from src.seo import normalize_http_url, parse_deadline, resolve_deadline_evidence
 
 
 def _default_metadata() -> dict:
@@ -29,12 +29,6 @@ def _nullable_text(value, max_length: int = 300) -> str | None:
         return None
     value = " ".join(value.split()).strip()
     return value[:max_length] or None
-
-
-def _deadline_year_is_explicit(text: str, year: int) -> bool:
-    """Require the model's deadline year to exist in non-URL source text."""
-    without_urls = re.sub(r"https?://\S+", " ", text or "", flags=re.IGNORECASE)
-    return re.search(rf"(?<!\d){year}(?!\d)", without_urls) is not None
 
 
 class JobClassifier:
@@ -157,8 +151,7 @@ class JobClassifier:
             application_url = None
 
         deadline = parse_deadline(data.get("application_deadline"))
-        if deadline and not _deadline_year_is_explicit(text, deadline.year):
-            deadline = None
+        deadline = resolve_deadline_evidence(text, deadline) if deadline else None
         application_deadline = deadline.isoformat() if deadline else None
 
         return {

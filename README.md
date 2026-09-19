@@ -184,10 +184,14 @@ title, employer, external application URL, known country, and substantive
 visible description. Passing that gate makes a page eligible for markup; it
 does not guarantee that Google will crawl, index, or show it.
 
-Deadline years must be explicit in the source text. A stored deadline from a
-calendar year before its source post is treated as invalid and falls back to
-the 90-day window; it is also omitted from generated snapshots and structured
-data.
+Deadlines override the 90-day window only when the source labels the same
+month/day as a deadline, closing date, or apply-by date. Explicit years are
+preserved; genuinely yearless deadlines are anchored to the posting year or,
+when that month/day has passed, the next year. Dates found only in URLs,
+publication metadata, event text, or job IDs are ignored. For legacy rows whose
+linked-page evidence was not retained, a stored deadline later than the source
+post remains trusted; unsupported same-day or past dates fall back to the
+90-day window and are omitted from generated snapshots and structured data.
 
 Google Jobs additionally expects:
 
