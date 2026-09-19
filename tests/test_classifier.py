@@ -12,8 +12,12 @@ class MockLLM(LLMProvider):
     def __init__(self, responses: list[str] | None = None):
         self._responses = responses or []
         self._call_index = 0
+        self.last_text = None
+        self.last_prompt = None
 
     def classify(self, text: str, prompt: str) -> str:
+        self.last_text = text
+        self.last_prompt = prompt
         if self._call_index < len(self._responses):
             response = self._responses[self._call_index]
             self._call_index += 1
@@ -176,12 +180,38 @@ class TestGetMetadata:
         assert result["application_deadline"] == "2026-11-30"
         assert result["location_text"] == "Haifa, Israel"
 
-    def test_model_cannot_invent_year_for_yearless_deadline(self):
+    def test_contextual_yearless_deadline_uses_posting_year(self):
         response = json.dumps({
             "disciplines": ["Psychology"],
             "country": "UK",
             "position_type": ["Postdoc"],
             "application_deadline": "2024-10-16",
+        })
+        result = JobClassifier(MockLLM([response])).get_metadata(
+            "Postdoc at Oxford. Deadline noon 16th Oct.",
+            posted_at="2026-09-17T08:00:00Z",
+        )
+        assert result["application_deadline"] == "2026-10-16"
+
+    def test_contextual_yearless_deadline_rolls_to_next_year(self):
+        response = json.dumps({
+            "disciplines": ["Psychology"],
+            "country": "UK",
+            "position_type": ["Postdoc"],
+            "application_deadline": "2026-02-15",
+        })
+        result = JobClassifier(MockLLM([response])).get_metadata(
+            "Postdoc at Oxford. Deadline 15 February.",
+            posted_at="2026-09-17T08:00:00Z",
+        )
+        assert result["application_deadline"] == "2027-02-15"
+
+    def test_yearless_deadline_without_post_date_remains_null(self):
+        response = json.dumps({
+            "disciplines": ["Psychology"],
+            "country": "UK",
+            "position_type": ["Postdoc"],
+            "application_deadline": "2026-10-16",
         })
         result = JobClassifier(MockLLM([response])).get_metadata(
             "Postdoc at Oxford. Deadline noon 16th Oct."
@@ -196,7 +226,8 @@ class TestGetMetadata:
             "application_deadline": "2026-06-28",
         })
         result = JobClassifier(MockLLM([response])).get_metadata(
-            "Postdoctoral researcher in crop science. Job ID: 28/06/2026."
+            "Postdoctoral researcher in crop science. Job ID: 28/06/26.",
+            posted_at="2026-07-02T11:24:34Z",
         )
         assert result["application_deadline"] is None
 
@@ -356,22 +387,23 @@ class TestGetMetadata:
 
 class TestClassifyPost:
     def test_real_job_with_metadata(self):
-        # First call: is_real_job -> YES, Second call: get_metadata -> JSON
         metadata_json = json.dumps({
+            "is_verified_job": True,
             "disciplines": ["Biology", "Computer Science"],
             "country": "USA",
             "position_type": ["PhD Student"]
         })
-        llm = MockLLM(["YES", metadata_json])
+        llm = MockLLM([metadata_json])
         classifier = JobClassifier(llm)
         result = classifier.classify_post("Bioinformatics PhD position")
         assert result["is_verified_job"] is True
         assert result["disciplines"] == ["Biology", "Computer Science"]
         assert result["country"] == "USA"
         assert result["position_type"] == ["PhD Student"]
+        assert llm._call_index == 1
 
     def test_non_job(self):
-        llm = MockLLM(["NO"])
+        llm = MockLLM([json.dumps({"is_verified_job": False})])
         classifier = JobClassifier(llm)
         result = classifier.classify_post("Job searching is hard")
         assert result["is_verified_job"] is False
@@ -383,14 +415,16 @@ class TestClassifyPost:
         assert result["application_url"] is None
         assert result["application_deadline"] is None
         assert result["location_text"] is None
+        assert llm._call_index == 1
 
     def test_real_job_with_metadata_text(self):
         metadata_json = json.dumps({
+            "is_verified_job": True,
             "disciplines": ["Physics"],
             "country": "Switzerland",
             "position_type": ["Postdoc"]
         })
-        llm = MockLLM(["YES", metadata_json])
+        llm = MockLLM([metadata_json])
         classifier = JobClassifier(llm)
         result = classifier.classify_post(
             "Postdoc in physics",
@@ -400,14 +434,17 @@ class TestClassifyPost:
         assert result["disciplines"] == ["Physics"]
         assert result["country"] == "Switzerland"
         assert result["position_type"] == ["Postdoc"]
+        assert "[POST TEXT]\nPostdoc in physics" in llm.last_text
+        assert "[CONTEXT FOR METADATA]" in llm.last_text
 
     def test_classify_uses_text_when_no_metadata_text(self):
         metadata_json = json.dumps({
+            "is_verified_job": True,
             "disciplines": ["Biology"],
             "country": "UK",
             "position_type": ["PhD Student"]
         })
-        llm = MockLLM(["YES", metadata_json])
+        llm = MockLLM([metadata_json])
         classifier = JobClassifier(llm)
         result = classifier.classify_post("PhD in Biology at Oxford")
         assert result["is_verified_job"] is True
@@ -415,12 +452,30 @@ class TestClassifyPost:
 
     def test_multiple_position_types_in_classify(self):
         metadata_json = json.dumps({
+            "is_verified_job": True,
             "disciplines": ["Biology"],
             "country": "Turkey",
             "position_type": ["PhD Student", "Postdoc"]
         })
-        llm = MockLLM(["YES", metadata_json])
+        llm = MockLLM([metadata_json])
         classifier = JobClassifier(llm)
         result = classifier.classify_post("Hiring PhD students and postdocs")
         assert result["is_verified_job"] is True
         assert result["position_type"] == ["PhD Student", "Postdoc"]
+
+    def test_post_date_is_visible_to_combined_prompt(self):
+        response = json.dumps({
+            "is_verified_job": True,
+            "disciplines": ["Biology"],
+            "country": "UK",
+            "position_type": ["Postdoc"],
+            "application_deadline": "2026-10-16",
+        })
+        llm = MockLLM([response])
+        result = JobClassifier(llm).classify_post(
+            "Postdoc. Deadline 16 October 2026.",
+            posted_at="2026-09-17T01:02:03Z",
+        )
+        assert result["application_deadline"] == "2026-10-16"
+        assert "published on 2026-09-17" in llm.last_prompt
+        assert llm._call_index == 1

@@ -198,6 +198,7 @@ def main():
                         result = classifier.classify_post(
                             d.get("raw_text") or d.get("message", ""),
                             metadata_text=d.get("metadata_text"),
+                            posted_at=d.get("created"),
                         )
                         d.update(result)
                     except LLMUnavailableError as e:

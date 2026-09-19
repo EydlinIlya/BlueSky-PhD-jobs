@@ -10,10 +10,10 @@ The service is free, non-commercial, and operated as an independent project.
 ## What it does
 
 - Searches Bluesky through the AT Protocol using academic-job queries.
-- Filters likely vacancies with Ministral 14B and optional provider fallbacks.
+- Filters and enriches likely vacancies in one Ministral 14B call, with optional provider fallbacks.
 - Extracts disciplines, country, position type, role title, employer,
   application URL, deadline, and location without inventing missing facts.
-- Deduplicates reposts using TF-IDF plus model verification.
+- Deduplicates reposts using exact normalized official application links first, then TF-IDF plus model verification.
 - Publishes an accessible feed with search, filters, saved searches, follows,
   weekly-alert controls, and a lazy-loaded archive.
 - Generates crawlable job pages, active subject/country hubs, and split XML

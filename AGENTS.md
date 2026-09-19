@@ -23,10 +23,10 @@ the AT Protocol and filters them with an LLM.
 
 Features include:
 - LLM-based filtering for Bluesky posts (Mistral/Ministral 14B → Gemini/Gemma → NVIDIA NIM → Groq failover)
-- Single JSON metadata extraction: disciplines (1-3), country, and position type
+- Single JSON classification and metadata extraction: verification, disciplines (1-3), country, position type, and evidence-backed SEO fields
 - Incremental sync state for Bluesky collection
 - Multiple storage backends (CSV, Supabase)
-- Deduplication of reposted positions (TF-IDF + LLM verification)
+- Deduplication of reposted positions (normalized official application URL, then TF-IDF + LLM verification)
 - GitHub Actions for automated daily updates
 - GitHub Pages frontend for browsing positions
 - Telegram channel for Biology + CS positions (bioinformatics)
@@ -107,14 +107,14 @@ python bluesky_search.py --no-llm
 **`src/logger.py`** - Logging configuration
 
 **`src/llm/`** - LLM integration (for Bluesky)
-- `config.py` - Provider model settings, retry settings, prompts, discipline list (includes `Ecology`), and position types. The single `METADATA_PROMPT_TEMPLATE` also extracts evidence-backed `job_title`, `hiring_organization`, `application_url`, `application_deadline`, and `location_text`; uncertain values must be null. It contains an explicit rule that remote-sensing-of-forests/crop-fields posts must be classified as Ecology primary (Biology / CS only as secondary tags).
+- `config.py` - Provider model settings, retry settings, prompts, discipline list (includes `Ecology`), and position types. The single `METADATA_PROMPT_TEMPLATE` classifies and extracts evidence-backed `job_title`, `hiring_organization`, `application_url`, `application_deadline`, and `location_text`; uncertain values must be null. It contains an explicit rule that remote-sensing-of-forests/crop-fields posts must be classified as Ecology primary (Biology / CS only as secondary tags).
 - `base.py` - Abstract `LLMProvider` class + `LLMUnavailableError`
 - `mistral.py` - `MistralProvider` calls Mistral Chat Completions. The default `ministral-14b-latest` was selected by the checked-in 41-case benchmark. Stable hash-based `prompt_cache_key` values keep filter/metadata instructions eligible for cached-input pricing without putting user data in cache keys.
 - `gemini.py` - `GeminiProvider` calls the native Gemini Interactions REST API with model-compatible minimal/low reasoning, disabled server-side storage, timeout, transient-error retry, rate-limit backoff, and free-tier pacing. It raises `LLMUnavailableError` after retries are exhausted.
 - `nvidia.py` - `NvidiaNIMProvider` calls NVIDIA's hosted OpenAI-compatible Chat Completions endpoint. The default `google/gemma-4-31b-it` matches the primary model for prompt/output consistency, uses deterministic sampling, a 512-token response cap, and fails quickly to Groq on API errors.
 - `groq.py` - `GroqProvider` calls Groq's OpenAI-compatible Chat Completions REST API. The default `openai/gpt-oss-120b` uses low reasoning, excludes returned reasoning, caps completions at 512 tokens, and uses a 15-second cooldown for the 8k free-plan TPM limit.
 - `fallback.py` - `FallbackProvider` composes the configured Mistral → Gemini → NVIDIA NIM → Groq chain. Failover is sticky for the process lifetime so a depleted provider is not retried for every row.
-- `classifier.py` - `JobClassifier` for filtering and metadata extraction
+- `classifier.py` - `JobClassifier`; one structured provider response decides verification and metadata, with the source post date supplied for supported deadline anchoring.
 
 `bluesky_search.py:get_classifier()` builds the configured Mistral → Gemini → NVIDIA NIM → Groq chain, skipping missing providers; any provider can operate alone. With none configured it returns `None` (no LLM). `MISTRAL_MODEL`, `GEMINI_MODEL`, `NVIDIA_MODEL`, and `GROQ_MODEL` override their respective defaults.
 
@@ -216,7 +216,8 @@ unique batch succeeds. `tests/test_publish_stage.py` protects these invariants.
 
 **`src/dedup.py`** - Production deduplication helpers (used by `stages/dedup.py`)
 - `preprocess_text()` - Cleans post text (strips bio, URLs, linked pages)
-- `deduplicate_new_posts()` - TF-IDF similarity; auto-accepts >= 0.95, LLM-verifies 0.25–0.95 zone
+- `normalize_application_url()` - Removes fragments, transport noise, and tracking parameters while retaining vacancy-specific query parameters.
+- `deduplicate_new_posts()` - First collapses exact normalized official application links, then uses TF-IDF similarity; auto-accepts >= 0.95, LLM-verifies the 0.25–0.95 zone.
 
 ### Data Flow (Supabase — 4-Stage Pipeline)
 
@@ -259,6 +260,7 @@ python -m pytest tests/ -v
 
 Test files:
 - `tests/test_classifier.py` - LLM classifier with mock LLM provider
+- `tests/test_dedup.py` - deterministic application-link deduplication and URL-normalization regressions
 - `tests/test_mistral.py` - Mistral request, caching, retry, and usage behavior
 - `tests/test_provider_selection.py` - Provider ordering and single-provider selection
 - `tests/test_llm_benchmark_fixture.py` - Benchmark fixture schema and label counts

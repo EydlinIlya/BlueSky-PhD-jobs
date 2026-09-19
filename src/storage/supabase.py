@@ -149,7 +149,7 @@ class SupabaseStorage(StorageBackend):
         while True:
             response = (
                 self.client.table(self.table)
-                .select("uri, message, created_at")
+                .select("uri, message, created_at, application_url")
                 .eq("is_verified_job", True)
                 .is_("duplicate_of", "null")
                 .range(offset, offset + page_size - 1)

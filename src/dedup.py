@@ -3,12 +3,14 @@
 import json
 import re
 import time
+from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from src.llm.base import LLMProvider
 from src.logger import setup_logger
+from src.seo import parse_datetime
 
 logger = setup_logger()
 
@@ -23,6 +25,48 @@ Two posts are NOT duplicates if they are at different institutions, different de
 
 Respond with ONLY a JSON object:
 {"duplicate": true/false, "confidence": 0.0-1.0, "reason": "brief explanation"}"""
+
+TRACKING_QUERY_KEYS = {
+    "fbclid", "gclid", "mc_cid", "mc_eid", "ref", "source",
+}
+
+
+def normalize_application_url(value) -> str | None:
+    """Normalize an official application URL for deterministic equality.
+
+    The scheme, fragment, trailing slash, and common tracking parameters do not
+    identify a vacancy. Other query parameters are retained because many
+    applicant systems encode the vacancy ID in the query string.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = urlsplit(value.strip())
+    except ValueError:
+        return None
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+        return None
+
+    host = parsed.hostname.lower()
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+    if port and not (
+        parsed.scheme.lower() == "http" and port == 80
+    ) and not (
+        parsed.scheme.lower() == "https" and port == 443
+    ):
+        host = f"{host}:{port}"
+    path = re.sub(r"/{2,}", "/", parsed.path or "/")
+    if path != "/":
+        path = path.rstrip("/")
+    query = urlencode(sorted(
+        (key, val)
+        for key, val in parse_qsl(parsed.query, keep_blank_values=True)
+        if not key.lower().startswith("utm_") and key.lower() not in TRACKING_QUERY_KEYS
+    ))
+    return f"{host}{path}" + (f"?{query}" if query else "")
 
 
 def preprocess_text(message: str) -> str:
@@ -132,13 +176,66 @@ def deduplicate_new_posts(
     if quote_duplicates:
         logger.info(f"Dedup: {len(quote_duplicates)} quote-based duplicates found")
 
-    # --- Phase 0b: Reply-based forced LLM dedup ---
+    # --- Phase 0b: Deterministic application-link dedup ---
+    # An exact normalized vacancy URL is stronger evidence than text similarity
+    # and costs no LLM call. The newest post remains canonical.
+    application_duplicates = {}
+    db_updates = []  # (old_uri, canonical_uri) for existing posts to update
+    candidates_by_application: dict[str, list[tuple[str, int, dict]]] = {}
+
+    for index, post in enumerate(new_posts):
+        if index in quote_duplicates:
+            continue
+        normalized = normalize_application_url(post.get("application_url"))
+        if normalized:
+            candidates_by_application.setdefault(normalized, []).append(
+                ("new", index, post)
+            )
+    for index, post in enumerate(existing):
+        normalized = normalize_application_url(post.get("application_url"))
+        if normalized:
+            candidates_by_application.setdefault(normalized, []).append(
+                ("existing", index, post)
+            )
+
+    def candidate_sort_key(candidate):
+        kind, _, post = candidate
+        timestamp = post.get("created") if kind == "new" else post.get("created_at")
+        parsed = parse_datetime(timestamp)
+        # Prefer a new row only for an exact timestamp tie so a current batch
+        # can become the stable canonical target.
+        return (parsed.timestamp() if parsed else float("-inf"), kind == "new")
+
+    for candidates in candidates_by_application.values():
+        if len(candidates) < 2:
+            continue
+        canonical_kind, canonical_index, canonical_post = max(
+            candidates,
+            key=candidate_sort_key,
+        )
+        canonical_uri = canonical_post["uri"]
+        for kind, index, post in candidates:
+            if kind == canonical_kind and index == canonical_index:
+                continue
+            if kind == "new":
+                application_duplicates[index] = canonical_uri
+                post["duplicate_of"] = canonical_uri
+            elif post["uri"] != canonical_uri:
+                db_updates.append((post["uri"], canonical_uri))
+
+    if application_duplicates or db_updates:
+        logger.info(
+            "Dedup: %s application-link duplicates found",
+            len(application_duplicates) + len(db_updates),
+        )
+
+    # --- Phase 0c: Reply-based forced LLM dedup ---
     # If a post is a reply to a post in the DB or same batch, force LLM check
     reply_duplicates = {}
     new_uri_to_idx = {p["uri"]: i for i, p in enumerate(new_posts)}
 
     for i, post in enumerate(new_posts):
-        if i in quote_duplicates:
+        if i in quote_duplicates or i in application_duplicates:
             continue  # already handled
         parent_uri = post.get("reply_parent_uri")
         if not parent_uri:
@@ -205,7 +302,11 @@ def deduplicate_new_posts(
 
     # --- Phase 1: Dedup within the new batch ---
     # For pairs of new posts that are duplicates, keep the newest one
-    all_phase0_dupes = {**quote_duplicates, **reply_duplicates}
+    all_phase0_dupes = {
+        **quote_duplicates,
+        **application_duplicates,
+        **reply_duplicates,
+    }
     duplicate_of_new = {i: None for i in all_phase0_dupes}  # pre-seed with phase 0 dupes
     if len(new_posts) > 1:
         valid_new_batch = [(i, t) for i, t in enumerate(new_texts) if t]
@@ -259,8 +360,6 @@ def deduplicate_new_posts(
     # --- Phase 2: Dedup new posts against existing DB posts ---
     # For each new canonical post that matches an existing post,
     # the older one gets marked as duplicate of the newer one
-    db_updates = []  # (old_uri, canonical_uri) for existing posts to update
-
     canonical_new_indices = [
         i for i in range(len(new_posts)) if i not in duplicate_of_new
     ]

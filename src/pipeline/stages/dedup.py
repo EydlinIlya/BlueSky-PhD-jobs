@@ -47,6 +47,7 @@ def run(run_date, storage, llm) -> None:
             "disciplines": row.get("disciplines"),
             "country": row.get("country"),
             "position_type": row.get("position_type"),
+            "application_url": row.get("application_url"),
             "is_verified_job": row.get("is_verified_job"),
             "quoted_uri": row.get("quoted_uri"),
             "reply_parent_uri": row.get("reply_parent_uri"),
