@@ -51,7 +51,11 @@ def run(run_date, storage, classifier) -> None:
             raw_text = row.get("raw_text") or row.get("message", "")
             metadata_text = row.get("metadata_text") or raw_text
             try:
-                result = classifier.classify_post(raw_text, metadata_text=metadata_text)
+                result = classifier.classify_post(
+                    raw_text,
+                    metadata_text=metadata_text,
+                    posted_at=row.get("created_at"),
+                )
                 if result.get("is_verified_job"):
                     result["seo_enriched_at"] = datetime.now(timezone.utc).isoformat()
             except LLMUnavailableError as e:

@@ -277,6 +277,7 @@ def test_sitemap_index_splits_core_and_eligible_jobs(tmp_path, monkeypatch):
 def test_archived_and_weak_pages_are_noindex_without_jobposting():
     archived = _position("Detailed position description. " * 8)
     archived["application_deadline"] = "2026-08-01"
+    archived["message"] += " Application deadline: August 1, 2026."
     archived_page = gsp.render_position_page(archived, "archived")
     assert '<meta name="robots" content="noindex, follow">' in archived_page
     assert "This position is archived" in archived_page
@@ -313,6 +314,7 @@ def test_jobs_sitemap_excludes_archived_and_weak_pages(tmp_path, monkeypatch):
         **eligible,
         "uri": "at://x/y/3archived",
         "application_deadline": "2026-01-01",
+        "message": eligible["message"] + " Application deadline: January 1, 2026.",
     }
     eligible_map = gsp.generate_position_pages([eligible, weak, archived])
     gsp.generate_sitemap(eligible_map, [])
@@ -328,7 +330,12 @@ def test_jobs_sitemap_excludes_archived_and_weak_pages(tmp_path, monkeypatch):
 def test_archived_position_is_absent_from_active_listing(tmp_path, monkeypatch):
     monkeypatch.setattr(gsp, "DOCS_DIR", str(tmp_path))
     rows = _corpus(10)
-    archived = {**rows[0], "uri": "at://x/y/3archived", "application_deadline": "2026-01-01"}
+    archived = {
+        **rows[0],
+        "uri": "at://x/y/3archived",
+        "application_deadline": "2026-01-01",
+        "message": rows[0]["message"] + " Application deadline: January 1, 2026.",
+    }
     gsp.generate_positions_html(rows + [archived])
     combined = "".join(f.read_text(encoding="utf-8") for f in _all_listing_html(tmp_path))
     assert "/p/3archived" not in combined
@@ -365,7 +372,12 @@ def test_generator_reports_partially_enriched_active_corpus(capsys):
 def test_archive_snapshot_contains_only_inactive_positions(tmp_path, monkeypatch):
     monkeypatch.setattr(gsp, "DOCS_DIR", str(tmp_path))
     active = _position("Detailed active position description. " * 5)
-    archived = dict(active, uri="at://test/archived", application_deadline="2026-08-01")
+    archived = dict(
+        active,
+        uri="at://test/archived",
+        application_deadline="2026-08-01",
+        message=active["message"] + " Application deadline: August 1, 2026.",
+    )
     now = gsp.datetime(2026, 9, 16, tzinfo=gsp.timezone.utc)
     gsp.generate_archive_json([active, archived], [], now=now)
     payload = json.loads((tmp_path / "archive.json").read_text(encoding="utf-8"))

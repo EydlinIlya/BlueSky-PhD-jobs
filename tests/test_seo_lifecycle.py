@@ -62,6 +62,98 @@ def test_deadline_before_source_post_is_ignored_as_impossible():
     assert is_seo_eligible(row, now=NOW + timedelta(days=1))
 
 
+def test_contextual_yearless_deadline_uses_posting_year():
+    row = position(
+        created_at="2026-09-16T22:32:59+00:00",
+        application_deadline="2024-10-16",
+        message=(
+            "Applications close on October 16. We invite researchers to join "
+            "this interdisciplinary project combining field observations, "
+            "modelling, and collaborative scientific analysis."
+        ),
+    )
+
+    assert effective_deadline(row).isoformat() == "2026-10-16"
+    assert is_position_active(row, now=NOW + timedelta(days=1))
+
+
+def test_contextual_yearless_deadline_rolls_to_next_year():
+    row = position(
+        created_at="2026-09-16T22:32:59+00:00",
+        application_deadline="2026-02-15",
+        message="Applications close on February 15.",
+    )
+
+    assert effective_deadline(row).isoformat() == "2027-02-15"
+
+
+def test_job_id_date_is_not_a_deadline():
+    row = position(
+        created_at="2026-07-02T11:24:34+00:00",
+        application_deadline="2026-06-28",
+        message="Postdoctoral researcher in crop science. Job ID: 28/06/26.",
+    )
+
+    assert effective_deadline(row) is None
+    assert is_position_active(row, now=datetime(2026, 9, 18, tzinfo=timezone.utc))
+
+
+def test_contextual_two_digit_year_is_accepted():
+    row = position(
+        created_at="2026-08-25T06:13:54+00:00",
+        application_deadline="2026-09-01",
+        message="One more week to apply (deadline 01.09.26).",
+    )
+
+    assert effective_deadline(row).isoformat() == "2026-09-01"
+
+
+def test_mojibake_hourglass_marker_is_deadline_context():
+    row = position(
+        created_at="2026-08-29T07:10:18+00:00",
+        application_deadline="2026-09-11",
+        message="Research Assistant\n\xe2\udc8f\xb3 11 Sep 2026 · salary listed",
+    )
+
+    assert effective_deadline(row).isoformat() == "2026-09-11"
+
+
+def test_full_date_without_deadline_context_is_ignored_when_not_future():
+    row = position(
+        created_at="2026-09-16T22:32:59+00:00",
+        application_deadline="2026-09-15",
+        message="Vacancy announcement published September 15, 2026.",
+    )
+
+    assert effective_deadline(row) is None
+    assert is_position_active(row, now=NOW + timedelta(days=1))
+
+
+def test_future_stored_deadline_can_come_from_linked_preview():
+    row = position(
+        created_at="2026-09-02T10:00:00+00:00",
+        application_deadline="2026-09-15",
+        message="PhD position in plant ecology. See the official vacancy page.",
+    )
+
+    assert effective_deadline(row).isoformat() == "2026-09-15"
+    assert not is_position_active(row, now=datetime(2026, 9, 18, tzinfo=timezone.utc))
+
+
+def test_deadline_range_prefers_candidate_end_year():
+    row = position(
+        created_at="2026-07-23T09:00:36+00:00",
+        application_deadline="2027-02-01",
+        message=(
+            "Open Call applications are accepted from 1 February 2024 "
+            "to 1 February 2027."
+        ),
+    )
+
+    assert effective_deadline(row).isoformat() == "2027-02-01"
+    assert is_position_active(row, now=datetime(2026, 9, 18, tzinfo=timezone.utc))
+
+
 def test_missing_or_malformed_post_date_is_archived():
     assert not is_position_active(position(created_at=None), now=NOW)
     assert not is_position_active(position(created_at="not-a-date"), now=NOW)

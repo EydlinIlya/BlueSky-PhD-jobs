@@ -149,42 +149,32 @@ def run_model(model: str, cases: list[dict], api_key: str, workers: int) -> dict
     ]
     latencies = []
 
-    def filter_one(index: int):
+    def classify_one(index: int):
         started = time.perf_counter()
-        result = classifier.is_real_job(cases[index]["raw_text"])
+        result = classifier.classify_post(
+            cases[index]["raw_text"],
+            metadata_text=cases[index]["metadata_text"],
+        )
         return index, result, time.perf_counter() - started
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(filter_one, i): i for i in range(len(cases))}
+        futures = {pool.submit(classify_one, i): i for i in range(len(cases))}
         for future in as_completed(futures):
-            index, predicted, latency = future.result()
+            index, result, latency = future.result()
+            predicted = result["is_verified_job"]
             records[index]["predicted_job"] = predicted
-            latencies.append(latency)
-
-    real_indices = [
-        index for index, case in enumerate(cases) if case["expected"]["is_job"]
-    ]
-
-    def metadata_one(index: int):
-        started = time.perf_counter()
-        result = classifier.get_metadata(cases[index]["metadata_text"])
-        return index, result, time.perf_counter() - started
-
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(metadata_one, i): i for i in real_indices}
-        for future in as_completed(futures):
-            index, metadata, latency = future.result()
-            expected = cases[index]["expected"]
-            records[index].update(
-                predicted_country=metadata["country"],
-                predicted_position=metadata["position_type"],
-                predicted_disciplines=metadata["disciplines"],
-                country_ok=normalize(metadata["country"])
-                == normalize(expected["country"]),
-                position_ok=position_matches(
-                    expected["position"], metadata["position_type"]
-                ),
-            )
+            if cases[index]["expected"]["is_job"]:
+                expected = cases[index]["expected"]
+                records[index].update(
+                    predicted_country=result["country"],
+                    predicted_position=result["position_type"],
+                    predicted_disciplines=result["disciplines"],
+                    country_ok=normalize(result["country"])
+                    == normalize(expected["country"]),
+                    position_ok=position_matches(
+                        expected["position"], result["position_type"]
+                    ),
+                )
             latencies.append(latency)
 
     scores = score(records)

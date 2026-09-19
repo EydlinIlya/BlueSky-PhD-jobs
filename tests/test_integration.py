@@ -27,11 +27,12 @@ class TestClassifierToStoragePipeline:
 
     def test_job_with_metadata_saved(self):
         metadata_json = json.dumps({
+            "is_verified_job": True,
             "disciplines": ["Biology", "Computer Science"],
             "country": "USA",
             "position_type": ["PhD Student"]
         })
-        llm = MockLLM(["YES", metadata_json])
+        llm = MockLLM([metadata_json])
         classifier = JobClassifier(llm)
         storage = MockStorage()
 
@@ -56,7 +57,7 @@ class TestClassifierToStoragePipeline:
         assert record["position_type"] == ["PhD Student"]
 
     def test_non_job_not_classified_for_metadata(self):
-        llm = MockLLM(["NO"])
+        llm = MockLLM([json.dumps({"is_verified_job": False})])
         classifier = JobClassifier(llm)
         storage = MockStorage()
 

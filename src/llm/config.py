@@ -96,8 +96,9 @@ POSITION_TYPES = [
 ]
 
 METADATA_PROMPT_TEMPLATE = (
-    "Extract metadata from this academic job posting as JSON.\n\n"
+    "Classify this social-media post and extract its academic-job metadata in one JSON response.\n\n"
     "Return a JSON object with these fields:\n"
+    '  "is_verified_job": true only when the POST TEXT advertises an early-career academic research position that is currently open\n'
     '  "disciplines": array of 1-3 disciplines from this list: {disciplines}\n'
     '  "country": country where the position is located (standard name, or "Unknown")\n'
     '  "position_type": array of position types from: PhD Student, Postdoc, Master Student, Research Assistant\n'
@@ -106,12 +107,23 @@ METADATA_PROMPT_TEMPLATE = (
     '  "application_url": exact HTTP(S) application or official vacancy URL, or null\n'
     '  "application_deadline": exact deadline as YYYY-MM-DD, or null\n'
     '  "location_text": exact city/region/campus wording, or null\n\n'
+    "CLASSIFICATION rules:\n"
+    "- Decide is_verified_job only from the POST TEXT section. CONTEXT may help extract metadata, but an author bio or linked-page preview must not turn a non-job post into a job.\n"
+    "- True: an open PhD, postdoc, research assistant, master thesis, or assistant-professor/tenure-track research position.\n"
+    "- False: discussion, congratulations, study recruitment, grants/contests, future openings not yet open, administrative roles, or senior faculty/leadership roles.\n"
+    "- Associate/full/visiting professor, director, and chair roles are false.\n\n"
+    "POSTING DATE AND DEADLINE YEAR:\n"
+    "- The source post was published on {posted_date}.\n"
+    "- Accept a date only when the source labels it as a deadline, closing date, or apply-by date.\n"
+    "- Preserve an explicit year. If an explicitly labelled deadline omits the year, use the posting year when its month/day is on or after the posting month/day; otherwise use the next year.\n"
+    "- Never treat a publication date, URL date, event date, or job/reference ID as an application deadline.\n"
+    "- If the posting date is unavailable, a deadline without a year must be null.\n\n"
     "EVIDENCE rules for the five job fields:\n"
     "- Copy facts only when they are explicitly present in the post or linked-page preview.\n"
     "- Never infer an employer from the author's handle or bio.\n"
     "- Never invent or normalize a vague role into a more specific job title.\n"
     "- application_url must be an explicit application/official vacancy URL, never a Bluesky URL.\n"
-    "- A month/day without an unambiguous year is not an exact deadline; return null.\n"
+    "- Do not infer missing deadline facts.\n"
     "- Return null for every uncertain or missing value.\n\n"
     "DISCIPLINE rules:\n"
     "- Pick 1-3 that best match. For cross-disciplinary work, list all (e.g., bioinformatics = Biology + Computer Science).\n"
@@ -135,20 +147,20 @@ METADATA_PROMPT_TEMPLATE = (
     "those should not reach this step\n\n"
     "Examples:\n"
     'Input: "PhD position at University of Oxford in computational biology"\n'
-    'Output: {{"disciplines": ["Biology", "Computer Science"], "country": "UK", "position_type": ["PhD Student"], "job_title": "PhD position in computational biology", "hiring_organization": "University of Oxford", "application_url": null, "application_deadline": null, "location_text": "Oxford"}}\n\n'
+    'Output: {{"is_verified_job": true, "disciplines": ["Biology", "Computer Science"], "country": "UK", "position_type": ["PhD Student"], "job_title": "PhD position in computational biology", "hiring_organization": "University of Oxford", "application_url": null, "application_deadline": null, "location_text": "Oxford"}}\n\n'
     'Input: "Postdoc and PhD positions at MIT in physics"\n'
-    'Output: {{"disciplines": ["Physics"], "country": "USA", "position_type": ["PhD Student", "Postdoc"], "job_title": null, "hiring_organization": "MIT", "application_url": null, "application_deadline": null, "location_text": null}}\n\n'
+    'Output: {{"is_verified_job": true, "disciplines": ["Physics"], "country": "USA", "position_type": ["PhD Student", "Postdoc"], "job_title": null, "hiring_organization": "MIT", "application_url": null, "application_deadline": null, "location_text": null}}\n\n'
     'Input: "Doctoral Research Position at Friedrich-Schiller-Universitat Jena in archaeology"\n'
-    'Output: {{"disciplines": ["History"], "country": "Germany", "position_type": ["PhD Student"], "job_title": "Doctoral Research Position in archaeology", "hiring_organization": "Friedrich Schiller University Jena", "application_url": null, "application_deadline": null, "location_text": "Jena"}}\n\n'
+    'Output: {{"is_verified_job": true, "disciplines": ["History"], "country": "Germany", "position_type": ["PhD Student"], "job_title": "Doctoral Research Position in archaeology", "hiring_organization": "Friedrich Schiller University Jena", "application_url": null, "application_deadline": null, "location_text": "Jena"}}\n\n'
     'Input: "Research assistant at Aarhus University, Denmark in microbial biology"\n'
-    'Output: {{"disciplines": ["Biology"], "country": "Denmark", "position_type": ["Research Assistant"], "job_title": "Research assistant", "hiring_organization": "Aarhus University", "application_url": null, "application_deadline": null, "location_text": null}}\n\n'
+    'Output: {{"is_verified_job": true, "disciplines": ["Biology"], "country": "Denmark", "position_type": ["Research Assistant"], "job_title": "Research assistant", "hiring_organization": "Aarhus University", "application_url": null, "application_deadline": null, "location_text": null}}\n\n'
     'Input: "MS opportunity in machine learning, apply via link"\n'
-    'Output: {{"disciplines": ["Computer Science"], "country": "Unknown", "position_type": ["Master Student"], "job_title": "MS opportunity in machine learning", "hiring_organization": null, "application_url": null, "application_deadline": null, "location_text": null}}\n\n'
+    'Output: {{"is_verified_job": true, "disciplines": ["Computer Science"], "country": "Unknown", "position_type": ["Master Student"], "job_title": "MS opportunity in machine learning", "hiring_organization": null, "application_url": null, "application_deadline": null, "location_text": null}}\n\n'
     'Input: "Hiring one postdoctoral and two predoctoral researchers in neuroscience"\n'
-    'Output: {{"disciplines": ["Psychology"], "country": "Unknown", "position_type": ["PhD Student", "Postdoc"], "job_title": null, "hiring_organization": null, "application_url": null, "application_deadline": null, "location_text": null}}\n\n'
+    'Output: {{"is_verified_job": true, "disciplines": ["Psychology"], "country": "Unknown", "position_type": ["PhD Student", "Postdoc"], "job_title": null, "hiring_organization": null, "application_url": null, "application_deadline": null, "location_text": null}}\n\n'
     'Input: "Assistant Professor (tenure-track) in Computational Biology at MIT"\n'
-    'Output: {{"disciplines": ["Biology", "Computer Science"], "country": "USA", "position_type": ["Postdoc"], "job_title": "Assistant Professor (tenure-track) in Computational Biology", "hiring_organization": "MIT", "application_url": null, "application_deadline": null, "location_text": null}}\n\n'
+    'Output: {{"is_verified_job": true, "disciplines": ["Biology", "Computer Science"], "country": "USA", "position_type": ["Postdoc"], "job_title": "Assistant Professor (tenure-track) in Computational Biology", "hiring_organization": "MIT", "application_url": null, "application_deadline": null, "location_text": null}}\n\n'
     'Input: "PhD position in satellite remote sensing of boreal forest carbon dynamics, University of Helsinki"\n'
-    'Output: {{"disciplines": ["Ecology", "Computer Science"], "country": "Finland", "position_type": ["PhD Student"], "job_title": "PhD position in satellite remote sensing of boreal forest carbon dynamics", "hiring_organization": "University of Helsinki", "application_url": null, "application_deadline": null, "location_text": null}}\n\n'
+    'Output: {{"is_verified_job": true, "disciplines": ["Ecology", "Computer Science"], "country": "Finland", "position_type": ["PhD Student"], "job_title": "PhD position in satellite remote sensing of boreal forest carbon dynamics", "hiring_organization": "University of Helsinki", "application_url": null, "application_deadline": null, "location_text": null}}\n\n'
     "Return ONLY the JSON object, no other text."
 )

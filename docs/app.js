@@ -87,14 +87,90 @@ function safeUrl(u) {
     catch { return null; }
 }
 
+function resolveDeadlineEvidence(sourceText, candidate, created) {
+    const source = String(sourceText || '').replace(/https?:\/\/\S+/gi, ' ');
+    const month = candidate.getUTCMonth() + 1;
+    const day = candidate.getUTCDate();
+    const names = [
+        'jan(?:uary)?', 'feb(?:ruary)?', 'mar(?:ch)?', 'apr(?:il)?', 'may',
+        'jun(?:e)?', 'jul(?:y)?', 'aug(?:ust)?', 'sep(?:t(?:ember)?)?',
+        'oct(?:ober)?', 'nov(?:ember)?', 'dec(?:ember)?'
+    ];
+    const name = names[month - 1];
+    const fullDatePatterns = [
+        new RegExp(`(?<!\\d)(\\d{4})[./-]0?${month}[./-]0?${day}(?!\\d)`, 'gi'),
+        new RegExp(`(?<!\\d)0?${day}[./-]0?${month}[./-](\\d{4})(?!\\d)`, 'gi'),
+        new RegExp(`(?<!\\d)0?${month}[./-]0?${day}[./-](\\d{4})(?!\\d)`, 'gi'),
+        new RegExp(`\\b(?:${name})\\.?\\s+(?:the\\s+)?0?${day}(?:st|nd|rd|th)?(?:,)?\\s+(\\d{4})\\b`, 'gi'),
+        new RegExp(`\\b0?${day}(?:st|nd|rd|th)?\\s+(?:of\\s+)?(?:${name})\\.?(?:,)?\\s+(\\d{4})\\b`, 'gi')
+    ];
+    const deadlineContext = /\bdeadline\b|\bclosing\s+date\b|\b(?:applications?|submissions?)\s+(?:close|closes|closed|closing|due)\b|\b(?:apply|submit)\b[\s\S]{0,40}\b(?:by|before|no\s+later\s+than)\b|\b(?:applications?|submissions?)\b[\s\S]{0,32}\b(?:accepted|open)\b[\s\S]{0,20}\buntil\b|\bno\s+later\s+than\b|[⏳⌛]|\u00e2\udc8f\u00b3/i;
+    const hasContext = match => {
+        const start = Math.max(0, match.index - 96);
+        const end = Math.min(source.length, match.index + match[0].length + 96);
+        return deadlineContext.test(source.slice(start, end));
+    };
+    const fullDates = [];
+    for (const pattern of fullDatePatterns) {
+        let match;
+        while ((match = pattern.exec(source)) !== null) {
+            if (!hasContext(match)) continue;
+            const resolved = new Date(Date.UTC(Number(match[1]), month - 1, day, 23, 59, 59));
+            if (resolved.getUTCMonth() !== month - 1 || resolved.getUTCDate() !== day) continue;
+            if (resolved.getUTCFullYear() === candidate.getUTCFullYear()) return resolved;
+            fullDates.push(resolved);
+        }
+    }
+    if (fullDates.length) return new Date(Math.max(...fullDates.map(date => date.getTime())));
+    const shortYearPatterns = [
+        new RegExp(`(?<!\\d)0?${day}[./-]0?${month}[./-](\\d{2})(?!\\d)`, 'gi'),
+        new RegExp(`(?<!\\d)0?${month}[./-]0?${day}[./-](\\d{2})(?!\\d)`, 'gi')
+    ];
+    for (const pattern of shortYearPatterns) {
+        let match;
+        while ((match = pattern.exec(source)) !== null) {
+            if (!hasContext(match)) continue;
+            return new Date(Date.UTC(2000 + Number(match[1]), month - 1, day, 23, 59, 59));
+        }
+    }
+    const yearlessPatterns = [
+        new RegExp(`(?<![\\d./-])0?${month}[./-]0?${day}(?![\\d./-])`, 'gi'),
+        new RegExp(`(?<![\\d./-])0?${day}[./-]0?${month}(?![\\d./-])`, 'gi'),
+        new RegExp(`\\b(?:${name})\\.?\\s+(?:the\\s+)?0?${day}(?:st|nd|rd|th)?\\b`, 'gi'),
+        new RegExp(`\\b0?${day}(?:st|nd|rd|th)?\\s+(?:of\\s+)?(?:${name})\\.?\\b`, 'gi')
+    ];
+    if (Number.isNaN(created.getTime())) return null;
+    for (const pattern of yearlessPatterns) {
+        let match;
+        while ((match = pattern.exec(source)) !== null) {
+            if (!hasContext(match)) continue;
+            let year = created.getUTCFullYear();
+            if (month - 1 < created.getUTCMonth()
+                || (month - 1 === created.getUTCMonth() && day < created.getUTCDate())) year += 1;
+            return new Date(Date.UTC(year, month - 1, day, 23, 59, 59));
+        }
+    }
+    return null;
+}
+
 function isActivePosition(position, now = new Date()) {
     const rawDeadline = position && position.application_deadline;
     if (typeof rawDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawDeadline)) {
-        const deadline = new Date(`${rawDeadline}T23:59:59Z`);
+        const candidate = new Date(`${rawDeadline}T23:59:59Z`);
         const created = new Date(position && position.created_at);
-        const impossible = !Number.isNaN(created.getTime())
-            && deadline.getUTCFullYear() < created.getUTCFullYear();
-        if (!Number.isNaN(deadline.getTime()) && !impossible) return deadline >= now;
+        if (!Number.isNaN(candidate.getTime())) {
+            const deadline = resolveDeadlineEvidence(position && position.message, candidate, created);
+            if (deadline) return deadline >= now;
+            if (!Number.isNaN(created.getTime())) {
+                const createdDay = Date.UTC(
+                    created.getUTCFullYear(), created.getUTCMonth(), created.getUTCDate()
+                );
+                const candidateDay = Date.UTC(
+                    candidate.getUTCFullYear(), candidate.getUTCMonth(), candidate.getUTCDate()
+                );
+                if (candidateDay > createdDay) return candidate >= now;
+            }
+        }
     }
     const created = new Date(position && position.created_at);
     if (Number.isNaN(created.getTime())) return false;

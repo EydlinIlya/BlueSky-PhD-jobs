@@ -109,7 +109,10 @@ def main() -> None:
     completed = 0
     for index, row in enumerate(candidates, 1):
         try:
-            metadata = classifier.get_metadata(row.get("message") or "")
+            metadata = classifier.get_metadata(
+                row.get("message") or "",
+                posted_at=row.get("created_at"),
+            )
         except LLMUnavailableError:
             LOGGER.exception(
                 "Mistral became unavailable at row %s/%s; completed rows are saved",

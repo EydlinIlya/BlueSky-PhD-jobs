@@ -6,12 +6,18 @@ from urllib.parse import urlparse
 
 from .base import LLMProvider
 from .config import DISCIPLINES, POSITION_TYPES, IS_REAL_JOB_PROMPT, METADATA_PROMPT_TEMPLATE
-from src.seo import normalize_http_url, parse_deadline
+from src.seo import (
+    normalize_http_url,
+    parse_deadline,
+    parse_datetime,
+    resolve_deadline_evidence,
+)
 
 
 def _default_metadata() -> dict:
     """Return a fresh, safe metadata fallback for malformed model output."""
     return {
+        "is_verified_job": None,
         "disciplines": ["Other"],
         "country": "Unknown",
         "position_type": ["PhD Student"],
@@ -31,10 +37,12 @@ def _nullable_text(value, max_length: int = 300) -> str | None:
     return value[:max_length] or None
 
 
-def _deadline_year_is_explicit(text: str, year: int) -> bool:
-    """Require the model's deadline year to exist in non-URL source text."""
-    without_urls = re.sub(r"https?://\S+", " ", text or "", flags=re.IGNORECASE)
-    return re.search(rf"(?<!\d){year}(?!\d)", without_urls) is not None
+def _resolve_deadline(value, source_text: str, posted_at=None):
+    """Accept only a date explicitly identified as an application deadline."""
+    deadline = parse_deadline(value)
+    if not deadline:
+        return None
+    return resolve_deadline_evidence(source_text, deadline, posted_at)
 
 
 class JobClassifier:
@@ -60,18 +68,24 @@ class JobClassifier:
         response = self.llm.classify(text, IS_REAL_JOB_PROMPT)
         return "YES" in response.upper()
 
-    def get_metadata(self, text: str) -> dict:
+    def get_metadata(self, text: str, posted_at=None) -> dict:
         """Extract classification and evidence-backed SEO metadata.
 
         Args:
             text: The post text to analyze (bio + post + embed context)
+            posted_at: Source-post timestamp included as model context
 
         Returns:
             Dict containing the classification fields plus nullable title,
             employer, application URL, deadline, and location fields.
         """
         disciplines_str = ", ".join(DISCIPLINES)
-        prompt = METADATA_PROMPT_TEMPLATE.format(disciplines=disciplines_str)
+        posted = parse_datetime(posted_at)
+        posted_date = posted.date().isoformat() if posted else "unavailable"
+        prompt = METADATA_PROMPT_TEMPLATE.format(
+            disciplines=disciplines_str,
+            posted_date=posted_date,
+        )
         response = self.llm.classify(text, prompt).strip()
 
         # Strip markdown fences if present
@@ -156,12 +170,15 @@ class JobClassifier:
         if application_url and "bsky.app" in urlparse(application_url).netloc.lower():
             application_url = None
 
-        deadline = parse_deadline(data.get("application_deadline"))
-        if deadline and not _deadline_year_is_explicit(text, deadline.year):
-            deadline = None
+        deadline = _resolve_deadline(
+            data.get("application_deadline"),
+            text,
+            posted_at,
+        )
         application_deadline = deadline.isoformat() if deadline else None
 
         return {
+            "is_verified_job": data.get("is_verified_job") is True,
             "disciplines": disciplines,
             "country": country,
             "position_type": position_type,
@@ -172,21 +189,32 @@ class JobClassifier:
             "location_text": location_text,
         }
 
-    def classify_post(self, text: str, metadata_text: str | None = None) -> dict:
+    def classify_post(
+        self,
+        text: str,
+        metadata_text: str | None = None,
+        posted_at=None,
+    ) -> dict:
         """Classify a post, determining if it's a real job and extracting metadata.
 
         Args:
             text: The raw post text (used for job detection)
             metadata_text: Enriched text with bio + embed context (used for metadata
                 extraction). Falls back to text if not provided.
+            posted_at: Source-post timestamp included as model context.
 
         Returns:
             Dict with classification and SEO metadata. Non-jobs have
             is_verified_job=False and None for all metadata fields.
         """
-        is_job = self.is_real_job(text)
+        model_text = f"[POST TEXT]\n{text}"
+        if metadata_text and metadata_text != text:
+            model_text += f"\n\n[CONTEXT FOR METADATA]\n{metadata_text}"
 
-        if not is_job:
+        # Filtering and metadata extraction deliberately share one structured
+        # response. Verified posts formerly required two separate model calls.
+        metadata = self.get_metadata(model_text, posted_at=posted_at)
+        if not metadata.get("is_verified_job"):
             return {
                 "is_verified_job": False,
                 "disciplines": None,
@@ -199,7 +227,6 @@ class JobClassifier:
                 "location_text": None,
             }
 
-        metadata = self.get_metadata(metadata_text or text)
         return {
             "is_verified_job": True,
             "disciplines": metadata["disciplines"],
