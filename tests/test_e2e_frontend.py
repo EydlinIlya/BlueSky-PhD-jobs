@@ -156,6 +156,18 @@ class TestFrontendLoads:
         assert "older than 90 days" in page.locator("#river-description").inner_text()
         assert page.locator('[data-tab="archive"]').get_attribute("aria-selected") == "true"
 
+    def test_archive_tab_count_respects_the_current_filters(self, server_url, page):
+        open_feed(page, server_url)
+        page.locator('[data-tab="archive"]').click()
+        page.wait_for_selector("article.post", timeout=15000)
+        total = page.locator("#tab-archive-ct").inner_text().strip()
+        page.evaluate("""() => {
+          state.search = 'this-string-matches-no-archive-position';
+          renderFeedReset();
+        }""")
+        assert total != "0"
+        assert page.locator("#tab-archive-ct").inner_text().strip() == "0"
+
     def test_keyboard_shortcut_focuses_search(self, server_url, page):
         open_feed(page, server_url)
         page.keyboard.press("Control+k")

@@ -542,18 +542,22 @@ function renderNextBatch() {
     loader.classList.toggle('hidden', renderedCount >= feedList.length);
 }
 
-// Counts live only on the two top tabs.
+// Counts respect the active shared filters. The archive count stays blank until
+// its lazy-loaded snapshot is available rather than pretending it is a total.
 function updateCounts() {
-    let latest = 0, followingMatched = 0;
+    let latest = 0, followingMatched = 0, archiveMatched = 0;
     for (const p of state.all) {
         if (!passesFilters(p)) continue;
         latest++;
         if (state.user && matchesFollowing(p)) followingMatched++;
     }
+    if (state.archiveLoaded) {
+        archiveMatched = state.archive.filter(p => passesFilters(p)).length;
+    }
     const set = (sel, v) => { const el = $(sel); if (el) el.textContent = v; };
     set('#tab-latest-ct', latest.toLocaleString());
     set('#tab-following-ct', state.user ? followingMatched.toLocaleString() : '');
-    set('#tab-archive-ct', state.archiveLoaded ? state.archive.length.toLocaleString() : '');
+    set('#tab-archive-ct', state.archiveLoaded ? archiveMatched.toLocaleString() : '');
 }
 
 /* ───────────────────────── INFINITE SCROLL ───────────────────────── */
@@ -748,7 +752,7 @@ function renderTrendCard(sel, counts, kind) {
     let html = top.map(([name, n], i) => {
         const on = state.topics.has(name);
         const followBtn = state.user
-            ? `<span class="trend-follow ${on ? 'on' : ''}" data-topic="${escapeHtml(name)}" data-topic-kind="${topicKind}">${on ? 'following' : 'follow'}</span>`
+            ? `<button type="button" class="trend-follow ${on ? 'on' : ''}" data-topic="${escapeHtml(name)}" data-topic-kind="${topicKind}">${on ? 'following' : 'follow'}</button>`
             : '';
         return `<div class="trend-row" data-trend="${escapeHtml(name)}" data-trend-kind="${kind}">
         <span class="trend-rank">${i + 1}</span>
