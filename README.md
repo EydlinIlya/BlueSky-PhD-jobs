@@ -80,10 +80,10 @@ SUPABASE_KEY=your-server-side-secret
 # Optional maintenance/email alias
 SUPABASE_SERVICE_KEY=your-server-side-secret
 
-# Manual operator digest
+# Allowlisted test digests (comma-separated; daily at 09:00 UTC)
 RESEND_API_KEY=your-resend-key
 EMAIL_FROM=PhD Sky <alerts@phdsky.org>
-DIGEST_RECIPIENT=you@example.com
+DIGEST_RECIPIENTS=you@example.com,reviewer@example.com
 
 # Vercel unsubscribe endpoint (public/publishable values, not service keys)
 SUPABASE_ANON_KEY=your-public-anon-or-publishable-key
@@ -236,8 +236,10 @@ GitHub Actions separates data freshness from deployment frequency:
   Vercel production deployment per day. Manual non-recovery runs also deploy.
 - `telegram-digest.yml` runs independently three times daily.
 - `bluesky-repost.yml` runs every six hours.
-- `subscription-digests.yml` is manual-only and sends at most three matching
-  positions to `DIGEST_RECIPIENT`; it sends nothing when there are no matches.
+- `subscription-digests.yml` runs daily at 09:00 UTC and also supports manual
+  dispatch. It processes only the comma-separated `DIGEST_RECIPIENTS` allowlist,
+  sends each profile at most three matching positions, and sends nothing when
+  that profile has no new matches. Each profile keeps independent watermarks.
 
 Digest body links open `/unsubscribe` and wait for a clear confirmation before
 changing anything. Mailbox-provider one-click unsubscribe uses the separate
@@ -275,8 +277,8 @@ python -m pytest tests/ -v
 - `SUPABASE_URL`, `SUPABASE_KEY`
 - Optional fallbacks: `GEMINI_API_KEY`, `NVIDIA_API_KEY`, `GROQ_API_KEY`
 - Optional Telegram: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID`
-- Manual email: `SUPABASE_SERVICE_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`,
-  `DIGEST_RECIPIENT`
+- Allowlisted test email: `SUPABASE_SERVICE_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`,
+  `DIGEST_RECIPIENTS`
 
 ## Tests
 

@@ -233,6 +233,32 @@ def test_operator_digest_sends_nothing_when_no_new_matches(monkeypatch):
     assert client.writes == []
 
 
+def test_operator_recipient_list_accepts_commas_repeats_and_deduplicates():
+    assert digest.operator_recipients([
+        "First@Example.com, second@example.com",
+        "first@example.com",
+    ]) == ["first@example.com", "second@example.com"]
+
+
+def test_multiple_operators_are_processed_independently(monkeypatch, capsys):
+    calls = []
+
+    def fake_run(recipient):
+        calls.append(recipient)
+        if recipient == "broken@example.com":
+            raise RuntimeError("profile missing")
+        return 1
+
+    monkeypatch.setattr(digest, "run_operator", fake_run)
+    assert digest.run_operators([
+        "first@example.com", "broken@example.com", "second@example.com"
+    ]) == -1
+    assert calls == [
+        "first@example.com", "broken@example.com", "second@example.com"
+    ]
+    assert "broken@example.com" in capsys.readouterr().err
+
+
 def test_real_send_aborts_without_unsubscribe_token(monkeypatch, capsys):
     """Never mail without a working token-scoped unsubscribe path."""
     client = _FakeClient({

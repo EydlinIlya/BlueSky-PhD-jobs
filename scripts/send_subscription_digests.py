@@ -1,13 +1,13 @@
 """Send saved-search subscription digests by email.
 
-The deployed GitHub workflow uses manual operator mode: it resolves exactly one
-configured profile email, aggregates that profile's saved searches into one
-message, and advances only its successful-match watermarks. Subscriber-wide
+The deployed GitHub workflow uses an explicit operator allowlist: it resolves
+each configured profile email, aggregates that profile's saved searches into
+one message, and advances only its successful-match watermarks. Subscriber-wide
 ``run()`` remains available in code for a later consented rollout but is not
-wired to any workflow or schedule.
+wired to the workflow. The allowlist runs daily and by manual dispatch.
 
 Usage:
-    python scripts/send_subscription_digests.py --operator-to owner@example.com
+    python scripts/send_subscription_digests.py --operator-to owner@example.com,reviewer@example.com
     python scripts/send_subscription_digests.py --test-to owner@example.com
 
 Required env:
@@ -38,6 +38,8 @@ SITE_URL = os.environ.get("SITE_BASE_URL", "https://phdsky.org/")
 MAX_POSITIONS_PER_DIGEST = 3
 OPERATOR_LINE = "PhD Sky · operated by Eli Eydlin"
 CONTACT_EMAIL = "eli.eydlin@gmail.com"
+
+
 def unsubscribe_url(sub: dict, site_url: str = SITE_URL) -> str:
     """Human preference-page link carrying the subscription's secret token."""
     return f"{site_url}unsubscribe?token={sub.get('unsubscribe_token', '')}"
@@ -358,6 +360,47 @@ def run_operator(to: str) -> int:
     return 1
 
 
+def operator_recipients(values: list[str]) -> list[str]:
+    """Normalize repeated/comma-separated operator addresses without duplicates."""
+    recipients: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        for candidate in value.split(","):
+            email = candidate.strip().lower()
+            if not email:
+                continue
+            if "@" not in email or email.startswith("@") or email.endswith("@"):
+                raise ValueError(f"Invalid operator recipient: {candidate.strip()!r}")
+            if email not in seen:
+                seen.add(email)
+                recipients.append(email)
+    return recipients
+
+
+def run_operators(recipients: list[str]) -> int:
+    """Process an explicit operator allowlist, isolating each recipient's state."""
+    sent = 0
+    failed: list[str] = []
+    for recipient in recipients:
+        try:
+            result = run_operator(recipient)
+        except Exception as exc:
+            print(f"Operator digest failed for {recipient}: {exc}", file=sys.stderr)
+            failed.append(recipient)
+            continue
+        if result < 0:
+            failed.append(recipient)
+        else:
+            sent += result
+    if failed:
+        print(
+            "Operator digest failed for: " + ", ".join(failed),
+            file=sys.stderr,
+        )
+        return -1
+    return sent
+
+
 def run(cadence: str) -> int:
     client = get_client()
     subs = fetch_due_subscriptions(client, cadence)
@@ -529,13 +572,19 @@ def main():
     ap.add_argument("--test-to", metavar="EMAIL",
                     help="TEST MODE: send one sample digest to EMAIL and exit. "
                          "Mails nobody else and writes nothing to the database.")
-    ap.add_argument("--operator-to", metavar="EMAIL",
-                    help="MANUAL OPERATOR MODE: send at most one new-position "
-                         "digest only to this profile email, then advance only "
-                         "that profile's subscription watermarks.")
+    ap.add_argument("--operator-to", metavar="EMAIL[,EMAIL...]", action="append",
+                    help="OPERATOR MODE: process this explicit profile-email "
+                         "allowlist. Accepts comma-separated addresses and may "
+                         "be repeated; each profile's watermarks stay isolated.")
     args = ap.parse_args()
     if args.operator_to:
-        sys.exit(0 if run_operator(args.operator_to) >= 0 else 1)
+        try:
+            recipients = operator_recipients(args.operator_to)
+        except ValueError as exc:
+            ap.error(str(exc))
+        if not recipients:
+            ap.error("--operator-to requires at least one email address")
+        sys.exit(0 if run_operators(recipients) >= 0 else 1)
     if args.test_to:
         sys.exit(0 if run_test(args.test_to, args.cadence) else 1)
     run(args.cadence)
