@@ -487,7 +487,7 @@ function postHTML(p) {
       <div class="p-body">${escapeHtml(bodyText)}${moreLink}</div>
       ${threadHTML}
       <div class="p-actions">
-        ${applicationUrl ? `<a class="p-act" href="${escapeHtml(applicationUrl)}" target="_blank" rel="noopener nofollow" data-stop style="margin-left:auto;color:var(--primary);font-weight:600">apply →</a>` : ''}
+        ${applicationUrl ? `<a class="p-act" href="${escapeHtml(applicationUrl)}" target="_blank" rel="noopener nofollow" data-stop style="margin-left:auto;color:var(--primary);font-weight:600">apply</a>` : ''}
         <a class="p-act" href="${escapeHtml(postUrl)}" target="_blank" rel="noopener nofollow" data-stop style="${applicationUrl ? '' : 'margin-left:auto;'}color:var(--fg-subtle)">source</a>
       </div>
     </article>`;
@@ -808,7 +808,7 @@ function openFlyout(uri) {
         }).join('')}
       </div>` : ''}
       <div style="display:flex;gap:8px;margin-top:6px">
-        ${applicationUrl ? `<a class="btn-primary" href="${escapeHtml(applicationUrl)}" target="_blank" rel="noopener nofollow">Apply on the official site →</a>` : ''}
+        ${applicationUrl ? `<a class="btn-primary" href="${escapeHtml(applicationUrl)}" target="_blank" rel="noopener nofollow">Apply on the official site</a>` : ''}
         <a class="btn-secondary" href="${escapeHtml(postUrl)}" target="_blank" rel="noopener nofollow">View source</a>
       </div>`;
     $('#flyout').classList.add('open');

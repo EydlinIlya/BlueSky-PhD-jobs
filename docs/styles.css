@@ -147,6 +147,9 @@ body { padding-bottom: 34px; }
   #river-meta { display: none; }
   .lbl-full { display: none; }                /* use the short tab label */
   .lbl-short { display: inline; }
+
+  /* Keep individual position rows from reading as a hard edge-to-edge list. */
+  .post { margin-inline: 4px; padding-right: 8px; }
 }
 .rail-section { display: flex; flex-direction: column; gap: 7px; }
 .rail-title { font-family: var(--font-mono); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--fg-subtle); padding: 0 4px; display: flex; align-items: center; justify-content: space-between; }

@@ -807,7 +807,7 @@ def render_position_page(pos, slug, now=None):
     if state != "archived" and application_url:
         actions.append(
             f'<a class="cta primary" href="{escape_html(application_url)}" '
-            'target="_blank" rel="noopener nofollow">Apply on the official site &rarr;</a>'
+            'target="_blank" rel="noopener nofollow">Apply on the official site</a>'
         )
     if source_url:
         actions.append(
