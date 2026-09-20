@@ -393,7 +393,10 @@ Required secrets:
 - Manual operator email workflow: `RESEND_API_KEY`, a verified `EMAIL_FROM`, and
   `DIGEST_RECIPIENT`; it reuses privileged `SUPABASE_KEY` when a separately named
   `SUPABASE_SERVICE_KEY` secret is absent. No plaintext Variable fallbacks.
-- Vercel unsubscribe function: `SUPABASE_URL` and public `SUPABASE_ANON_KEY`.
+- Vercel unsubscribe function: `SUPABASE_URL` and public `SUPABASE_ANON_KEY` are
+  recommended deployment overrides. The checked-in fallbacks are the same
+  public project values already shipped to the browser; service keys are never
+  used by this endpoint.
 
 ## Frontend (`docs/`)
 
@@ -453,9 +456,12 @@ onboarding, subscriptions page, toasts).
   ORCID provider buttons are **hidden** for now (kept in `PROVIDERS` with
   `soon:true`, filtered out at render) until the academic-OAuth branch.
 - Saved searches create weekly email subscriptions (`cadence='weekly'`,
-  `deliver_email=true`). The Subscriptions page lists, deletes, and edits alert
+  `deliver_email=true`). The Subscriptions page lists, deletes, edits, pauses,
+  and re-enables alert email
   filters under owner-only RLS. “Show matches” restores one subscription's
   keyword/area/country/level/aggregator filters and opens the Latest feed.
+  Re-enabling sets `last_notified_at` to the current time so a paused backlog is
+  not sent. Loading the page never turns a paused/off row back on.
 - **Follows** are live: "+ follow" on a post toggles an `account_follows` row;
   "follow" on a right-rail Top-area/country toggles a `topic_follows` row.
 - Initial account chrome stays in a neutral `authReady=false` pending state
@@ -502,12 +508,21 @@ Backend pieces:
 - Digest HTML uses the academic light palette and a **See more in your feed**
   button linking to `/#following`; `docs/app.js` resolves `/#following` and
   `/#subscriptions` after session restoration.
-- Tests: `tests/test_email.py` (mock provider) + `tests/test_digest.py`
-  (matching/formatting).
+- Tests: `tests/test_email.py` (mock provider), `tests/test_digest.py`
+  (matching/formatting/headers), and `tests/test_unsubscribe_api.py` (method and
+  token-scoped endpoint contract).
 
 **Email unsubscribe:** migration 007 adds per-alert tokens and the
-`unsubscribe_by_token` RPC. `docs/unsubscribe.html` reads the token from the URL
-and invokes that RPC through the public Supabase client.
+`unsubscribe_by_token` RPC. The visible `/unsubscribe?token=...` page is a human
+preference page: GET is read-only and the RPC is not invoked until the user
+presses **Stop weekly email**. `api/unsubscribe.js` is the POST-only Vercel
+function used both by that confirmation and by mailbox providers. It calls the
+token-scoped RPC with the public Supabase key, returns 405 for GET, and uses a
+neutral response for invalid/reused tokens. Digest headers use
+`List-Unsubscribe: <https://phdsky.org/api/unsubscribe?...>` plus
+`List-Unsubscribe-Post: List-Unsubscribe=One-Click`; the body link continues to
+use the confirmation page. Successful human flows link to the real
+`/#subscriptions` view, where authenticated owners can re-enable the alert.
 
 **Legal pages:** `docs/privacy.html` contains the applicable Section 11 collection
 notice, controller/contact, purposes, recipients, international processing,

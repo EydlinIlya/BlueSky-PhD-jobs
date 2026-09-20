@@ -54,6 +54,21 @@ def test_subscription_label():
     assert digest.subscription_label({}) == "all positions"
 
 
+def test_unsubscribe_links_separate_human_confirmation_from_one_click_post():
+    sub = {"unsubscribe_token": "4e162b33-229b-441a-b655-1fd560765037"}
+    assert digest.unsubscribe_url(sub) == (
+        "https://phdsky.org/unsubscribe?token=4e162b33-229b-441a-b655-1fd560765037"
+    )
+    assert digest.unsubscribe_headers(sub) == {
+        "List-Unsubscribe": (
+            "<https://phdsky.org/api/unsubscribe?token="
+            "4e162b33-229b-441a-b655-1fd560765037>"
+        ),
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    }
+    assert digest.unsubscribe_headers({}) is None
+
+
 def test_format_digest_html_includes_count_and_link():
     sub = {"disciplines": ["Biology"]}
     body = digest.format_digest_html(sub, [pos(), pos(uri="at://y")])
@@ -188,6 +203,10 @@ def test_operator_digest_sends_one_email_with_three_positions_and_updates_waterm
     assert "See more in your feed" in captured[0]["html"]
     assert "https://phdsky.org/#following" in captured[0]["html"]
     assert "See more in your feed" in captured[0]["text"]
+    assert captured[0]["headers"] == {
+        "List-Unsubscribe": "<https://phdsky.org/api/unsubscribe?token=tok-123>",
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    }
     assert client.writes == [{"last_notified_at": "2026-09-14T00:00:00+00:00"}]
 
 
@@ -215,8 +234,7 @@ def test_operator_digest_sends_nothing_when_no_new_matches(monkeypatch):
 
 
 def test_real_send_aborts_without_unsubscribe_token(monkeypatch, capsys):
-    """Never mail without a working unsubscribe link (CAN-SPAM / bulk-sender
-    rules). A missing token means migration 007 hasn't been applied."""
+    """Never mail without a working token-scoped unsubscribe path."""
     client = _FakeClient({
         "subscriptions": [{
             "id": "sub-1", "user_id": "user-1", "disciplines": [], "countries": [],

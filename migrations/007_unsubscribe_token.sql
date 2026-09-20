@@ -1,7 +1,7 @@
--- Migration 007: One-click email unsubscribe
+-- Migration 007: Token-scoped email unsubscribe
 -- Adds a secret per-subscription token so a digest email can carry a working
--- unsubscribe link (CAN-SPAM / ePrivacy) that an *unauthenticated* click can
--- act on. The RPC is SECURITY DEFINER (bypasses RLS) but only ever disables the
+-- unsubscribe action that does not require authentication. The RPC is SECURITY
+-- DEFINER (bypasses RLS) but only ever disables the
 -- single row whose secret token matches, so it can't touch other users' data.
 -- Requires migration 004 (subscriptions).
 
@@ -15,7 +15,7 @@ ALTER TABLE subscriptions ALTER COLUMN unsubscribe_token SET NOT NULL;
 
 -- 2. Token-scoped unsubscribe. Turns email delivery off (and cadence to 'off')
 --    for the matching subscription. Returns a human-readable filter label for a
---    friendly confirmation page, or NULL if the token is unknown/already used.
+--    confirmation flow, or NULL if the token is unknown.
 CREATE OR REPLACE FUNCTION unsubscribe_by_token(p_token uuid)
 RETURNS text
 LANGUAGE plpgsql

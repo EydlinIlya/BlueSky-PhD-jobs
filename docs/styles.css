@@ -465,6 +465,9 @@ a.p-time:hover { color: var(--primary); text-decoration: underline; }
 .sub-card-q .pre { color: var(--accent); }
 .sub-card-stat { font-family: var(--font-mono); font-size: 11px; color: var(--fg-subtle); white-space: nowrap; }
 .sub-card-stat b { color: var(--accent); }
+.sub-email-status { flex: 0 0 auto; padding: 4px 7px; border: 1px solid var(--border); border-radius: 5px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; }
+.sub-email-status.on { color: var(--green-700); background: rgba(47, 125, 91, .08); border-color: rgba(47, 125, 91, .28); }
+.sub-email-status.off { color: var(--fg-subtle); background: var(--bg-elevated); }
 .sub-card-tags { display: flex; flex-wrap: wrap; gap: 5px; }
 .sub-cadence-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .cad-pill { padding: 6px 12px; border: 1px solid var(--border); border-radius: 7px; font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); background: var(--bg); cursor: pointer; transition: all .15s; }
@@ -481,13 +484,21 @@ a.p-time:hover { color: var(--primary); text-decoration: underline; }
 .del-static { font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); }
 .del-static .em { color: var(--fg-subtle); }
 .sub-card-actions { margin-left: auto; display: flex; align-items: center; gap: 14px; }
-.sub-view, .sub-edit, .sub-delete { font-family: var(--font-mono); font-size: 11px; background: none; border: none; cursor: pointer; padding: 2px 0; }
+.sub-view, .sub-edit, .sub-delete, .sub-email-toggle { font-family: var(--font-mono); font-size: 11px; background: none; border: none; cursor: pointer; padding: 2px 0; }
+.sub-email-toggle { color: var(--primary); font-weight: 600; }
+.sub-email-toggle:hover { color: var(--primary-hover); }
+.sub-email-toggle[disabled] { cursor: wait; opacity: .55; }
 .sub-view { color: var(--primary); font-weight: 600; }
 .sub-view:hover { color: var(--accent); }
 .sub-delete { color: var(--fg-subtle); }
 .sub-delete:hover { color: var(--red-500); }
 .sub-edit { color: var(--fg-muted); }
 .sub-edit:hover { color: var(--fg); }
+
+@media (max-width: 620px) {
+  .sub-card-actions { width: 100%; margin-left: 0; flex-wrap: wrap; gap: 14px 18px; }
+  .sub-card-actions button { min-height: 44px; padding: 8px 0; }
+}
 
 .edit-sub-body { max-height: min(68vh, 620px); overflow-y: auto; }
 .edit-filter-group { margin: 0; padding: 0; border: 0; }

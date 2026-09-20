@@ -201,3 +201,56 @@ class TestFrontendLoads:
         assert page.locator('[data-tab="latest"]').get_attribute("aria-selected") == "true"
         assert "on" in page.locator('#chips-area .chip[data-area="Computer Science"]').get_attribute("class")
         assert page.locator("article.post").count() > 0
+
+    def test_paused_subscription_can_be_turned_back_on(self, server_url, page):
+        open_feed(page, server_url)
+        page.evaluate("""() => {
+          state.user = {id: 'test-user', email: 'reader@example.com'};
+          state.subs = [{
+            id: 'sub-paused', query_text: 'israel', disciplines: [], countries: [],
+            position_types: [], hide_aggregators: false, cadence: 'off',
+            deliver_email: false
+          }];
+          updateSub = async (id, fields) => {
+            Object.assign(state.subs.find(item => item.id === id), fields);
+            renderRailSubs();
+            renderSubsPage();
+            return true;
+          };
+          setView('subs');
+        }""")
+        assert page.locator(".sub-email-status").inner_text() == "Email paused"
+        page.locator('[data-toggle-sub-email="sub-paused"]').click()
+        page.wait_for_timeout(100)
+        assert page.locator(".sub-email-status").inner_text() == "Email on"
+        assert page.locator('[data-toggle-sub-email="sub-paused"]').inner_text() == "Pause email"
+        state = page.evaluate("""() => ({
+          deliver_email: state.subs[0].deliver_email,
+          cadence: state.subs[0].cadence,
+          last_notified_at: state.subs[0].last_notified_at
+        })""")
+        assert state["deliver_email"] is True
+        assert state["cadence"] == "weekly"
+        assert state["last_notified_at"]
+
+    def test_unsubscribe_page_waits_for_confirmation(self, server_url, page):
+        requests = []
+
+        def respond(route, request):
+            requests.append({"method": request.method, "url": request.url})
+            route.fulfill(status=200, content_type="application/json", body='{"ok":true}')
+
+        page.route("**/api/unsubscribe?**", respond)
+        root = server_url.split("/?", 1)[0]
+        token = "4e162b33-229b-441a-b655-1fd560765037"
+        page.goto(f"{root}/unsubscribe.html?token={token}", wait_until="domcontentloaded")
+        page.wait_for_timeout(200)
+        assert requests == []
+        assert page.locator("#card-title").inner_text() == "Stop this weekly email?"
+        page.locator("#confirm-unsubscribe").click()
+        page.wait_for_selector("text=Weekly email stopped.")
+        assert requests == [{
+            "method": "POST",
+            "url": f"{root}/api/unsubscribe?token={token}",
+        }]
+        assert page.locator('a[href="/#subscriptions"]').count() == 1

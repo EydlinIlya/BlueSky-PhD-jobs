@@ -85,6 +85,9 @@ RESEND_API_KEY=your-resend-key
 EMAIL_FROM=PhD Sky <alerts@phdsky.org>
 DIGEST_RECIPIENT=you@example.com
 
+# Vercel unsubscribe endpoint (public/publishable values, not service keys)
+SUPABASE_ANON_KEY=your-public-anon-or-publishable-key
+
 # Optional channels
 TELEGRAM_BOT_TOKEN=your-bot-token
 TELEGRAM_CHANNEL_ID=@your_channel
@@ -159,6 +162,9 @@ API as a fallback.
 
 The desktop search expands when focused. Saved subscriptions include **Show
 matches**, which restores that subscription's search and filters in the feed.
+Each saved search also shows whether weekly email is on or paused and provides
+an explicit control to pause or re-enable it. Re-enabling starts from that time,
+so the paused backlog is not mailed.
 The Archive tab lazy-loads `archive.json`; archived records do not appear in
 active listings or the jobs sitemap.
 
@@ -232,6 +238,12 @@ GitHub Actions separates data freshness from deployment frequency:
 - `bluesky-repost.yml` runs every six hours.
 - `subscription-digests.yml` is manual-only and sends at most three matching
   positions to `DIGEST_RECIPIENT`; it sends nothing when there are no matches.
+
+Digest body links open `/unsubscribe` and wait for a clear confirmation before
+changing anything. Mailbox-provider one-click unsubscribe uses the separate
+POST-only `/api/unsubscribe` endpoint with RFC 8058 headers; GET requests never
+change subscription state. The success page links to `/#subscriptions`, where
+signed-in users can turn weekly email back on.
 
 For a Vercel Hobby project, configure **Project Settings → Security → Deployment
 Retention**. A practical policy for this repository is seven days for production,

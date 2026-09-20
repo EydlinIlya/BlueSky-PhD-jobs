@@ -1030,11 +1030,14 @@ function renderRailSubs() {
     }
     sec.removeAttribute('aria-busy');
     if (u) {
-        const list = state.subs.length ? state.subs.map(s => `
+        const list = state.subs.length ? state.subs.map(s => {
+          const emailOn = s.deliver_email !== false && s.cadence !== 'off';
+          return `
           <div class="sub-row" data-open-subs="1">
             <div class="ss-q"><span class="pre">_</span>${escapeHtml(subLabel(s))}</div>
-            <div class="ss-meta"><span class="cad">weekly</span></div>
-          </div>`).join('')
+            <div class="ss-meta"><span class="cad">${emailOn ? 'weekly' : 'paused'}</span></div>
+          </div>`;
+        }).join('')
           : `<div style="font-family:var(--font-mono);font-size:11px;color:var(--fg-subtle);padding:4px">No subscriptions yet.</div>`;
         sec.innerHTML = `
           <div class="rail-title">Subscriptions <span class="more" data-open-subs="1">manage</span></div>
@@ -1185,8 +1188,10 @@ async function loadSubs() {
         .from('subscriptions').select('*').order('created_at', { ascending: false });
     if (error) { console.warn('loadSubs failed', error); return; }
     state.subs = data || [];
-    // The product is weekly-only now; normalize any legacy daily/instant/off rows.
-    const legacy = state.subs.filter(s => s.cadence !== 'weekly');
+    // Enabled legacy daily/instant alerts become weekly. Paused/off rows must
+    // remain paused until the account owner explicitly turns email back on.
+    const legacy = state.subs.filter(s => s.deliver_email !== false
+        && ['daily', 'instant'].includes(s.cadence));
     if (legacy.length) {
         await Promise.all(legacy.map(s =>
             supabaseClient.from('subscriptions').update({ cadence: 'weekly' }).eq('id', s.id)));
@@ -1215,11 +1220,24 @@ async function saveCurrentSearch() {
 
 async function updateSub(id, fields) {
     const { error } = await supabaseClient.from('subscriptions').update(fields).eq('id', id);
-    if (error) { toast(`Update failed: ${error.message}`); return; }
+    if (error) { toast(`Update failed: ${error.message}`); return false; }
     const s = state.subs.find(x => x.id === id);
     if (s) Object.assign(s, fields);
     renderRailSubs();
     renderSubsPage();
+    return true;
+}
+
+async function setSubscriptionEmail(id, enabled) {
+    const fields = {
+        deliver_email: enabled,
+        cadence: enabled ? 'weekly' : 'off',
+    };
+    // Re-enabling starts from now instead of mailing the paused backlog.
+    if (enabled) fields.last_notified_at = new Date().toISOString();
+    const updated = await updateSub(id, fields);
+    if (updated) toast(enabled ? 'Weekly email turned on' : 'Weekly email paused', true);
+    return updated;
 }
 
 function subscriptionCountries() {
@@ -1352,6 +1370,7 @@ function renderSubsPage() {
     const el = $('#view-subs');
     if (!u) { el.innerHTML = ''; return; }
     const cards = state.subs.length ? state.subs.map(s => {
+        const emailOn = s.deliver_email !== false && s.cadence !== 'off';
         const tags = [
             ...(s.disciplines || []).map(d => `<span class="b" style="background:${getDisciplineColor(d)}">${escapeHtml(discShort(d))}</span>`),
             ...(s.position_types || []).map(t => `<span class="b b-pos">${escapeHtml(t)}</span>`),
@@ -1360,11 +1379,13 @@ function renderSubsPage() {
         return `<div class="sub-card" data-sub="${escapeHtml(s.id)}">
           <div class="sub-card-head">
             <div class="sub-card-q"><span class="pre">_</span>${escapeHtml(subLabel(s))}</div>
+            <span class="sub-email-status ${emailOn ? 'on' : 'off'}">${emailOn ? 'Email on' : 'Email paused'}</span>
           </div>
           <div class="sub-card-tags">${tags}</div>
           <div class="sub-delivery">
-            <span class="del-static">Weekly email digest → <span class="em">${escapeHtml(u.email || '')}</span></span>
+            <span class="del-static">${emailOn ? 'Weekly email digest' : 'Saved search only'} → <span class="em">${escapeHtml(u.email || '')}</span></span>
             <div class="sub-card-actions">
+              <button class="sub-email-toggle" data-toggle-sub-email="${escapeHtml(s.id)}" aria-pressed="${emailOn}">${emailOn ? 'Pause email' : 'Turn on weekly email'}</button>
               <button class="sub-view" data-view-sub="${escapeHtml(s.id)}">Show matches</button>
               <button class="sub-edit" data-edit-sub="${escapeHtml(s.id)}">Edit filters</button>
               <button class="sub-delete" data-del-sub="${escapeHtml(s.id)}">Delete</button>
@@ -1561,6 +1582,17 @@ function wireEvents() {
         if (edit) {
             const subscription = state.subs.find(item => String(item.id) === edit.dataset.editSub);
             if (subscription) openSubscriptionEditor(subscription);
+            return;
+        }
+        const delivery = e.target.closest('[data-toggle-sub-email]');
+        if (delivery) {
+            const subscription = state.subs.find(item => String(item.id) === delivery.dataset.toggleSubEmail);
+            if (!subscription) return;
+            const enabled = !(subscription.deliver_email !== false && subscription.cadence !== 'off');
+            delivery.disabled = true;
+            setSubscriptionEmail(subscription.id, enabled).then(updated => {
+                if (!updated) delivery.disabled = false;
+            });
             return;
         }
         const dsub = e.target.closest('[data-del-sub]');

@@ -38,13 +38,25 @@ SITE_URL = os.environ.get("SITE_BASE_URL", "https://phdsky.org/")
 MAX_POSITIONS_PER_DIGEST = 3
 OPERATOR_LINE = "PhD Sky · operated by Eli Eydlin"
 CONTACT_EMAIL = "eli.eydlin@gmail.com"
-# mailto fallback for List-Unsubscribe (works even if the URL flow is down).
-UNSUB_MAILTO = os.environ.get("UNSUB_MAILTO", "eli.eydlin@gmail.com")
-
-
 def unsubscribe_url(sub: dict, site_url: str = SITE_URL) -> str:
-    """One-click unsubscribe link carrying the subscription's secret token."""
+    """Human preference-page link carrying the subscription's secret token."""
     return f"{site_url}unsubscribe?token={sub.get('unsubscribe_token', '')}"
+
+
+def one_click_unsubscribe_url(sub: dict, site_url: str = SITE_URL) -> str:
+    """RFC 8058 endpoint used only by mailbox-provider POST requests."""
+    return f"{site_url}api/unsubscribe?token={sub.get('unsubscribe_token', '')}"
+
+
+def unsubscribe_headers(sub: dict, site_url: str = SITE_URL) -> dict[str, str] | None:
+    """Return scanner-safe one-click headers for a tokenized subscription."""
+    if not sub.get("unsubscribe_token"):
+        return None
+    endpoint = one_click_unsubscribe_url(sub, site_url)
+    return {
+        "List-Unsubscribe": f"<{endpoint}>",
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    }
 
 
 def recipient_feed_url(site_url: str = SITE_URL) -> str:
@@ -325,11 +337,7 @@ def run_operator(to: str) -> int:
     subject = f"{len(matches)} new: {subscription_label(display_sub)}"[:120]
     body = format_digest_html(display_sub, matches, unsub_url=unsub)
     text_body = format_digest_text(display_sub, matches, unsub_url=unsub)
-    headers = None
-    if first_token_sub.get("unsubscribe_token"):
-        headers = {
-            "List-Unsubscribe": f"<{unsub}>, <mailto:{UNSUB_MAILTO}?subject=unsubscribe>",
-        }
+    headers = unsubscribe_headers(first_token_sub)
 
     if not send_email(to, subject, body, headers=headers, text=text_body):
         print("Operator digest send failed; watermarks unchanged for retry.", file=sys.stderr)
@@ -363,10 +371,9 @@ def run(cadence: str) -> int:
     candidates = fetch_candidate_positions(client, oldest)
     print(f"{len(subs)} subscription(s), {len(candidates)} candidate position(s)")
 
-    # Refuse to send without a working unsubscribe link. Commercial email needs
-    # one (CAN-SPAM / ePrivacy), and Gmail + Yahoo bulk-sender rules require
-    # one-click List-Unsubscribe or they start binning the mail. A missing token
-    # means migrations/007_unsubscribe_token.sql hasn't been applied.
+    # Refuse to send without a working unsubscribe path. This keeps a requested
+    # service alert easy to stop and supplies standards-based mailbox controls.
+    # A missing token means migrations/007_unsubscribe_token.sql is not applied.
     if not any(s.get("unsubscribe_token") for s in subs):
         print("ABORT: no subscription has an unsubscribe_token — apply "
               "migrations/007_unsubscribe_token.sql in the Supabase SQL editor. "
@@ -390,11 +397,9 @@ def run(cadence: str) -> int:
         subject = f"{len(matches)} new: {subscription_label(sub)}"[:120]
         unsub = unsubscribe_url(sub)
         body = format_digest_html(sub, matches, unsub_url=unsub)
-        # List-Unsubscribe lets mail clients surface a native unsubscribe button.
-        # (URL flow + mailto fallback; the URL is handled by docs/unsubscribe.html.)
-        unsub_headers = {
-            "List-Unsubscribe": f"<{unsub}>, <mailto:{UNSUB_MAILTO}?subject=unsubscribe>",
-        }
+        # Mailbox-provider one-click uses a POST-only endpoint. The visible body
+        # link opens a separate confirmation page, so GET scanners cannot opt out.
+        unsub_headers = unsubscribe_headers(sub)
         if send_email(email, subject, body, headers=unsub_headers):
             # Advances past every match, including any beyond the display cap —
             # those are disclosed in the email body with a link to the site.
@@ -505,7 +510,7 @@ def run_test(to: str, cadence: str = "weekly") -> int:
     subject = f"[TEST] {len(matches)} new: {subscription_label(sub)}"[:120]
     unsub = unsubscribe_url(sub)
     body = TEST_BANNER + format_digest_html(sub, matches, unsub_url=unsub)
-    headers = {"List-Unsubscribe": f"<{unsub}>, <mailto:{UNSUB_MAILTO}?subject=unsubscribe>"}
+    headers = unsubscribe_headers(sub)
 
     text_body = format_digest_text(sub, matches, unsub_url=unsub)
     if send_email(to, subject, body, headers=headers, text=text_body):
