@@ -69,6 +69,20 @@ def test_unsubscribe_links_separate_human_confirmation_from_one_click_post():
     assert digest.unsubscribe_headers({}) is None
 
 
+def test_combined_digest_unsubscribe_stops_all_owner_alerts():
+    sub = {"unsubscribe_token": "4e162b33-229b-441a-b655-1fd560765037"}
+    assert digest.unsubscribe_url(sub, all_alerts=True).endswith(
+        "unsubscribe?token=4e162b33-229b-441a-b655-1fd560765037&scope=all"
+    )
+    assert digest.unsubscribe_headers(sub, all_alerts=True) == {
+        "List-Unsubscribe": (
+            "<https://phdsky.org/api/unsubscribe?token="
+            "4e162b33-229b-441a-b655-1fd560765037&scope=all>"
+        ),
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    }
+
+
 def test_format_digest_html_includes_count_and_link():
     sub = {"disciplines": ["Biology"]}
     body = digest.format_digest_html(sub, [pos(), pos(uri="at://y")])
@@ -233,6 +247,44 @@ def test_operator_digest_sends_nothing_when_no_new_matches(monkeypatch):
     assert client.writes == []
 
 
+def test_aggregate_digest_combines_saved_searches_and_updates_each_match(monkeypatch):
+    client = _FakeClient({})
+    subs = [
+        {
+            "id": "bio", "disciplines": ["Biology"], "countries": [],
+            "position_types": [], "query_text": None, "hide_aggregators": False,
+            "unsubscribe_token": "tok-bio", "last_notified_at": "2026-09-01",
+        },
+        {
+            "id": "physics", "disciplines": ["Physics"], "countries": [],
+            "position_types": [], "query_text": None, "hide_aggregators": False,
+            "unsubscribe_token": "tok-physics", "last_notified_at": "2026-09-01",
+        },
+    ]
+    positions = [
+        pos(uri="at://bio", created_at="2026-09-10T00:00:00+00:00"),
+        pos(
+            uri="at://physics", disciplines=["Physics"],
+            created_at="2026-09-12T00:00:00+00:00",
+        ),
+    ]
+    captured = []
+    monkeypatch.setattr(digest, "send_email", _fake_send(captured))
+
+    assert digest.send_aggregate_digest(
+        client, subs, positions, "owner@example.com", "profile user-1"
+    ) == 1
+    assert len(captured) == 1
+    assert captured[0]["to"] == "owner@example.com"
+    assert "2 new positions" in captured[0]["html"]
+    assert "scope=all" in captured[0]["html"]
+    assert "scope=all" in captured[0]["headers"]["List-Unsubscribe"]
+    assert client.writes == [
+        {"last_notified_at": "2026-09-10T00:00:00+00:00"},
+        {"last_notified_at": "2026-09-12T00:00:00+00:00"},
+    ]
+
+
 def test_operator_recipient_list_accepts_commas_repeats_and_deduplicates():
     assert digest.operator_recipients([
         "First@Example.com, second@example.com",
@@ -272,10 +324,11 @@ def test_real_send_aborts_without_unsubscribe_token(monkeypatch, capsys):
         "profiles": [{"email": "someone@example.com"}],
     })
     monkeypatch.setattr(digest, "get_client", lambda: client)
+    monkeypatch.setattr(digest, "report_email_config", lambda: True)
     captured = []
     monkeypatch.setattr(digest, "send_email", _fake_send(captured))
 
-    assert digest.run("weekly") == 0
+    assert digest.run("weekly") == -1
     assert captured == [], "must not send without an unsubscribe token"
     assert client.writes == []
     assert "007_unsubscribe_token" in capsys.readouterr().err

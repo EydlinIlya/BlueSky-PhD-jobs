@@ -66,8 +66,16 @@
 <script>
   'use strict';
   const token = new URLSearchParams(window.location.search).get('token');
+  const allAlerts = new URLSearchParams(window.location.search).get('scope') === 'all';
   const button = document.getElementById('confirm-unsubscribe');
   const statusEl = document.getElementById('status');
+
+  if (allAlerts) {
+    document.querySelector('h1').textContent = 'Manage weekly emails';
+    document.querySelector('.intro').textContent = 'This link controls all weekly saved-search alerts for your account. Your saved searches and account will remain available.';
+    document.getElementById('card-title').textContent = 'Stop all weekly emails?';
+    button.textContent = 'Stop all weekly emails';
+  }
 
   function showInvalidLink() {
     document.getElementById('card-title').textContent = 'This link is incomplete';
@@ -84,16 +92,21 @@
       statusEl.className = 'status';
       statusEl.textContent = '';
       try {
-        const response = await fetch(`/api/unsubscribe?token=${encodeURIComponent(token)}`, {
+        const scope = allAlerts ? '&scope=all' : '';
+        const response = await fetch(`/api/unsubscribe?token=${encodeURIComponent(token)}${scope}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: 'List-Unsubscribe=One-Click',
         });
         if (!response.ok) throw new Error(`unsubscribe ${response.status}`);
         document.getElementById('card-title').innerHTML = '<span class="success-mark">Weekly email stopped.</span>';
-        document.getElementById('card-copy').textContent = 'This alert is now paused. You can turn it on again from Subscriptions after signing in.';
+        document.getElementById('card-copy').textContent = allAlerts
+          ? 'All email alerts are now paused. You can turn them on again from Subscriptions after signing in.'
+          : 'This alert is now paused. You can turn it on again from Subscriptions after signing in.';
         document.getElementById('actions').innerHTML = '<a class="button button-secondary" href="/#subscriptions">Manage subscriptions</a>';
-        statusEl.textContent = 'No further weekly emails will be sent for this saved search.';
+        statusEl.textContent = allAlerts
+          ? 'No further weekly saved-search emails will be sent.'
+          : 'No further weekly emails will be sent for this saved search.';
       } catch (error) {
         console.error(error);
         button.disabled = false;

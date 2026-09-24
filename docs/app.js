@@ -17,7 +17,7 @@ const supabaseClient = USE_MOCK ? null : window.supabase.createClient(SUPABASE_U
 // Aggregator handles — inlined so it works on file:// and GitHub Pages alike.
 // Keep in sync with docs/aggregators.json.
 const aggregatorHandles = new Set([
-    "tenuretracker.bsky.social", "epsteinweb.bsky.social", "jobboardsearch.com",
+    "tenuretracker.bsky.social", "jobboardsearch.com",
     "agristok.bsky.social", "scholarshipunion.bsky.social", "higherjobz.bsky.social",
     "evoldir.bsky.social", "jobrxiv.org", "cosmossn.bsky.social", "vacancyedu.bsky.social",
     "sciencehr.bsky.social", "finland.activitypub.awakari.com.ap.brid.gy",
@@ -27,6 +27,12 @@ const aggregatorHandles = new Set([
     "iddjobs.org", "epijobs.bsky.social", "rss.dfaria.eu", "inomics.bsky.social",
     "greenjobs.de", "bioinfojobs.bsky.social", "atmchemaerojobs.bsky.social",
     "gulfcareerhunt.bsky.social", "diversifytech.com",
+    "academictransfer.bsky.social", "ofygh.bsky.social", "laplaceexpert.bsky.social",
+    "theeconomicmisfit.bsky.social", "enschede.vacatureforum.nl.ap.brid.gy",
+    "suitch-co.bsky.social", "bentureio.bsky.social",
+    "mlscientist.bsky.social", "fullyfundedscholar.bsky.social",
+    "historyjobs.bsky.social", "crackrjobs.bsky.social", "healtheconall.bsky.social",
+    "njschooljobs.com", "systems-neuro.bsky.social", "hydrosci.bsky.social",
 ]);
 function isAggregator(handle) { return !!handle && aggregatorHandles.has(handle); }
 
@@ -724,10 +730,6 @@ function clearFilters() {
 
 /* ───────────────────────── ACTIVITY RAIL ───────────────────────── */
 function renderActivity() {
-    const today = state.all.filter(p => dayLabel(p.created_at) === 'Today').length;
-    $('#activity-today').innerHTML =
-        `<div>· <strong style="color:var(--fg)">+${today}</strong> new position${today === 1 ? '' : 's'} today</div>`;
-
     const dcounts = {};
     for (const p of state.all) for (const d of (p.disciplines || [])) dcounts[d] = (dcounts[d] || 0) + 1;
     renderTrendCard('#activity-trends', dcounts, 'area');

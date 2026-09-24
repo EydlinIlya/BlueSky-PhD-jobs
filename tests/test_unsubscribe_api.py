@@ -65,6 +65,17 @@ def test_post_invokes_only_the_token_scoped_rpc():
 
 
 @pytest.mark.skipif(NODE is None, reason="Node.js is required for Vercel function tests")
+def test_combined_digest_post_invokes_owner_scoped_rpc():
+    token = "4e162b33-229b-441a-b655-1fd560765037"
+    result = _invoke("POST", f"/api/unsubscribe?token={token}&scope=all")
+    assert result["status"] == 200
+    assert len(result["fetchCalls"]) == 1
+    assert result["fetchCalls"][0]["url"].endswith(
+        "/rest/v1/rpc/unsubscribe_owner_by_token"
+    )
+
+
+@pytest.mark.skipif(NODE is None, reason="Node.js is required for Vercel function tests")
 def test_invalid_token_returns_neutral_success_without_rpc():
     result = _invoke("POST", "/api/unsubscribe?token=not-a-token")
     assert result["status"] == 200

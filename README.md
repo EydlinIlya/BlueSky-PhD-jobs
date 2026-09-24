@@ -80,10 +80,9 @@ SUPABASE_KEY=your-server-side-secret
 # Optional maintenance/email alias
 SUPABASE_SERVICE_KEY=your-server-side-secret
 
-# Allowlisted test digests (comma-separated; daily at 09:00 UTC)
+# Weekly subscriber digests (Monday at 09:00 UTC)
 RESEND_API_KEY=your-resend-key
 EMAIL_FROM=PhD Sky <alerts@phdsky.org>
-DIGEST_RECIPIENTS=you@example.com,reviewer@example.com
 
 # Vercel unsubscribe endpoint (public/publishable values, not service keys)
 SUPABASE_ANON_KEY=your-public-anon-or-publishable-key
@@ -236,16 +235,19 @@ GitHub Actions separates data freshness from deployment frequency:
   Vercel production deployment per day. Manual non-recovery runs also deploy.
 - `telegram-digest.yml` runs independently three times daily.
 - `bluesky-repost.yml` runs every six hours.
-- `subscription-digests.yml` runs daily at 09:00 UTC and also supports manual
-  dispatch. It processes only the comma-separated `DIGEST_RECIPIENTS` allowlist,
-  sends each profile at most three matching positions, and sends nothing when
-  that profile has no new matches. Each profile keeps independent watermarks.
+- `subscription-digests.yml` runs Mondays at 09:00 UTC and also supports manual
+  dispatch. It sends each subscriber one combined message for all enabled weekly
+  saved searches, displays at most three matching positions, and sends nothing
+  when that subscriber has no new matches. Each saved search keeps its own
+  watermark; one subscriber's failure does not stop the remaining deliveries.
 
 Digest body links open `/unsubscribe` and wait for a clear confirmation before
 changing anything. Mailbox-provider one-click unsubscribe uses the separate
 POST-only `/api/unsubscribe` endpoint with RFC 8058 headers; GET requests never
-change subscription state. The success page links to `/#subscriptions`, where
-signed-in users can turn weekly email back on.
+change subscription state. A combined digest stops all of that owner's weekly
+alerts; a single-alert digest stops only that alert. Apply migration 009 before
+enabling subscriber-wide delivery. The success page links to `/#subscriptions`,
+where signed-in users can turn weekly email back on.
 
 For a Vercel Hobby project, configure **Project Settings → Security → Deployment
 Retention**. A practical policy for this repository is seven days for production,
@@ -260,9 +262,6 @@ to `https://phdsky.org/`.
 ## Maintenance commands
 
 ```bash
-# Review prolific aggregator accounts before editing docs/aggregators.json
-python scripts/find_aggregator_candidates.py --min-posts 5
-
 # Preview Bluesky reposts without publishing
 python scripts/repost_to_bluesky.py --dry-run --limit 3
 
@@ -277,8 +276,7 @@ python -m pytest tests/ -v
 - `SUPABASE_URL`, `SUPABASE_KEY`
 - Optional fallbacks: `GEMINI_API_KEY`, `NVIDIA_API_KEY`, `GROQ_API_KEY`
 - Optional Telegram: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID`
-- Allowlisted test email: `SUPABASE_SERVICE_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`,
-  `DIGEST_RECIPIENTS`
+- Subscriber email: `SUPABASE_SERVICE_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`
 
 ## Tests
 
