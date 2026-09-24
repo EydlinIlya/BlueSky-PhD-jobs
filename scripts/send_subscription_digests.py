@@ -1,10 +1,9 @@
 """Send saved-search subscription digests by email.
 
-The deployed GitHub workflow uses an explicit operator allowlist: it resolves
-each configured profile email, aggregates that profile's saved searches into
-one message, and advances only its successful-match watermarks. Subscriber-wide
-``run()`` remains available in code for a later consented rollout but is not
-wired to the workflow. The allowlist runs daily and by manual dispatch.
+The deployed workflow groups enabled saved searches by owner, sends at most one
+message to each owner, and advances only the alerts that matched after that
+owner's message succeeds. Operator mode retains the same behavior for an
+explicit email allowlist, and test mode remains read-only.
 
 Usage:
     python scripts/send_subscription_digests.py --operator-to owner@example.com,reviewer@example.com
@@ -40,21 +39,29 @@ OPERATOR_LINE = "PhD Sky · operated by Eli Eydlin"
 CONTACT_EMAIL = "eli.eydlin@gmail.com"
 
 
-def unsubscribe_url(sub: dict, site_url: str = SITE_URL) -> str:
+def unsubscribe_url(
+    sub: dict, site_url: str = SITE_URL, *, all_alerts: bool = False
+) -> str:
     """Human preference-page link carrying the subscription's secret token."""
-    return f"{site_url}unsubscribe?token={sub.get('unsubscribe_token', '')}"
+    scope = "&scope=all" if all_alerts else ""
+    return f"{site_url}unsubscribe?token={sub.get('unsubscribe_token', '')}{scope}"
 
 
-def one_click_unsubscribe_url(sub: dict, site_url: str = SITE_URL) -> str:
+def one_click_unsubscribe_url(
+    sub: dict, site_url: str = SITE_URL, *, all_alerts: bool = False
+) -> str:
     """RFC 8058 endpoint used only by mailbox-provider POST requests."""
-    return f"{site_url}api/unsubscribe?token={sub.get('unsubscribe_token', '')}"
+    scope = "&scope=all" if all_alerts else ""
+    return f"{site_url}api/unsubscribe?token={sub.get('unsubscribe_token', '')}{scope}"
 
 
-def unsubscribe_headers(sub: dict, site_url: str = SITE_URL) -> dict[str, str] | None:
+def unsubscribe_headers(
+    sub: dict, site_url: str = SITE_URL, *, all_alerts: bool = False
+) -> dict[str, str] | None:
     """Return scanner-safe one-click headers for a tokenized subscription."""
     if not sub.get("unsubscribe_token"):
         return None
-    endpoint = one_click_unsubscribe_url(sub, site_url)
+    endpoint = one_click_unsubscribe_url(sub, site_url, all_alerts=all_alerts)
     return {
         "List-Unsubscribe": f"<{endpoint}>",
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
@@ -296,25 +303,19 @@ def fetch_operator_subscriptions(client, email: str) -> list[dict]:
     )
 
 
-def run_operator(to: str) -> int:
-    """Send one aggregate digest only to ``to`` and advance only its alerts.
+def send_aggregate_digest(
+    client,
+    subs: list[dict],
+    candidates: list[dict],
+    to: str,
+    recipient_label: str = "subscriber",
+) -> int:
+    """Send one owner's combined saved-search digest.
 
-    This is the production-safe temporary mode used by GitHub Actions. It never
-    looks up or sends to any other profile email. With zero new matches it sends
-    nothing and performs no writes.
+    Returns 1 after a send, 0 when there are no matches, and -1 on delivery
+    failure. Watermarks move only for subscriptions that contributed a match,
+    and only after the combined message is accepted by the provider.
     """
-    if not report_email_config():
-        return -1
-    client = get_client()
-    subs = fetch_operator_subscriptions(client, to)
-    if not subs:
-        print("No enabled subscriptions for the configured operator; no email sent.")
-        return 0
-
-    watermarks = [w for w in (subscription_watermark(s) for s in subs) if w]
-    oldest = min(watermarks) if len(watermarks) == len(subs) else None
-    candidates = fetch_candidate_positions(client, oldest)
-
     matches_by_sub: dict[str, list[dict]] = {}
     unique_matches: dict[str, dict] = {}
     for sub in subs:
@@ -330,19 +331,29 @@ def run_operator(to: str) -> int:
         unique_matches.values(), key=lambda p: p.get("created_at") or "", reverse=True
     )
     if not matches:
-        print("No new positions match the operator's saved searches; no email sent.")
+        print(f"No new positions match the {recipient_label}'s saved searches; no email sent.")
         return 0
 
     display_sub = subs[0] if len(subs) == 1 else {"disciplines": ["Your saved searches"]}
-    first_token_sub = next((s for s in subs if s.get("unsubscribe_token")), subs[0])
-    unsub = unsubscribe_url(first_token_sub)
+    token_sub = next((s for s in subs if s.get("unsubscribe_token")), None)
+    if token_sub is None:
+        print(
+            f"Cannot email {recipient_label}: no saved search has an unsubscribe token.",
+            file=sys.stderr,
+        )
+        return -1
+
+    combined = len(subs) > 1
+    unsub = unsubscribe_url(token_sub, all_alerts=combined)
     subject = f"{len(matches)} new: {subscription_label(display_sub)}"[:120]
     body = format_digest_html(display_sub, matches, unsub_url=unsub)
     text_body = format_digest_text(display_sub, matches, unsub_url=unsub)
-    headers = unsubscribe_headers(first_token_sub)
-
+    headers = unsubscribe_headers(token_sub, all_alerts=combined)
     if not send_email(to, subject, body, headers=headers, text=text_body):
-        print("Operator digest send failed; watermarks unchanged for retry.", file=sys.stderr)
+        print(
+            f"Digest send failed for {recipient_label}; watermarks unchanged for retry.",
+            file=sys.stderr,
+        )
         return -1
 
     for sub in subs:
@@ -354,10 +365,31 @@ def run_operator(to: str) -> int:
             {"last_notified_at": newest}
         ).eq("id", sub["id"]).execute()
     print(
-        f"Sent one operator digest to {to}: {len(matches)} matches, "
+        f"Sent one digest to {recipient_label}: {len(matches)} matches, "
         f"{min(len(matches), MAX_POSITIONS_PER_DIGEST)} displayed."
     )
     return 1
+
+
+def run_operator(to: str) -> int:
+    """Send one aggregate digest only to ``to`` and advance only its alerts.
+
+    This manual diagnostic mode never looks up or sends to any other profile
+    email. With zero new matches it sends nothing and performs no writes.
+    """
+    if not report_email_config():
+        return -1
+    client = get_client()
+    subs = fetch_operator_subscriptions(client, to)
+    if not subs:
+        print("No enabled subscriptions for the configured operator; no email sent.")
+        return 0
+
+    watermarks = [w for w in (subscription_watermark(s) for s in subs) if w]
+    oldest = min(watermarks) if len(watermarks) == len(subs) else None
+    candidates = fetch_candidate_positions(client, oldest)
+
+    return send_aggregate_digest(client, subs, candidates, to, "operator")
 
 
 def operator_recipients(values: list[str]) -> list[str]:
@@ -402,61 +434,59 @@ def run_operators(recipients: list[str]) -> int:
 
 
 def run(cadence: str) -> int:
+    """Send one combined digest per owner for all enabled subscriptions."""
+    if not report_email_config():
+        return -1
     client = get_client()
     subs = fetch_due_subscriptions(client, cadence)
     if not subs:
         print(f"No '{cadence}' email subscriptions due.")
         return 0
 
-    # Fetch once across all subs using the oldest watermark, then filter per-sub.
-    watermarks = [w for w in (subscription_watermark(s) for s in subs) if w]
-    oldest = min(watermarks) if len(watermarks) == len(subs) else None
-    candidates = fetch_candidate_positions(client, oldest)
-    print(f"{len(subs)} subscription(s), {len(candidates)} candidate position(s)")
-
-    # Refuse to send without a working unsubscribe path. This keeps a requested
-    # service alert easy to stop and supplies standards-based mailbox controls.
-    # A missing token means migrations/007_unsubscribe_token.sql is not applied.
+    # Refuse the entire run when migration 007 is absent. A partially migrated
+    # database is handled per owner below: tokenless alerts are skipped while
+    # valid alerts continue, and the workflow reports failure for attention.
     if not any(s.get("unsubscribe_token") for s in subs):
         print("ABORT: no subscription has an unsubscribe_token — apply "
               "migrations/007_unsubscribe_token.sql in the Supabase SQL editor. "
               "Refusing to send mail with a dead unsubscribe link.", file=sys.stderr)
-        return 0
+        return -1
+
+    valid_subs = [s for s in subs if s.get("unsubscribe_token")]
+    missing_tokens = len(subs) - len(valid_subs)
+    by_user: dict[str, list[dict]] = {}
+    for sub in valid_subs:
+        by_user.setdefault(str(sub["user_id"]), []).append(sub)
+
+    watermarks = [w for w in (subscription_watermark(s) for s in valid_subs) if w]
+    oldest = min(watermarks) if len(watermarks) == len(valid_subs) else None
+    candidates = fetch_candidate_positions(client, oldest)
+    print(
+        f"{len(valid_subs)} subscription(s) across {len(by_user)} owner(s), "
+        f"{len(candidates)} candidate position(s)"
+    )
 
     sent = 0
-    for sub in subs:
-        if not sub.get("unsubscribe_token"):
-            print(f"  sub {sub['id']}: no unsubscribe_token, skipping")
-            continue
-        wm = subscription_watermark(sub)
-        pool = [p for p in candidates if (not wm or p["created_at"] > wm)]
-        matches = [p for p in pool if position_matches(sub, p)]
-        if not matches:
-            continue
-        email = user_email(client, sub["user_id"])
-        if not email:
-            print(f"  sub {sub['id']}: no email on profile, skipping")
-            continue
-        subject = f"{len(matches)} new: {subscription_label(sub)}"[:120]
-        unsub = unsubscribe_url(sub)
-        body = format_digest_html(sub, matches, unsub_url=unsub)
-        # Mailbox-provider one-click uses a POST-only endpoint. The visible body
-        # link opens a separate confirmation page, so GET scanners cannot opt out.
-        unsub_headers = unsubscribe_headers(sub)
-        if send_email(email, subject, body, headers=unsub_headers):
-            # Advances past every match, including any beyond the display cap —
-            # those are disclosed in the email body with a link to the site.
-            newest = max(p["created_at"] for p in matches)
-            client.table("subscriptions").update(
-                {"last_notified_at": newest}).eq("id", sub["id"]).execute()
-            sent += 1
-            capped = len(matches) - MAX_POSITIONS_PER_DIGEST
-            note = f" ({capped} over the display cap, linked not listed)" if capped > 0 else ""
-            print(f"  sub {sub['id']}: emailed {len(matches)} to {email}{note}")
-        else:
-            print(f"  sub {sub['id']}: send failed, watermark unchanged (will retry)")
-    print(f"Done. Sent {sent} digest(s).")
-    return sent
+    failures = missing_tokens
+    for user_id, owner_subs in by_user.items():
+        label = f"profile {user_id}"
+        try:
+            email = user_email(client, user_id)
+            if not email:
+                print(f"  {label}: no email on profile, skipping", file=sys.stderr)
+                failures += 1
+                continue
+            result = send_aggregate_digest(client, owner_subs, candidates, email, label)
+            if result < 0:
+                failures += 1
+            else:
+                sent += result
+        except Exception as exc:
+            print(f"  {label}: digest failed: {exc}", file=sys.stderr)
+            failures += 1
+
+    print(f"Done. Sent {sent} owner digest(s); {failures} failure(s).")
+    return -1 if failures else sent
 
 
 # ── Test send ───────────────────────────────────────────────────────────────
@@ -567,8 +597,8 @@ def run_test(to: str, cadence: str = "weekly") -> int:
 
 def main():
     ap = argparse.ArgumentParser(description="Send subscription email digests")
-    ap.add_argument("--cadence", default="daily", choices=["instant", "daily", "weekly"],
-                    help="which cadence bucket to send (default: daily)")
+    ap.add_argument("--cadence", default="weekly", choices=["instant", "daily", "weekly"],
+                    help="which cadence bucket to send (default: weekly)")
     ap.add_argument("--test-to", metavar="EMAIL",
                     help="TEST MODE: send one sample digest to EMAIL and exit. "
                          "Mails nobody else and writes nothing to the database.")
@@ -587,7 +617,7 @@ def main():
         sys.exit(0 if run_operators(recipients) >= 0 else 1)
     if args.test_to:
         sys.exit(0 if run_test(args.test_to, args.cadence) else 1)
-    run(args.cadence)
+    sys.exit(0 if run(args.cadence) >= 0 else 1)
 
 
 if __name__ == "__main__":

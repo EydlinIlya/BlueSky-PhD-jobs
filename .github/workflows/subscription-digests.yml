@@ -1,17 +1,16 @@
-name: Operator Email Digest
+name: Subscriber Email Digests
 
-# Testing allowlist only: configured operator profiles, never all subscribers.
 on:
   schedule:
-    # 09:00 UTC daily. Scheduled workflows run from the default branch.
-    - cron: "0 9 * * *"
+    # 09:00 UTC Monday. Scheduled workflows run from the default branch.
+    - cron: "0 9 * * 1"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: operator-email-digest
+  group: subscriber-email-digests
   cancel-in-progress: false
 
 jobs:
@@ -30,17 +29,11 @@ jobs:
       - name: Install dependencies
         run: pip install -e .
 
-      - name: Send allowlisted digests when new matches exist
+      - name: Send one combined digest per subscriber when new matches exist
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           EMAIL_PROVIDER: ${{ secrets.EMAIL_PROVIDER || 'resend' }}
-          DIGEST_RECIPIENTS: ${{ secrets.DIGEST_RECIPIENTS || secrets.DIGEST_RECIPIENT }}
-        run: |
-          if [[ -z "$DIGEST_RECIPIENTS" ]]; then
-            echo "DIGEST_RECIPIENTS Actions secret is required" >&2
-            exit 2
-          fi
-          python scripts/send_subscription_digests.py --operator-to "$DIGEST_RECIPIENTS"
+        run: python scripts/send_subscription_digests.py --cadence weekly

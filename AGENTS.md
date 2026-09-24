@@ -66,7 +66,6 @@ SUPABASE_SERVICE_KEY=service-role-key # For subscription digest cron (bypasses R
 RESEND_API_KEY=your-resend-key        # For subscription email digests
 EMAIL_FROM=PhD Sky <alerts@phdsky.org># Digest sender (verified Resend domain)
 EMAIL_PROVIDER=resend                 # Email backend (default: resend)
-DIGEST_RECIPIENTS=a@x.com,b@x.com     # Explicit test-recipient allowlist
 SUPABASE_ANON_KEY=your-anon-key       # Vercel unsubscribe function (public key)
 ```
 
@@ -181,7 +180,11 @@ dates to the newest staging row. Supabase write errors propagate, and a short
 save count raises, so staging and checkpoints are cleared only after the full
 unique batch succeeds. `tests/test_publish_stage.py` protects these invariants.
 
-**`scripts/find_aggregator_candidates.py`** - One-shot helper that lists Bluesky handles with ≥ `--min-posts` (default 5) canonical posts plus the bio from each handle's most recent post. Pure read; does not touch the pipeline or dedup. A human reviews the output and hand-edits `docs/aggregators.json` to add/remove aggregator handles. The frontend's **"Hide aggregator reposts"** toggle reads that JSON and filters the grid + card views accordingly. Dedup is unaffected because `preprocess_text()` already strips `[Bio: ...]` prefixes before TF-IDF comparison.
+**`scripts/find_aggregator_candidates.py`** - One-shot audit helper that lists
+Bluesky handles with ≥ `--min-posts` (default 5) canonical posts. It is not part
+of runtime behavior or a recurring classification process. Aggregator status is
+the fixed static list in `docs/aggregators.json`. Dedup is unaffected because
+`preprocess_text()` already strips `[Bio: ...]` prefixes before comparison.
 
 **`scripts/post_to_telegram.py`** - Telegram channel posting (standalone digest)
 - Runs as its own cron job (`.github/workflows/telegram-digest.yml`), 3×/day
@@ -390,9 +393,9 @@ Required secrets:
 - `GROQ_API_KEY` (optional — enables Groq fallback for filter and dedup)
 - `SUPABASE_URL`, `SUPABASE_KEY`
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID` (optional — skipped if not set)
-- Allowlisted operator email workflow: `RESEND_API_KEY`, a verified `EMAIL_FROM`,
-  and comma-separated `DIGEST_RECIPIENTS`; it reuses privileged `SUPABASE_KEY` when a separately named
-  `SUPABASE_SERVICE_KEY` secret is absent. No plaintext Variable fallbacks.
+- Subscriber email workflow: `RESEND_API_KEY` and a verified `EMAIL_FROM`; it
+  reuses privileged `SUPABASE_KEY` when a separately named `SUPABASE_SERVICE_KEY`
+  secret is absent. No plaintext Variable fallbacks.
 - Vercel unsubscribe function: `SUPABASE_URL` and public `SUPABASE_ANON_KEY` are
   recommended deployment overrides. The checked-in fallbacks are the same
   public project values already shipped to the browser; service keys are never
@@ -492,22 +495,22 @@ frontend reads/writes them via `supabaseClient` under the auth session;
 `migrations/004_subscriptions.sql` creates the owner-only table;
 the frontend currently saves weekly email subscriptions and supports editing
 their filters. Migration 007 adds the per-subscription unsubscribe token.
+Migration 009 adds the owner-wide unsubscribe RPC used by combined digests.
 Backend pieces:
 
 - **`src/email/`** — provider-agnostic email (`EmailProvider` ABC +
   `get_email_provider()`/`send_email()`, chosen by `EMAIL_PROVIDER`, default
   `resend`). Providers accept both HTML and optional plain-text bodies.
-- **`scripts/send_subscription_digests.py`** — operator mode accepts a repeated or
-  comma-separated email allowlist. It resolves each profile independently,
-  aggregates that profile's enabled saved searches into one message, displays at
-  most three positions, and advances only that profile's matching subscription
-  watermarks after a successful send. One recipient failure does not prevent the
-  remaining recipients from being processed, but the command exits non-zero.
-  Zero new matches means no email and no write.
-- **`.github/workflows/subscription-digests.yml`** — runs daily at 09:00 UTC and
-  supports manual dispatch. There is no subscriber-wide send path. It reads only
-  Actions secrets and calls `--operator-to "$DIGEST_RECIPIENTS"`; the singular
-  legacy secret remains a fallback during configuration rollover.
+- **`scripts/send_subscription_digests.py`** — subscriber-wide mode groups enabled
+  saved searches by owner, sends each owner one combined message displaying at
+  most three unique positions, and advances only that owner's matching alert
+  watermarks after a successful send. Owners are isolated: one lookup or delivery
+  failure does not stop the rest, and any failure makes the command exit non-zero.
+  Zero new matches means no email and no write. `--operator-to` remains available
+  as a manual allowlisted diagnostic using the same aggregate-delivery path.
+- **`.github/workflows/subscription-digests.yml`** — runs Mondays at 09:00 UTC and
+  supports manual dispatch. It invokes the weekly subscriber-wide mode using only
+  Actions secrets.
 - Digest HTML uses the academic light palette and a **See more in your feed**
   button linking to `/#following`; `docs/app.js` resolves `/#following` and
   `/#subscriptions` after session restoration.
@@ -524,7 +527,9 @@ token-scoped RPC with the public Supabase key, returns 405 for GET, and uses a
 neutral response for invalid/reused tokens. Digest headers use
 `List-Unsubscribe: <https://phdsky.org/api/unsubscribe?...>` plus
 `List-Unsubscribe-Post: List-Unsubscribe=One-Click`; the body link continues to
-use the confirmation page. Successful human flows link to the real
+use the confirmation page. For combined multi-alert messages, `scope=all`
+selects migration 009's owner-wide RPC so unsubscribe stops every weekly alert
+instead of silently stopping only one. Successful human flows link to the real
 `/#subscriptions` view, where authenticated owners can re-enable the alert.
 
 **Legal pages:** `docs/privacy.html` contains the applicable Section 11 collection
@@ -536,11 +541,13 @@ or account-data AI training. Both are linked from the footer; signup shows a
 "By creating an account you agree to Terms & Privacy" line.
 
 Deployment: verify `phdsky.org` in Resend (SPF/DKIM/DMARC), apply migrations
-through 008, deploy the static UI, test the digest and unsubscribe flow, then
+through 009, deploy the static UI, test the digest and unsubscribe flow, then
 enable the digest workflow. The service-role key must never be exposed to
 frontend code.
 
-**`docs/aggregators.json`** - Hand-maintained list `{ "handles": [...] }` of Bluesky handles flagged as aggregator reposters. Source of truth for the UI filter. Updated via `scripts/find_aggregator_candidates.py`.
+**`docs/aggregators.json`** - Fixed curated list `{ "handles": [...] }` of Bluesky
+handles flagged as aggregator reposters. It is the static source of truth for the
+UI filter and repost exclusions; there is no runtime or scheduled classification.
 
 ### Crawlable static surface (`scripts/generate_seo_pages.py`)
 

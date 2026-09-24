@@ -17,6 +17,14 @@ function requestToken(request) {
   }
 }
 
+function requestScope(request) {
+  try {
+    return new URL(request.url || "", "https://phdsky.org").searchParams.get("scope") || "";
+  } catch (_) {
+    return "";
+  }
+}
+
 async function handler(request, response) {
   response.setHeader("Cache-Control", "no-store");
   response.setHeader("Allow", "POST");
@@ -28,6 +36,7 @@ async function handler(request, response) {
   }
 
   const token = requestToken(request);
+  const scope = requestScope(request);
   // Keep responses neutral so callers cannot use the endpoint to distinguish a
   // missing, invalid, previously used, or currently enabled token.
   if (!UUID_RE.test(token)) {
@@ -38,7 +47,8 @@ async function handler(request, response) {
   const anonKey = process.env.SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY;
 
   try {
-    const rpcResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/unsubscribe_by_token`, {
+    const rpc = scope === "all" ? "unsubscribe_owner_by_token" : "unsubscribe_by_token";
+    const rpcResponse = await fetch(`${supabaseUrl}/rest/v1/rpc/${rpc}`, {
       method: "POST",
       headers: {
         apikey: anonKey,
@@ -60,3 +70,4 @@ async function handler(request, response) {
 
 module.exports = handler;
 module.exports.requestToken = requestToken;
+module.exports.requestScope = requestScope;

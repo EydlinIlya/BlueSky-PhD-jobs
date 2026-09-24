@@ -1,7 +1,6 @@
 {
   "handles": [
     "tenuretracker.bsky.social",
-    "epsteinweb.bsky.social",
     "jobboardsearch.com",
     "agristok.bsky.social",
     "scholarshipunion.bsky.social",
@@ -24,7 +23,22 @@
     "bioinfojobs.bsky.social",
     "atmchemaerojobs.bsky.social",
     "gulfcareerhunt.bsky.social",
-    "diversifytech.com"
+    "diversifytech.com",
+    "academictransfer.bsky.social",
+    "ofygh.bsky.social",
+    "laplaceexpert.bsky.social",
+    "theeconomicmisfit.bsky.social",
+    "enschede.vacatureforum.nl.ap.brid.gy",
+    "suitch-co.bsky.social",
+    "bentureio.bsky.social",
+    "mlscientist.bsky.social",
+    "fullyfundedscholar.bsky.social",
+    "historyjobs.bsky.social",
+    "crackrjobs.bsky.social",
+    "healtheconall.bsky.social",
+    "njschooljobs.com",
+    "systems-neuro.bsky.social",
+    "hydrosci.bsky.social"
   ],
-  "note": "Bluesky handles that re-post many positions (aggregator bots/channels). Maintained by hand after reviewing candidates from scripts/find_aggregator_candidates.py. Users can toggle 'Hide aggregator reposts' in the UI to exclude these handles from the listing."
+  "note": "Fixed curated list of Bluesky job/opportunity aggregators, job boards, and automated mailing-list feeds. No runtime or scheduled classification is performed. Users can toggle 'Hide aggregator reposts' in the UI to exclude these handles from the listing."
 }
