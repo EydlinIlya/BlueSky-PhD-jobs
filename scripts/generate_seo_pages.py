@@ -526,7 +526,8 @@ def _facet_nav(facets):
 
 
 def _listing_page(*, title, description, canonical, h1, lead, articles, jsonld,
-                  facet_nav="", pager="", prev_url=None, next_url=None, robots="index, follow"):
+                  facet_nav="", pager="", prev_url=None, next_url=None, robots="index, follow",
+                  intro=""):
     rel = ""
     if prev_url:
         rel += f'\n    <link rel="prev" href="{prev_url}">'
@@ -569,6 +570,7 @@ def _listing_page(*, title, description, canonical, h1, lead, articles, jsonld,
     <a href="/" class="back-link">&larr; Back to the interactive board</a>
     <h1>{escape_html(h1)}</h1>
     <p class="subtitle">{lead}</p>
+{intro}
 {facet_nav}
 {articles}
 {pager}
@@ -635,6 +637,55 @@ def build_facets(positions):
     return prep(by_disc, "area"), prep(by_country, "country")
 
 
+def facet_copy(facet):
+    """Search-facing copy for existing hubs; funding is never assumed."""
+    name = facet["name"]
+    if facet["kind"] == "area":
+        heading = f"PhD and Postdoc Positions in {name}"
+        description = (
+            f"Browse PhD and postdoc positions in {name}, with research vacancies, "
+            "application links and recent announcements. Updated daily on PhD Sky."
+        )
+        text = (
+            f"Explore PhD studentships, postdoctoral jobs and research positions in {name}. "
+            "Compare the projects and locations below, then open the original announcement "
+            "for entry requirements, funding details and application deadlines."
+        )
+    else:
+        place = f"the {name}" if name in {"Netherlands", "UK", "USA"} else name
+        heading = f"PhD and Postdoc Positions in {place}"
+        description = (
+            f"Explore PhD and postdoc positions in {place}. Compare research vacancies "
+            "and check funding, eligibility and application deadlines at the source."
+        )
+        text = (
+            f"Browse PhD opportunities, postdoctoral jobs and research positions in {place}. "
+            "Looking for a funded PhD? Check each announcement for salary or stipend, "
+            "tuition coverage, funding duration and eligibility before applying. "
+            "Funding terms vary by position."
+        )
+    if facet["kind"] == "area" and name == "Biology":
+        text = (
+            "Find PhD and postdoc positions in biology, including opportunities in "
+            "molecular biology, genetics, microbiology and bioinformatics. "
+            "For each vacancy, check the research topic, required laboratory or "
+            "computational skills, funding and application deadline in the original announcement."
+        )
+    if facet["kind"] == "country" and name == "Netherlands":
+        description = (
+            "Find PhD and postdoc positions in the Netherlands. Looking for a funded PhD? "
+            "Check salary, funding duration and eligibility in each vacancy."
+        )
+    intro = (
+        f'<p>{escape_html(text)}</p>\n'
+        '<p>Listings are collected from public academic posts on Bluesky. '
+        'Confirm availability and terms with the hiring institution. '
+        '<a href="/">Search and filter PhD and postdoc positions</a>, or '
+        '<a href="/positions">browse the full research jobs directory</a>.</p>'
+    )
+    return heading, description, intro
+
+
 def generate_facet_pages(disc_facets, country_facets, facet_nav):
     """Write /area/<slug> and /country/<slug> hub pages."""
     urls = []
@@ -642,21 +693,13 @@ def generate_facet_pages(disc_facets, country_facets, facet_nav):
         keep = set()
         for f in facets:
             rows = f["rows"][:FACET_MAX_ITEMS]
-            # h1/title carry a literal '&'; _listing_page escapes them once.
-            if f["kind"] == "area":
-                h1 = f"{f['name']} PhD & Postdoc Positions"
-                desc = (f"{f['count']} open {f['name']} PhD, postdoc and research positions "
-                        f"aggregated from Bluesky. Updated daily.")
-            else:
-                h1 = f"PhD & Postdoc Positions in {f['name']}"
-                desc = (f"{f['count']} open PhD, postdoc and research positions in "
-                        f"{f['name']}, aggregated from Bluesky. Updated daily.")
+            h1, desc, intro = facet_copy(f)
             title = f"{h1} | PhD Sky"
             lead = (f"{f['count']} position{'s' if f['count'] != 1 else ''} &middot; "
                     f"showing the {len(rows)} most recent")
             html = _listing_page(
                 title=title, description=desc, canonical=f["url"],
-                h1=h1, lead=lead,
+                h1=h1, lead=lead, intro=intro,
                 articles="\n".join(_position_article(p) for p in rows),
                 jsonld=json_for_script(
                     _collection_schema(title, desc, f["url"], rows), indent=2),
@@ -712,6 +755,13 @@ def generate_positions_html(positions, now=None):
         html = _listing_page(
             title=title, description=desc, canonical=canonical,
             h1="PhD & Postdoc Positions",
+            intro=(
+                '<p>Browse PhD studentships, postdoctoral jobs and research vacancies '
+                'collected from public Bluesky posts, by subject and country. '
+                'Open a listing to check the project, funding '
+                'and application requirements, or <a href="/">search and filter '
+                'positions on the interactive board</a>.</p>'
+            ) if n == 1 else "",
             lead=f"{total} positions{suffix} &middot; last updated {today}",
             articles="\n".join(_position_article(p) for p in rows),
             jsonld=json_for_script(_collection_schema(title, desc, canonical, rows), indent=2),
@@ -933,6 +983,8 @@ def generate_sitemap(slug_to_lastmod=None, listing_urls=None):
         f"<changefreq>daily</changefreq><priority>0.8</priority></url>",
         f"  <url><loc>{BASE_URL}about</loc><lastmod>{static_lastmod('about.html')}</lastmod>"
         f"<changefreq>monthly</changefreq><priority>0.4</priority></url>",
+        f"  <url><loc>{BASE_URL}why-bluesky</loc><lastmod>{static_lastmod('why-bluesky.html')}</lastmod>"
+        f"<changefreq>monthly</changefreq><priority>0.4</priority></url>",
         f"  <url><loc>{BASE_URL}privacy</loc><lastmod>{static_lastmod('privacy.html')}</lastmod>"
         f"<changefreq>yearly</changefreq><priority>0.3</priority></url>",
         f"  <url><loc>{BASE_URL}terms</loc><lastmod>{static_lastmod('terms.html')}</lastmod>"
@@ -981,7 +1033,7 @@ def generate_sitemap(slug_to_lastmod=None, listing_urls=None):
     with open(os.path.join(DOCS_DIR, "sitemap.xml"), "w", encoding="utf-8", newline="\n") as f:
         f.write(sitemap_index)
     extra = len(slug_to_lastmod or {})
-    print(f"Generated sitemap index: 5 core + {len(listing)} hubs + {extra} eligible jobs")
+    print(f"Generated sitemap index: 6 core + {len(listing)} hubs + {extra} eligible jobs")
 
 
 def _snapshot_position(pos):

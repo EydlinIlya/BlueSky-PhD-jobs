@@ -43,6 +43,21 @@ def open_feed(page, server_url):
     page.wait_for_selector("article.post", timeout=15000)
 
 
+@pytest.mark.parametrize("width", [375, 1280])
+def test_why_bluesky_editorial_page(server_url, page, tmp_path, width):
+    page.set_viewport_size({"width": width, "height": 900})
+    page.goto(server_url.replace("/?mock", "/why-bluesky.html"))
+    assert page.locator("h1").all_text_contents() == ["Why Bluesky?"]
+    assert page.locator("main a[href^='https://']").count() == 8
+    assert page.locator("a[href='/positions']").count() == 1
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    page.keyboard.press("Tab")
+    assert page.locator(".skip-link").evaluate("el => el === document.activeElement")
+    assert page.locator(".skip-link").bounding_box()["y"] >= 0
+    page.locator("h1").click()
+    page.screenshot(path=str(tmp_path / f"why-bluesky-{width}.png"), full_page=True)
+
+
 class TestFrontendLoads:
     def test_page_identity_and_visible_heading(self, server_url, page):
         open_feed(page, server_url)

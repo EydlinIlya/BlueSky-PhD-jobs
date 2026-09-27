@@ -551,6 +551,12 @@ UI filter and repost exclusions; there is no runtime or scheduled classification
 
 ### Crawlable static surface (`scripts/generate_seo_pages.py`)
 
+`docs/why-bluesky.html` is a hand-maintained editorial page explaining the academic
+evidence and API rationale for Bluesky collection. It links to the underlying
+studies and commentary, labels preprints, and states coverage/verification limits.
+Home and About link to it; the core sitemap generator retains `/why-bluesky`.
+Keep its visible copy and WebPage/search/social metadata consistent.
+
 The board is a JS app, so everything a crawler indexes is generated as static
 HTML next to it. Googlebot renders JS, which means `<noscript>` is **discarded** —
 it is kept for non-rendering scrapers only and must never be the sole path to a
@@ -580,6 +586,15 @@ Two invariants worth preserving:
 
 Generated directories are pruned each run, so a shrinking corpus doesn't leave
 stale pages serving 200s.
+
+Homepage metadata and visible homepage/directory/hub copy must explicitly identify
+public Bluesky posts as the listing source; do not imply direct employer submissions.
+`facet_copy()` maintains titles, descriptions and visible introductions for the
+existing subject/country hubs, including specific Biology and Netherlands copy.
+Funding guidance must not assert that every listed PhD is funded. The homepage
+contains ordinary visible links to `/positions` and selected hubs outside the
+noscript block. Keep its feed introduction in sync with `updateFeedContext()`
+in `docs/app.js` (the function that restores the Latest/Archive heading).
 
 The generator fetches the full canonical corpus to keep archive URLs alive, then
 uses `src/seo.py` to derive active and eligible subsets. Active rows alone feed

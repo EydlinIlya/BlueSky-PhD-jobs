@@ -1441,7 +1441,7 @@ function updateFeedContext() {
         : 'Current PhD and postdoctoral positions';
     $('#river-description').textContent = archived
         ? 'Closed opportunities and posts older than 90 days, retained for reference.'
-        : 'Research opportunities gathered from Bluesky with help from artificial intelligence.';
+        : 'PhD positions and postdoc jobs collected automatically from public Bluesky posts. Browse by subject and country; check funding and application details at the source.';
     $('#river-meta').innerHTML = archived
         ? 'Historical record · applications may be closed'
         : 'Updated daily';

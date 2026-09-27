@@ -19,6 +19,24 @@ import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 
+
+def test_why_bluesky_metadata_and_discovery():
+    page = (REPO / "docs/why-bluesky.html").read_text(encoding="utf-8")
+    schema = json.loads(re.search(
+        r'<script type="application/ld\+json">(.*?)</script>', page, re.S
+    ).group(1))
+    assert schema["@type"] == "WebPage"
+    assert schema["url"] == "https://phdsky.org/why-bluesky"
+    assert f'<title>{schema["name"]}</title>' in page
+    assert f'<link rel="canonical" href="{schema["url"]}">' in page
+    assert '<meta name="robots" content="index, follow">' in page
+    assert page.count(f'content="{schema["description"]}"') == 3
+    assert "JobPosting" not in page
+    assert "preprints, not peer-reviewed evidence" in page
+    for filename in ("index.html", "about.html"):
+        assert 'href="/why-bluesky"' in (REPO / "docs" / filename).read_text(encoding="utf-8")
+    assert schema["url"] in (REPO / "docs/sitemaps/core.xml").read_text(encoding="utf-8")
+
 # The module reads SUPABASE_* at import time.
 os.environ.setdefault("SUPABASE_URL", "https://example.invalid")
 os.environ.setdefault("SUPABASE_KEY", "test-key")
@@ -264,6 +282,7 @@ def test_sitemap_index_splits_core_and_eligible_jobs(tmp_path, monkeypatch):
     core_locs = re.findall(r"<loc>(.*?)</loc>", core_xml)
     assert len(core_locs) == len(set(core_locs))
     assert "https://phdsky.org/positions" in core_locs
+    assert "https://phdsky.org/why-bluesky" in core_locs
     assert "https://phdsky.org/positions/2" not in core_locs
     assert any("/area/" in u for u in core_locs)
     assert any("/country/" in u for u in core_locs)

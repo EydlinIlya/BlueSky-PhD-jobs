@@ -172,16 +172,23 @@ order and configure the redirect URLs documented in the migration headers.
 
 ## Search indexing and Google Jobs
 
-`scripts/generate_seo_pages.py` creates:
+The crawlable site includes generated listings and hand-maintained information pages:
 
 | URL | Purpose |
 | --- | --- |
 | `/p/<slug>` | One position; weak/archived pages are `noindex` |
 | `/positions` | Canonical current-position listing |
 | `/positions/<n>` | Crawlable pagination, `noindex, follow` after page one |
+| `/why-bluesky` | Evidence and API explanation for collecting academic jobs from Bluesky |
 | `/area/<slug>` | Active discipline hub |
 | `/country/<slug>` | Active country hub |
 | `/sitemap.xml` | Index for `core.xml` and `jobs.xml` |
+
+The homepage links directly to the research directory and selected subject/country
+hubs. Hub introductions explain what to check when applying, including funding
+terms; listings are not universally described as funded. Homepage descriptions
+and visible directory/hub copy explicitly identify public Bluesky posts as the
+source, not direct employer submissions.
 
 A position remains active until its explicit deadline, or for 90 days when no
 deadline is known. Our current schema gate requires an active verified listing,
