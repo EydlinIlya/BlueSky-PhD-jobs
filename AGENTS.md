@@ -592,8 +592,8 @@ public Bluesky posts as the listing source; do not imply direct employer submiss
 `facet_copy()` maintains titles, descriptions and visible introductions for the
 existing subject/country hubs, including specific Biology and Netherlands copy.
 Funding guidance must not assert that every listed PhD is funded. The homepage
-contains ordinary visible links to `/positions` and selected hubs outside the
-noscript block. Keep its feed introduction in sync with `updateFeedContext()`
+footer has informational/legal links, without a separate Browse row.
+Keep its feed introduction in sync with `updateFeedContext()`
 in `docs/app.js` (the function that restores the Latest/Archive heading).
 
 The generator fetches the full canonical corpus to keep archive URLs alive, then

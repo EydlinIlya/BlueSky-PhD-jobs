@@ -1,301 +1,103 @@
+<p><a href="https://phdsky.org/"><img src="docs/favicon.svg" alt="PhD Sky logo" width="80" height="80"></a></p>
+
 # PhD Sky
 
-[PhD Sky](https://phdsky.org/) finds public PhD, postdoctoral, research-assistant,
-and academic-faculty opportunities shared on Bluesky. A language model filters
-and labels posts; the original post and official application page remain the
-sources of truth.
+Find PhD positions, postdoc jobs and other academic opportunities shared on
+Bluesky, without having to follow every lab or catch every post.
 
-The service is free, non-commercial, and operated as an independent project.
+**[Browse positions at phdsky.org](https://phdsky.org/)**
 
-## What it does
+PhD Sky is a free, independent, non-commercial project operated by Eli Eydlin.
+You can browse without an account. There are no paid listings or advertisements.
 
-- Searches Bluesky through the AT Protocol using academic-job queries.
-- Filters and enriches likely vacancies in one Ministral 14B call, with optional provider fallbacks.
-- Extracts disciplines, country, position type, role title, employer,
-  application URL, deadline, and location without inventing missing facts.
-- Deduplicates reposts using exact normalized official application links first, then TF-IDF plus model verification.
-- Publishes an accessible feed with search, filters, saved searches, follows,
-  weekly-alert controls, and a lazy-loaded archive.
-- Generates crawlable job pages, active subject/country hubs, and split XML
-  sitemaps.
-- Can quote-post selected listings to Bluesky and publish a bioinformatics
-  digest to Telegram.
+## Why this exists
 
-## Architecture
+A researcher announces an opening, colleagues share it, and the post soon slips
+down the feed. Someone looking for that exact project might never see it.
+PhD Sky collects those public announcements in one searchable place, so you can
+look for opportunities by subject and country instead of relying on who you follow.
 
-```text
-Bluesky
-   │
-   ▼
-Fetch → classify and enrich → deduplicate → publish to Supabase
-                                               │
-                         ┌─────────────────────┴─────────────────────┐
-                         ▼                                           ▼
-               static site generator                         digest/repost jobs
-                         │
-                         ▼
-                    Vercel /docs
-```
+Bluesky has become a useful place for academic conversations and research sharing.
+Its documented API also makes it practical for a small project to collect public
+posts automatically. Our [Why Bluesky? page](https://phdsky.org/why-bluesky) explains
+the choice, with links to academic studies, reporting and critical commentary.
 
-Supabase ingestion is checkpointed by stage. A failed run resumes from stored
-staging rows, and publishing clears staging only after the complete upsert
-succeeds.
+## Find opportunities that fit
 
-## Quick start
+Search by keyword, filter by discipline, country or career stage, and open the
+original announcement when something looks promising. You can hide posts from
+known aggregator accounts if you prefer to browse other sources.
 
-Requires Python 3.11.9 or newer.
+With an optional account, you can follow researchers and topics or save a search.
+The Following feed brings those interests together. Saved searches can also send
+weekly emails with new matches; you can edit, pause or unsubscribe from alerts.
+Older listings remain available in the archive.
 
-```bash
-python -m venv .venv
+## How it works
 
-# Windows
-.venv/Scripts/activate
+PhD Sky searches public Bluesky posts through its API. AI helps identify likely
+vacancies and label them by subject, country and position type. When the source
+supports it, the system also extracts the employer, application link and deadline.
 
-# macOS/Linux
-source .venv/bin/activate
+It then groups repeated announcements so the same opening is easier to recognise.
+The website links back to the original Bluesky post and includes an application
+link when one is available. Collection runs several times a day, with a daily
+website snapshot and separate email delivery.
 
-pip install -e .
-```
+These listings are collected automatically from Bluesky, not submitted directly
+to PhD Sky by employers. You can read more about the process on the
+[About page](https://phdsky.org/about).
 
-Create `.env`:
+## What to check before applying
+
+Automation makes mistakes, and a social post rarely contains the whole vacancy.
+Check funding, eligibility and deadlines with the hiring institution. PhD Sky
+doesn't independently verify or endorse listings, and it doesn't cover every
+academic opening. A PhD listing is not necessarily a funded PhD.
+
+The current feed uses application deadlines where supported, otherwise a 90-day
+posting window. That helps keep older posts out of the way, but it cannot guarantee
+that a position is still open.
+
+## Host your own version
+
+Fork or clone this repository. With Python 3.11.9+ and a virtual environment, install
+the collector with `pip install -e .`. Create a local `.env` file:
 
 ```dotenv
-# Required for collection; use a Bluesky app password
 BLUESKY_HANDLE=your-handle.bsky.social
 BLUESKY_PASSWORD=your-app-password
-
-# Primary classifier
 MISTRAL_API_KEY=your-mistral-api-key
-MISTRAL_MODEL=ministral-14b-latest
-
-# Optional fallbacks, used in this order
-GEMINI_API_KEY=your-gemini-key
-NVIDIA_API_KEY=your-nvidia-key
-GROQ_API_KEY=your-groq-key
-
-# Required for the production database
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-server-side-secret
-
-# Optional maintenance/email alias
-SUPABASE_SERVICE_KEY=your-server-side-secret
-
-# Weekly subscriber digests (Monday at 09:00 UTC)
-RESEND_API_KEY=your-resend-key
-EMAIL_FROM=PhD Sky <alerts@phdsky.org>
-
-# Vercel unsubscribe endpoint (public/publishable values, not service keys)
-SUPABASE_ANON_KEY=your-public-anon-or-publishable-key
-
-# Optional channels
-TELEGRAM_BOT_TOKEN=your-bot-token
-TELEGRAM_CHANNEL_ID=@your_channel
 ```
-
-Never expose `SUPABASE_KEY` or `SUPABASE_SERVICE_KEY` in frontend code.
-
-## Running the pipeline
 
 ```bash
-# Local CSV run
-python bluesky_search.py
-
-# Supabase production pipeline
-python bluesky_search.py --storage supabase
-
-# Recovery: ignore the saved timestamp and fetch the deepest recent window
-python bluesky_search.py --storage supabase --full-sync --limit 100
-
-# Run through a specific checkpoint
-python bluesky_search.py --storage supabase --stage fetch
-python bluesky_search.py --storage supabase --stage filter
-python bluesky_search.py --storage supabase --stage dedup
-python bluesky_search.py --storage supabase --stage publish
-
-# Small diagnostic run without model filtering
-python bluesky_search.py --no-llm --limit 10
+python bluesky_search.py                         # Collect into a local CSV
+python -m http.server --directory docs          # Preview the website
 ```
 
-Useful options:
+Open `http://localhost:8000/?mock` to try the interface with sample data. The CSV
+run is separate from the website; it does not refresh the site's listings.
 
-| Option | Purpose | Default |
-| --- | --- | --- |
-| `-q, --query` | Add a Bluesky search query; repeatable | built-in query set |
-| `-l, --limit` | Results per query | `50` |
-| `--storage` | `csv` or `supabase` | `csv` |
-| `--stage` | Stop after one persistent stage | `all` |
-| `--full-sync` | Ignore the incremental timestamp | off |
-| `--no-llm` | Disable configured model providers | off |
-| `-o, --output` | CSV output path | `phd_positions.csv` |
+For a live instance, use your own Supabase database and authentication, apply the
+SQL files in `migrations/` in numeric order, and set `SUPABASE_URL` and the
+server-side `SUPABASE_KEY`. Collect with `--storage supabase`, then run
+`python scripts/generate_seo_pages.py`. Deploy `docs/`; the included Vercel
+configuration also supports the unsubscribe API. No frontend build step is needed.
 
-## Model providers and benchmarks
+Before deployment, replace the public Supabase settings and PhD Sky domain
+references, including authentication redirects and email links. Never put service
+keys in browser code. Configure your own GitHub Actions secrets before enabling
+scheduled collection or email. See [AGENTS.md](AGENTS.md) for configuration,
+architecture and testing details.
 
-Provider order is Mistral → Gemini → NVIDIA NIM → Groq; missing providers are
-skipped. Failover is sticky for the process so an unavailable provider is not
-retried for every row.
+## Contribute or report a problem
 
-The production prompt and hand-reviewed fixtures are benchmarked with:
-
-```bash
-python scripts/benchmark_mistral_models.py
-python scripts/benchmark_seo_enrichment.py --model ministral-14b-latest
-```
-
-Reports under `.benchmarks/` include classification quality, metadata accuracy,
-latency, token use, cache hits, and estimated standard/batch cost. Ministral 14B
-is the current default because it matched the larger model on the checked-in
-classification fixture at substantially lower cost.
-
-## Frontend
-
-The site is plain HTML, CSS, and JavaScript under `docs/`; there is no frontend
-build step.
-
-```bash
-python -m http.server --directory docs
-```
-
-Open `http://localhost:8000/?mock` for the offline fixture. Production loading
-uses the embedded snapshot, then `positions.json`, then the public Supabase read
-API as a fallback.
-
-The desktop search expands when focused. Saved subscriptions include **Show
-matches**, which restores that subscription's search and filters in the feed.
-Each saved search also shows whether weekly email is on or paused and provides
-an explicit control to pause or re-enable it. Re-enabling starts from that time,
-so the paused backlog is not mailed.
-The Archive tab lazy-loads `archive.json`; archived records do not appear in
-active listings or the jobs sitemap.
-
-Accounts use Supabase Auth. Apply migrations under `migrations/` in numeric
-order and configure the redirect URLs documented in the migration headers.
-
-## Search indexing and Google Jobs
-
-The crawlable site includes generated listings and hand-maintained information pages:
-
-| URL | Purpose |
-| --- | --- |
-| `/p/<slug>` | One position; weak/archived pages are `noindex` |
-| `/positions` | Canonical current-position listing |
-| `/positions/<n>` | Crawlable pagination, `noindex, follow` after page one |
-| `/why-bluesky` | Evidence and API explanation for collecting academic jobs from Bluesky |
-| `/area/<slug>` | Active discipline hub |
-| `/country/<slug>` | Active country hub |
-| `/sitemap.xml` | Index for `core.xml` and `jobs.xml` |
-
-The homepage links directly to the research directory and selected subject/country
-hubs. Hub introductions explain what to check when applying, including funding
-terms; listings are not universally described as funded. Homepage descriptions
-and visible directory/hub copy explicitly identify public Bluesky posts as the
-source, not direct employer submissions.
-
-A position remains active until its explicit deadline, or for 90 days when no
-deadline is known. Our current schema gate requires an active verified listing,
-title, employer, external application URL, known country, and substantive
-visible description. Passing that gate makes a page eligible for markup; it
-does not guarantee that Google will crawl, index, or show it.
-
-Deadlines override the 90-day window only when the source labels the same
-month/day as a deadline, closing date, or apply-by date. Explicit years are
-preserved; genuinely yearless deadlines are anchored to the posting year or,
-when that month/day has passed, the next year. Dates found only in URLs,
-publication metadata, event text, or job IDs are ignored. For legacy rows whose
-linked-page evidence was not retained, a stored deadline later than the source
-post remains trusted; unsupported same-day or past dates fall back to the
-90-day window and are omitted from generated snapshots and structured data.
-
-Google Jobs additionally expects:
-
-- one real vacancy on the detail page;
-- `title`, `datePosted`, `description`, `hiringOrganization`, and a valid
-  `jobLocation` (or correctly declared fully remote location);
-- a visible description that completely represents responsibilities,
-  qualifications, skills, education, experience, and other relevant details;
-- a working way to apply without requiring login merely to read the vacancy;
-- page content that exactly agrees with the structured data;
-- prompt removal or expiration when applications close.
-
-Most rejected PhD Sky candidates lack a verified application URL, exact title,
-employer, or country. Even syntactically valid pages may not qualify because a
-short social post is not a complete job description. Search Console's valid
-item count also lags deployment while Google discovers and recrawls the jobs
-sitemap.
-
-Run the resumable enrichment before regenerating:
-
-```bash
-python scripts/backfill_seo_metadata.py --limit 20 --dry-run
-python scripts/backfill_seo_metadata.py
-python scripts/generate_seo_pages.py
-```
-
-After a substantial template change, validate representative URLs with Google's
-Rich Results Test and inspect them in Search Console.
-
-## Automation and deployment lifecycle
-
-GitHub Actions separates data freshness from deployment frequency:
-
-- `scheduled-search.yml` ingests at 05:00, 11:00, 17:00, and 23:00 UTC.
-- Only the 05:00 UTC run regenerates and commits `docs/`, producing one routine
-  Vercel production deployment per day. Manual non-recovery runs also deploy.
-- `telegram-digest.yml` runs independently three times daily.
-- `bluesky-repost.yml` runs every six hours.
-- `subscription-digests.yml` runs Mondays at 09:00 UTC and also supports manual
-  dispatch. It sends each subscriber one combined message for all enabled weekly
-  saved searches, displays at most three matching positions, and sends nothing
-  when that subscriber has no new matches. Each saved search keeps its own
-  watermark; one subscriber's failure does not stop the remaining deliveries.
-
-Digest body links open `/unsubscribe` and wait for a clear confirmation before
-changing anything. Mailbox-provider one-click unsubscribe uses the separate
-POST-only `/api/unsubscribe` endpoint with RFC 8058 headers; GET requests never
-change subscription state. A combined digest stops all of that owner's weekly
-alerts; a single-alert digest stops only that alert. Apply migration 009 before
-enabling subscriber-wide delivery. The success page links to `/#subscriptions`,
-where signed-in users can turn weekly email back on.
-
-For a Vercel Hobby project, configure **Project Settings → Security → Deployment
-Retention**. A practical policy for this repository is seven days for production,
-three days for previews, and one day for cancelled/errored deployments. Delete
-merged remote branches so their latest preview is no longer retention-protected.
-Vercel retention is a project setting; it is not defined in `vercel.json`.
-
-The site is served from `docs/` on `main`. `vercel.json` supplies clean URLs,
-security headers, and cache policy. The legacy GitHub Pages branch only redirects
-to `https://phdsky.org/`.
-
-## Maintenance commands
-
-```bash
-# Preview Bluesky reposts without publishing
-python scripts/repost_to_bluesky.py --dry-run --limit 3
-
-# Run all tests
-python -m pytest tests/ -v
-```
-
-## Required GitHub Actions secrets
-
-- `BLUESKY_HANDLE`, `BLUESKY_PASSWORD`
-- `MISTRAL_API_KEY`
-- `SUPABASE_URL`, `SUPABASE_KEY`
-- Optional fallbacks: `GEMINI_API_KEY`, `NVIDIA_API_KEY`, `GROQ_API_KEY`
-- Optional Telegram: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID`
-- Subscriber email: `SUPABASE_SERVICE_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`
-
-## Tests
-
-```bash
-python -m pytest tests/ -v
-```
-
-The suite covers provider requests and fallback, persistent pipeline behavior,
-deduplication, Bluesky ingestion, storage, lifecycle/eligibility rules, HTML and
-JSON-LD escaping, sitemap invariants, email delivery, unsubscribe behavior, and
-offline Playwright interaction/accessibility flows.
+Code, documentation and classification fixes are welcome through
+[GitHub issues and pull requests](https://github.com/EydlinIlya/BlueSky-PhD-jobs).
+To request correction or removal of your own public post, email
+[eli.eydlin@gmail.com](mailto:eli.eydlin@gmail.com).
 
 ## License
 
-Apache License 2.0
+The project code is licensed under [Apache 2.0](LICENSE). That license does not
+grant rights to the third-party posts collected by the service.
