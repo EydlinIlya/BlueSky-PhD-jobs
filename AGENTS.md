@@ -514,6 +514,13 @@ Backend pieces:
 - Digest HTML uses the academic light palette and a **See more in your feed**
   button linking to `/#following`; `docs/app.js` resolves `/#following` and
   `/#subscriptions` after session restoration.
+- Digest HTML and plain text link to the site's `/p/<post-id>` pages (or the
+  Following feed when a post URI is unavailable), not directly to external job
+  sites. Position-page links preserve access to original and application URLs.
+  Email excerpts omit raw URLs to avoid mail-client auto-links; the contact link
+  points to `/about` instead of a `mailto:` address. Keep this same-domain link
+  policy when changing the template. The Monday 09:00 UTC digest follows the
+  05:00 UTC static-site regeneration, so those position pages are normally live.
 - Tests: `tests/test_email.py` (mock provider), `tests/test_digest.py`
   (matching/formatting/headers), and `tests/test_unsubscribe_api.py` (method and
   token-scoped endpoint contract).
@@ -540,10 +547,12 @@ state that the service is free/non-commercial and has no sales, ads, profiling,
 or account-data AI training. Both are linked from the footer; signup shows a
 "By creating an account you agree to Terms & Privacy" line.
 
-Deployment: verify `phdsky.org` in Resend (SPF/DKIM/DMARC), apply migrations
-through 009, deploy the static UI, test the digest and unsubscribe flow, then
-enable the digest workflow. The service-role key must never be exposed to
-frontend code.
+Deployment: verify `phdsky.org` in Resend (SPF/DKIM/DMARC), including a Vercel
+DNS TXT record at `_dmarc` with value `v=DMARC1; p=none;` until a stricter
+policy is justified by checking all legitimate senders and their alignment.
+Apply migrations through 009, deploy the static UI, test the digest and
+unsubscribe flow, then enable the digest workflow. The service-role key must
+never be exposed to frontend code.
 
 **`docs/aggregators.json`** - Fixed curated list `{ "handles": [...] }` of Bluesky
 handles flagged as aggregator reposters. It is the static source of truth for the

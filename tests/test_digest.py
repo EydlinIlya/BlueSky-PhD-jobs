@@ -1,7 +1,9 @@
 """Tests for subscription digest matching + formatting (pure helpers)."""
 
 import sys
+from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import send_subscription_digests as digest  # noqa: E402
@@ -87,8 +89,43 @@ def test_format_digest_html_includes_count_and_link():
     sub = {"disciplines": ["Biology"]}
     body = digest.format_digest_html(sub, [pos(), pos(uri="at://y")])
     assert "2 new positions" in body
-    assert "https://bsky.app/x" in body
+    assert 'href="https://phdsky.org/p/x"' in body
+    assert 'href="https://phdsky.org/p/y"' in body
     assert "Biology" in body
+
+
+def test_digest_links_stay_on_sending_domain():
+    position = pos(
+        uri="at://did:plc:abc/app.bsky.feed.post/3mldoq7ee5k2s",
+        application_url="https://mlscientist.com/phd-example/",
+        message="Apply at https://tenuretracker.info/l/example for this position",
+    )
+    html_body = digest.format_digest_html({}, [position])
+    text_body = digest.format_digest_text({}, [position])
+
+    class Links(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.urls = []
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "a":
+                self.urls.extend(value for key, value in attrs if key == "href")
+
+    links = Links()
+    links.feed(html_body)
+    assert links.urls
+    assert all(urlparse(url).hostname == "phdsky.org" for url in links.urls)
+    assert "https://phdsky.org/p/3mldoq7ee5k2s" in links.urls
+    assert "https://phdsky.org/about" in links.urls
+    assert "mlscientist.com" not in html_body + text_body
+    assert "tenuretracker.info" not in html_body + text_body
+    assert "mailto:" not in html_body
+    assert "https://phdsky.org/p/3mldoq7ee5k2s" in text_body
+
+
+def test_position_link_falls_back_to_feed_without_uri():
+    assert digest.position_page_url({}) == "https://phdsky.org/#following"
 
 
 # ── Overflow disclosure + watermark semantics ───────────────────────────────

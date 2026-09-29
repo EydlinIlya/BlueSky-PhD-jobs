@@ -21,6 +21,7 @@ import argparse
 import html
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,7 +37,6 @@ load_dotenv()
 SITE_URL = os.environ.get("SITE_BASE_URL", "https://phdsky.org/")
 MAX_POSITIONS_PER_DIGEST = 3
 OPERATOR_LINE = "PhD Sky · operated by Eli Eydlin"
-CONTACT_EMAIL = "eli.eydlin@gmail.com"
 
 
 def unsubscribe_url(
@@ -71,6 +71,19 @@ def unsubscribe_headers(
 def recipient_feed_url(site_url: str = SITE_URL) -> str:
     """Deep link to the authenticated recipient's personalized feed."""
     return f"{site_url.rstrip('/')}/#following"
+
+
+def position_page_url(pos: dict, site_url: str = SITE_URL) -> str:
+    """Link to the same PhD Sky permalink used by the static page generator."""
+    uri = pos.get("uri") or ""
+    slug = re.sub(r"[^a-zA-Z0-9_-]", "", uri.rsplit("/", 1)[-1])
+    return f"{site_url.rstrip('/')}/p/{slug}" if slug else recipient_feed_url(site_url)
+
+
+def email_excerpt(message: str) -> str:
+    """Keep source text readable without external URLs auto-linking in mail clients."""
+    return re.sub(r"\s+", " ", re.sub(r"https?://\S+", "", message)).strip()[:220]
+
 
 _AGGREGATORS_FILE = Path(__file__).resolve().parent.parent / "docs" / "aggregators.json"
 try:
@@ -147,8 +160,8 @@ def format_digest_html(
         disc = ", ".join(p.get("disciplines") or [])
         location = p.get("location_text") or p.get("country") or ""
         meta = " · ".join([x for x in (employer, disc, location) if x and x != "Unknown"])
-        msg = (p.get("message") or "")[:220]
-        url = p.get("application_url") or p.get("url") or feed_url
+        msg = email_excerpt(p.get("message") or "")
+        url = position_page_url(p, site_url)
         rows.append(
             f'<div style="padding:18px 0;border-top:1px solid #c8d0cb">'
             f'<div style="font:600 16px Arial,sans-serif;color:#18201d">{html.escape(title)}</div>'
@@ -173,7 +186,8 @@ def format_digest_html(
         f'<a href="{html.escape(site_url)}" style="color:#315f78">PhD Sky</a>. '
         f'<a href="{html.escape(unsub_url)}" style="color:#315f78">Unsubscribe</a> or '
         f'<a href="{html.escape(site_url.rstrip("/"))}/#subscriptions" style="color:#315f78">manage your alerts</a>.'
-        f'<br>{html.escape(OPERATOR_LINE)} · <a href="mailto:{CONTACT_EMAIL}" style="color:#315f78">{CONTACT_EMAIL}</a>'
+        f'<br>{html.escape(OPERATOR_LINE)} · '
+        f'<a href="{html.escape(site_url.rstrip("/"))}/about" style="color:#315f78">Contact</a>'
         f'</div>'
         f'</div>'
         f'</div>'
@@ -196,13 +210,13 @@ def format_digest_text(
         title = p.get("job_title") or " / ".join(p.get("position_type") or []) or "Research position"
         employer = p.get("hiring_organization") or ""
         location = p.get("location_text") or p.get("country") or ""
-        url = p.get("application_url") or p.get("url") or recipient_feed_url(site_url)
+        url = position_page_url(p, site_url)
         lines += [title, " · ".join(x for x in (employer, location) if x), url, ""]
     lines += [
         f"See more in your feed: {recipient_feed_url(site_url)}",
         f"Unsubscribe: {unsub_url or unsubscribe_url(sub, site_url)}",
         OPERATOR_LINE,
-        CONTACT_EMAIL,
+        f"Contact: {site_url.rstrip('/')}/about",
     ]
     return "\n".join(lines)
 

@@ -31,7 +31,9 @@ known aggregator accounts if you prefer to browse other sources.
 With an optional account, you can follow researchers and topics or save a search.
 The Following feed brings those interests together. Saved searches can also send
 weekly emails with new matches; you can edit, pause or unsubscribe from alerts.
-Older listings remain available in the archive.
+Digest links point to PhD Sky position pages, where the original Bluesky post
+and any available application link remain visible. Older listings remain
+available in the archive.
 
 ## How it works
 
